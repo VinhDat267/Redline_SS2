@@ -1,0 +1,102 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+client_secret_*.json
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage/
+.nyc_output/
+output/
+src/frontend/vitest-report.json
+
+# Logs
+logs/
+*.log
+src/backend/*local-command-caveat*.txt
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+tmp_*.py
+tmp_*.txt
+fix_*.py
+refactor*.py
+replace-*.js
+implement_theme.py
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+src/backend/uploads/
+
+# Python (if using Python for backend)
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+*.egg-info/
+venv/
+env/
+ENV/
+
+# Misc
+.cache/
+.parcel-cache/
+.claude/
+.superpowers/
+.playwright-cli/
+src/frontend/patch_trace_ui.py
+src/backend/Acme_SRS_Payment_*.docx
+src/backend/generate_demo_docs*.py
+docs/E2E_WORKFLOW_MANUAL.md
+docs/superpowers/
+
+# Local course/project artifacts not for public repo
+.agents/
+AGENTS.md
+design-system/
+DESIGN-binance.md
+ERD.drawio
+TrienKhaiDuAn/
+FinalProjectSubmission/
+ERDRefine.drawio.png
+ERDver01.drawio.png
+MD_62FIT3SS2_SpecialSubject2_S2024.pdf
+Project_Proposal_Ideadocx.pdf
+docs/Redline_Project_Proposal_SS2.docx
+docs/Project_Proposal_Idea_Brainstorming_Redline_Final*.docx
+docs/project-proposal-idea-brainstorming-redline-final*.md
+docs/Redline_Compare_Specification_v1.docx
+docs/Redline_Parser_Specification_v1.docx
+
+stitch_iconic_visual_web_interface

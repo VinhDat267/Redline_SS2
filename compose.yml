@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: redline-pgvector
+    environment:
+      POSTGRES_DB: redline
+      POSTGRES_USER: redline
+      POSTGRES_PASSWORD: redline
+    ports:
+      - "5432:5432"
+    volumes:
+      - redline_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U redline -d redline"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  redline_pgdata:

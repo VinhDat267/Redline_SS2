@@ -1,0 +1,147 @@
+# Redline
+
+Redline is an AI-powered Contract Review application for `62FIT3SS2 - Special Subject 2`, focused on deterministic compare, RAG-enhanced AI review, and grounded contract Q&A.
+
+```text
+Project → Contract → DOCX/PDF Draft Upload → Parse → Compare
+→ RAG-Enhanced AI Review → Human Review → Contract Q&A
+→ Summary / Export → Analytics
+```
+
+## Current Status
+
+Updated: 2026-05-15
+
+The application is fully functional with production deployments on Heroku (backend) and Vercel (frontend).
+
+**Stack:**
+
+- **Backend:** FastAPI, SQLAlchemy, Alembic, PostgreSQL + pgvector, Pillow (avatar processing)
+- **Frontend:** React 19, Vite, Tailwind CSS, Recharts
+- **Auth:** HttpOnly cookie sessions, CSRF tokens, Google OAuth, DB-backed rate limiting
+- **AI/RAG:** OpenAI-compatible providers via 9Router, Gemini embeddings (3072-dim), pgvector retrieval
+
+**Test suite:**
+
+- Backend: **211 passed** (Pytest, SQLite fixtures)
+- Frontend: **102 passed** (Vitest, 18 test files)
+- Frontend build: passes (Vite chunk-size warning only)
+
+**Core truth boundaries:**
+
+- Parser and compare truth are **deterministic** — AI never overrides them.
+- AI Review and Contract Q&A are **suggestion/support layers** only.
+- Human-confirmed review status and requirement/test-case mappings are the **final workflow truth**.
+
+## Project Structure
+
+```text
+RedlineSS2/
+├── docs/               # Project documentation, testing pack, demo kits
+│   ├── demo/           # Full system demo kit (MedNova/Aster Cloud)
+│   ├── design/         # Stitch design system description
+│   └── testing/        # Testing pack, eval harness, VN showcase
+├── src/
+│   ├── backend/        # FastAPI + SQLAlchemy + Alembic
+│   └── frontend/       # React + Vite + Tailwind
+└── README.md           # This file
+```
+
+## Quickstart
+
+### Prerequisites
+
+- Docker (for PostgreSQL + pgvector)
+- Python 3.14+ with venv
+- Node.js 18+ with npm
+
+### Backend
+
+```powershell
+docker compose up -d postgres
+cd src/backend
+python -m venv .venv
+.\.venv\Scripts\python -m pip install -e .[dev]
+Copy-Item .env.example .env
+# Fill REDLINE_AI_OPENAI_API_KEY or REDLINE_AI_GEMINI_API_KEY in .env for AI features.
+.\.venv\Scripts\python -m alembic upgrade head
+.\.venv\Scripts\python -m app.seed
+.\.venv\Scripts\python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+Swagger UI: `http://127.0.0.1:8000/docs`
+
+The backend always loads `src/backend/.env` by absolute path, so settings stay consistent regardless of working directory. RAG runtime uses PostgreSQL + pgvector via `compose.yml`; run Alembic after starting Docker so the `vector` extension exists.
+
+### Frontend
+
+```powershell
+cd src/frontend
+npm install
+npm run dev
+```
+
+Dev server: `http://localhost:5173`
+
+## Verification
+
+```powershell
+# Backend tests (SQLite fixtures, ~211 tests)
+cd src/backend
+.\.venv\Scripts\python -m pytest tests -q
+
+# Frontend tests (~102 tests)
+cd src/frontend
+npm run test -- --run
+
+# Frontend production build
+npm run build
+
+# RAG embedding health (requires running PostgreSQL)
+cd src/backend
+.\.venv\Scripts\python -m app.rag_admin health --strict
+```
+
+For manual end-to-end rehearsal, see `docs/testing/tutorial-redline-e2e-full-pass.md`.
+
+## Main Routes
+
+| Route | Purpose |
+|-------|---------|
+| `/` | Project inventory, starter seed, pending invitations |
+| `/account` | User profile, avatar upload, password management |
+| `/projects/:projectId` | Contract, requirement, test case, team, activity workspace |
+| `/projects/:projectId/analytics` | Project analytics dashboard |
+| `/contracts/:contractId` | Contract draft inventory, DOCX/PDF upload, compare setup |
+| `/contracts/:contractId/chat` | Grounded contract Q&A workspace |
+| `/documents/:documentId` | Document version inventory and metadata |
+| `/documents/:documentId/parser` | Parser workspace and AI requirement extraction |
+| `/compare-runs/:compareRunId` | Compare workspace and AI review batch generation |
+| `/compare-runs/:compareRunId/review` | Human review workspace |
+| `/compare-runs/:compareRunId/impact` | Traceability and affected test impact |
+| `/compare-runs/:compareRunId/summary` | AI summary, Markdown export, DOCX report export |
+
+## Key Features
+
+- **Auth:** Local email/password + Google OAuth, HttpOnly cookie sessions, CSRF protection, DB-backed rate limiting on all auth endpoints, avatar upload with server-side image processing (256×256 WebP)
+- **Parser:** DOCX body/header/footer/footnote/endnote/table surfaces, PDF text-layer + OCR fallback (Tesseract), legal numbering classification
+- **Compare:** Deterministic clause-level diff between two parsed drafts
+- **AI Review:** RAG-enhanced per-item and batch generation, with/without-RAG controlled baseline
+- **Contract Q&A:** Attempt-driven streaming chat with grounded citations, session memory, metadata-intent routing, cooperative cancel/retry
+- **Traceability:** Requirement ↔ test case mapping, impacted test calculation from clause changes
+- **Summary/Export:** AI-generated summary, Markdown export, DOCX report
+- **Analytics:** Project-level statistics, document breakdown, review status charts
+
+## Repository Guide
+
+| Document | Purpose |
+|----------|---------|
+| `docs/demo/full-system-demo/README.md` | Realistic end-to-end demo kit |
+| `docs/testing/README.md` | Testing pack and regression procedures |
+| `docs/design/` | Current visual/product design reference |
+
+## Team
+
+- **Dat Vinh** — Technical lead and main developer
+- **My** — Business analysis, UX, and testing support
+- **Ly** — Documentation, tracking, and QA support

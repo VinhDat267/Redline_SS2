@@ -1,0 +1,138 @@
+[
+  {
+    "case_id": "NDA-REV-001",
+    "contract_family": "NDA",
+    "clause_title": "Limitation of Liability",
+    "change_type": "modified",
+    "source_excerpt": "Direct damages are capped at fees paid in the prior 12 months, excluding confidentiality breach, willful misconduct, and injunctive relief.",
+    "target_excerpt": "All damages are capped at one month of fees, including confidentiality breach and equitable remedies.",
+    "expected_risk": "high",
+    "expected_review_focus": "The cap narrows recovery and newly applies to confidentiality breach and equitable remedies.",
+    "evidence_keywords": [
+      "one month of fees",
+      "confidentiality breach",
+      "equitable remedies"
+    ],
+    "truth_boundary_assertion": "The AI review may recommend negotiation, but the final risk decision remains with the reviewer.",
+    "scoring_notes": "Pass when the review flags the lowered cap and inclusion of confidentiality breach or equitable remedies."
+  },
+  {
+    "case_id": "NDA-REV-002",
+    "contract_family": "NDA",
+    "clause_title": "Confidentiality Term",
+    "change_type": "modified",
+    "source_excerpt": "Confidentiality obligations continue for three years after disclosure.",
+    "target_excerpt": "Confidentiality obligations continue for five years after disclosure.",
+    "expected_risk": "medium",
+    "expected_review_focus": "The confidentiality survival period is extended and may increase operational burden.",
+    "evidence_keywords": [
+      "three years",
+      "five years",
+      "continue"
+    ],
+    "truth_boundary_assertion": "The AI review should describe the change and ask for reviewer confirmation instead of finalizing acceptance.",
+    "scoring_notes": "Pass when the review catches the term extension and frames it as a business/legal review point."
+  },
+  {
+    "case_id": "NDA-REV-003",
+    "contract_family": "NDA",
+    "clause_title": "Exclusions",
+    "change_type": "modified",
+    "source_excerpt": "Confidential Information excludes information independently developed without use of Confidential Information.",
+    "target_excerpt": "The independently developed exclusion is removed.",
+    "expected_risk": "medium",
+    "expected_review_focus": "Removing the independent-development exclusion broadens protected information.",
+    "evidence_keywords": [
+      "independently developed",
+      "exclusion",
+      "removed"
+    ],
+    "truth_boundary_assertion": "The AI review should not create a new exclusion; it can suggest restoring or negotiating the clause.",
+    "scoring_notes": "Pass when the review identifies the removed carveout as the central issue."
+  },
+  {
+    "case_id": "NDA-REV-004",
+    "contract_family": "NDA",
+    "clause_title": "Termination",
+    "change_type": "modified",
+    "source_excerpt": "Either party may terminate for convenience with 30 days written notice.",
+    "target_excerpt": "Recipient may terminate for convenience with 10 days written notice.",
+    "expected_risk": "medium",
+    "expected_review_focus": "The notice period is shortened and termination right is no longer mutual.",
+    "evidence_keywords": [
+      "30 days",
+      "10 days",
+      "Recipient"
+    ],
+    "truth_boundary_assertion": "The AI review should keep the deterministic compare item as the source of the changed text.",
+    "scoring_notes": "Pass when the review mentions both shorter notice and unilateral termination."
+  },
+  {
+    "case_id": "SOW-REV-001",
+    "contract_family": "SOW",
+    "clause_title": "Acceptance",
+    "change_type": "modified",
+    "source_excerpt": "Customer has 10 business days to reject non-conforming deliverables with written reasons.",
+    "target_excerpt": "Deliverables are deemed accepted after 3 business days unless Customer provides detailed defect evidence.",
+    "expected_risk": "high",
+    "expected_review_focus": "The acceptance window is shortened and deemed acceptance becomes easier to trigger.",
+    "evidence_keywords": [
+      "10 business days",
+      "3 business days",
+      "deemed accepted"
+    ],
+    "truth_boundary_assertion": "The AI review may recommend reverting the acceptance window, but cannot mark the item resolved.",
+    "scoring_notes": "Pass when the review highlights both timing and deemed acceptance risk."
+  },
+  {
+    "case_id": "SOW-REV-002",
+    "contract_family": "SOW",
+    "clause_title": "Payment",
+    "change_type": "modified",
+    "source_excerpt": "Fees are invoiced monthly in arrears and payable 30 days after invoice.",
+    "target_excerpt": "Fifty percent of fees are due upfront and remaining invoices are payable 15 days after invoice.",
+    "expected_risk": "medium",
+    "expected_review_focus": "The payment schedule accelerates cash outflow and reduces review time.",
+    "evidence_keywords": [
+      "50 percent",
+      "upfront",
+      "15 days"
+    ],
+    "truth_boundary_assertion": "The AI review should ground the issue in payment timing, not invent unrelated pricing concerns.",
+    "scoring_notes": "Pass when the review identifies upfront payment or shorter payment period."
+  },
+  {
+    "case_id": "SOW-REV-003",
+    "contract_family": "SOW",
+    "clause_title": "IP Ownership",
+    "change_type": "modified",
+    "source_excerpt": "Customer owns all custom deliverables upon full payment.",
+    "target_excerpt": "Vendor retains ownership of all deliverables and grants Customer a non-exclusive internal-use license.",
+    "expected_risk": "high",
+    "expected_review_focus": "Ownership changes from customer ownership to vendor ownership with a limited license.",
+    "evidence_keywords": [
+      "Vendor retains ownership",
+      "non-exclusive",
+      "internal-use license"
+    ],
+    "truth_boundary_assertion": "The AI review should request reviewer/legal confirmation rather than conclude enforceability.",
+    "scoring_notes": "Pass when the review flags ownership transfer as high risk."
+  },
+  {
+    "case_id": "SOW-REV-004",
+    "contract_family": "SOW",
+    "clause_title": "Change Control",
+    "change_type": "added",
+    "source_excerpt": "No matching change-control fee clause.",
+    "target_excerpt": "Vendor may charge time-and-materials fees for out-of-scope requests before written change-order approval.",
+    "expected_risk": "medium",
+    "expected_review_focus": "The added clause permits charges before a signed change order.",
+    "evidence_keywords": [
+      "time-and-materials",
+      "out-of-scope",
+      "before written change-order approval"
+    ],
+    "truth_boundary_assertion": "The AI review should not suppress the added-clause compare truth.",
+    "scoring_notes": "Pass when the review catches pre-approval fee exposure."
+  }
+]

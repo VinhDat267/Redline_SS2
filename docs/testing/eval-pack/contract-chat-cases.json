@@ -1,0 +1,153 @@
+[
+  {
+    "case_id": "NDA-QA-001",
+    "contract_family": "NDA",
+    "draft_label": "v2",
+    "question": "What is the liability cap in this draft?",
+    "expected_answer_points": [
+      "The cap is one month of fees.",
+      "The cap applies to all damages in the v2 wording."
+    ],
+    "required_citation_keywords": [
+      "one month of fees",
+      "All damages"
+    ],
+    "disallowed_claims": [
+      "12 months of fees",
+      "confidentiality breach is excluded from the cap"
+    ],
+    "scoring_notes": "The answer should cite the v2 Limitation of Liability clause."
+  },
+  {
+    "case_id": "NDA-QA-002",
+    "contract_family": "NDA",
+    "draft_label": "v2",
+    "question": "How long do confidentiality obligations last?",
+    "expected_answer_points": [
+      "The v2 obligations continue for five years after disclosure."
+    ],
+    "required_citation_keywords": [
+      "five years",
+      "after disclosure"
+    ],
+    "disallowed_claims": [
+      "three years",
+      "indefinitely"
+    ],
+    "scoring_notes": "The answer should not mix v1 and v2 terms."
+  },
+  {
+    "case_id": "NDA-QA-003",
+    "contract_family": "NDA",
+    "draft_label": "v2",
+    "question": "Does the draft keep an independent-development exclusion?",
+    "expected_answer_points": [
+      "No, the v2 notes remove the independently developed exclusion."
+    ],
+    "required_citation_keywords": [
+      "independently developed",
+      "removed"
+    ],
+    "disallowed_claims": [
+      "independently developed information is excluded"
+    ],
+    "scoring_notes": "The answer should state the absence/removal, not infer a replacement carveout."
+  },
+  {
+    "case_id": "NDA-QA-004",
+    "contract_family": "NDA",
+    "draft_label": "v2",
+    "question": "Who can terminate for convenience and how much notice is required?",
+    "expected_answer_points": [
+      "Recipient may terminate for convenience.",
+      "The notice period is 10 days."
+    ],
+    "required_citation_keywords": [
+      "Recipient",
+      "10 days"
+    ],
+    "disallowed_claims": [
+      "either party",
+      "30 days"
+    ],
+    "scoring_notes": "The answer should cite the v2 Termination clause."
+  },
+  {
+    "case_id": "SOW-QA-001",
+    "contract_family": "SOW",
+    "draft_label": "v2",
+    "question": "What deliverables are listed in the statement of work?",
+    "expected_answer_points": [
+      "The listed deliverables are a requirements workshop, clickable prototype, API integration guide, and deployment checklist."
+    ],
+    "required_citation_keywords": [
+      "requirements workshop",
+      "clickable prototype",
+      "API integration guide",
+      "deployment checklist"
+    ],
+    "disallowed_claims": [
+      "mobile app",
+      "production hosting"
+    ],
+    "scoring_notes": "The answer can be a concise list if every item is grounded in the deliverables clause."
+  },
+  {
+    "case_id": "SOW-QA-002",
+    "contract_family": "SOW",
+    "draft_label": "v2",
+    "question": "When are deliverables deemed accepted?",
+    "expected_answer_points": [
+      "Deliverables are deemed accepted after 3 business days unless Customer provides detailed defect evidence."
+    ],
+    "required_citation_keywords": [
+      "3 business days",
+      "deemed accepted",
+      "detailed defect evidence"
+    ],
+    "disallowed_claims": [
+      "10 business days",
+      "written reasons"
+    ],
+    "scoring_notes": "The answer should cite the v2 Acceptance clause."
+  },
+  {
+    "case_id": "SOW-QA-003",
+    "contract_family": "SOW",
+    "draft_label": "v2",
+    "question": "What payment timing does the v2 draft require?",
+    "expected_answer_points": [
+      "Fifty percent of fees are due upfront.",
+      "Remaining invoices are payable 15 days after invoice."
+    ],
+    "required_citation_keywords": [
+      "Fifty percent",
+      "upfront",
+      "15 days"
+    ],
+    "disallowed_claims": [
+      "monthly in arrears",
+      "30 days after invoice"
+    ],
+    "scoring_notes": "The answer should avoid using the v1 payment term."
+  },
+  {
+    "case_id": "SOW-QA-004",
+    "contract_family": "SOW",
+    "draft_label": "v2",
+    "question": "Who owns the deliverables after payment?",
+    "expected_answer_points": [
+      "Vendor retains ownership of all deliverables.",
+      "Customer receives a non-exclusive internal-use license."
+    ],
+    "required_citation_keywords": [
+      "Vendor retains ownership",
+      "non-exclusive",
+      "internal-use license"
+    ],
+    "disallowed_claims": [
+      "Customer owns all custom deliverables"
+    ],
+    "scoring_notes": "The answer should cite the v2 IP Ownership clause and avoid legal enforceability conclusions."
+  }
+]

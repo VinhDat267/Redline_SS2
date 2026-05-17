@@ -210,7 +210,7 @@ def _build_extraction_payload(
         "parse_run_id": parse_run_id,
         "guidance": (
             "Identify requirement candidates from parsed DOCX blocks. Prefer explicit requirement IDs, "
-            "shall/must/should statements, and SRS requirement tables."
+            "shall/must/should statements, obligations, and contract requirement tables."
         ),
         "blocks": [
             {

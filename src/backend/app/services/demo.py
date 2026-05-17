@@ -4,9 +4,10 @@ from docx import Document as DocxDocument
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.config import BACKEND_ROOT, settings
+from app.core.config import settings
 from app.models import Document, DocumentVersion, Project, ProjectMember, User
 from app.seed import seed_demo_users
+from app.services.upload_storage import to_stored_upload_path
 
 
 WORKSPACE_PROJECT_NAME = "Redline Review Workspace"
@@ -14,34 +15,34 @@ LEGACY_PROJECT_NAMES = {WORKSPACE_PROJECT_NAME, "Redline SS2 Demo"}
 WORKSPACE_PROJECT_DESCRIPTION = "Starter review workspace for live Redline project, document, parser, and compare flows."
 DEMO_DOCUMENT_SPECS = [
     {
-        "title": "Software Requirements Specification",
-        "document_type": "SRS",
-        "description": "Primary review document for the live Redline workflow.",
+        "title": "Master Services Agreement",
+        "document_type": "MSA",
+        "description": "Primary contract for the live Redline review workflow.",
         "versions": [
             {
                 "version_label": "v1.1",
-                "file_name": "srs-v1.1.docx",
+                "file_name": "msa-v1.1.docx",
                 "parse_status": "parsed",
-                "notes": "Starter baseline source version for review and compare.",
+                "notes": "Starter baseline contract draft for review and compare.",
             },
             {
                 "version_label": "v2.0",
-                "file_name": "srs-v2.0.docx",
+                "file_name": "msa-v2.0.docx",
                 "parse_status": "parsed",
-                "notes": "Starter target version for review and compare.",
+                "notes": "Starter revised contract draft for review and compare.",
             },
         ],
     },
     {
-        "title": "API Specification",
-        "document_type": "SPEC",
-        "description": "Secondary document that keeps the project detail page populated with real data.",
+        "title": "Security Addendum",
+        "document_type": "DPA",
+        "description": "Secondary contract artifact that keeps the project detail page populated with real data.",
         "versions": [
             {
                 "version_label": "v1.0",
-                "file_name": "api-spec-v1.0.docx",
+                "file_name": "security-addendum-v1.0.docx",
                 "parse_status": "pending",
-                "notes": "Seeded secondary document version for the project inventory.",
+                "notes": "Seeded secondary contract draft for the project inventory.",
             }
         ],
     },
@@ -62,7 +63,7 @@ def _ensure_demo_upload(document_id: int, file_name: str, version_label: str) ->
             ),
             encoding="utf-8",
         )
-    return stored_file.relative_to(BACKEND_ROOT).as_posix()
+    return to_stored_upload_path(stored_file)
 
 
 def _is_valid_docx(file_path: Path) -> bool:
@@ -77,8 +78,8 @@ def _is_valid_docx(file_path: Path) -> bool:
 
 def _write_demo_docx(file_path: Path, *, file_name: str, version_label: str) -> None:
     document = DocxDocument()
-    document.add_heading("Software Requirements Specification", level=1)
-    document.add_paragraph(f"Demo draft {version_label} generated for Redline parser and compare workflows.")
+    document.add_heading("Master Services Agreement", level=1)
+    document.add_paragraph(f"Demo contract draft {version_label} generated for Redline parser and compare workflows.")
 
     document.add_heading("1. Purpose", level=2)
     document.add_paragraph(

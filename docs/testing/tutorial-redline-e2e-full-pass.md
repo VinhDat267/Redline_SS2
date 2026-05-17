@@ -76,13 +76,13 @@ De de theo doi, dung 2 email mau:
 ## Phase 2 - Tao data setup trong project
 Trong `Project Detail`, tao 2 document:
 
-### Document A - core compare
-- Title: `Redline Demo SRS`
-- Type: `SRS`
+### Contract A - core compare
+- Title: `Master Services Agreement`
+- Type: `MSA`
 
-### Document B - parser coverage
-- Title: `Parser Coverage Fixture`
-- Type: `SRS`
+### Contract B - parser coverage
+- Title: `Security Addendum`
+- Type: `DPA`
 
 Tiep theo, trong cung project, tao toi thieu:
 

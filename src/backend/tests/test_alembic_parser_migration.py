@@ -1,4 +1,5 @@
 from pathlib import Path
+from io import StringIO
 
 from alembic import command
 from alembic.config import Config
@@ -123,3 +124,21 @@ def test_alembic_head_applies_expanded_parser_truth_schema(tmp_path: Path):
         } <= ai_batch_job_item_columns
     finally:
         settings.database_url = original_database_url
+
+
+def test_alembic_offline_sql_generation_covers_parser_truth_migrations():
+    alembic_config = Config(str(BACKEND_ROOT / "alembic.ini"))
+    output = StringIO()
+    alembic_config.output_buffer = output
+    original_database_url = settings.database_url
+
+    try:
+        settings.database_url = "postgresql+psycopg://redline:redline@127.0.0.1:5432/redline"
+        command.upgrade(alembic_config, "head", sql=True)
+    finally:
+        settings.database_url = original_database_url
+
+    generated_sql = output.getvalue()
+    assert "CREATE TABLE document_parse_runs" in generated_sql
+    assert "legacy-v1-body-only" in generated_sql
+    assert "CREATE TABLE auth_rate_limit_buckets" in generated_sql

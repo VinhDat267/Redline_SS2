@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     database_url: str = DEFAULT_DATABASE_URL
     uploads_dir: str = DEFAULT_UPLOADS_DIR
     upload_storage_backend: str = "local"
+    document_upload_max_bytes: int = 25 * 1024 * 1024
     auth_secret: str = DEFAULT_AUTH_SECRET
     access_token_expire_minutes: int = 720
     google_client_id: str | None = None
@@ -139,6 +140,8 @@ class Settings(BaseSettings):
             raise ValueError(
                 "REDLINE_UPLOAD_STORAGE_BACKEND must be one of: local, persistent-local, ephemeral-demo"
             )
+        if self.document_upload_max_bytes <= 0:
+            raise ValueError("REDLINE_DOCUMENT_UPLOAD_MAX_BYTES must be greater than 0")
 
         if normalized_environment in REQUIRES_SECURE_AUTH_SECRET_ENVIRONMENTS:
             if auth_secret in INSECURE_AUTH_SECRETS or len(auth_secret) < 32:

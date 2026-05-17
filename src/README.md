@@ -4,7 +4,7 @@ Source code for the Redline AI Contract Review application.
 
 ## Layout
 
-- `backend/` — FastAPI application with SQLAlchemy models, Alembic migrations, PostgreSQL + pgvector runtime, and Pytest coverage
+- `backend/` — FastAPI application with SQLAlchemy models, Alembic migrations, PostgreSQL + pgvector runtime, Heroku deploy files, and Pytest coverage
 - `frontend/` — React 19 + Vite + Tailwind application with authenticated workspaces and Vitest coverage
 
 ## Backend Capabilities

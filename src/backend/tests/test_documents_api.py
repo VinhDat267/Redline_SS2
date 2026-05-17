@@ -1,11 +1,11 @@
 from io import BytesIO
+from pathlib import Path
 
 import fitz
 import pytest
 from docx import Document as DocxDocument
 from sqlalchemy import select
 
-from app.core.config import BACKEND_ROOT
 from app.models import DocumentBlock, DocumentParseRun, DocumentSurface, DocumentVersion
 from app.services import documents as document_service
 
@@ -215,7 +215,7 @@ def test_delete_document_version_preserves_file_when_db_commit_fails(
     assert create_response.status_code == 201
     payload = create_response.json()["data"]
     version_id = payload["id"]
-    file_path = BACKEND_ROOT / payload["file_path"]
+    file_path = document_service.resolve_stored_upload_path(payload["file_path"])
     assert file_path.exists()
 
     with session_factory() as session:
@@ -266,6 +266,110 @@ def test_document_version_upload_accepts_pdf_file(client, auth_headers):
     assert payload["file_name"] == "contract-v1.pdf"
     assert payload["file_path"].endswith(".pdf")
     assert payload["parse_status"] == "pending"
+
+
+def test_document_version_upload_supports_external_uploads_dir(
+    client,
+    auth_headers,
+    tmp_path,
+    monkeypatch,
+):
+    external_uploads_dir = tmp_path / "mounted-uploads"
+    monkeypatch.setattr(document_service.settings, "uploads_dir", str(external_uploads_dir), raising=False)
+
+    project_response = client.post(
+        "/api/v1/projects",
+        json={"name": "External Uploads Demo", "description": "Mounted upload storage"},
+        headers=auth_headers,
+    )
+    project_id = project_response.json()["data"]["id"]
+    document_response = client.post(
+        f"/api/v1/projects/{project_id}/documents",
+        json={
+            "title": "External Storage Contract",
+            "document_type": "CONTRACT",
+            "description": "Upload path target",
+        },
+        headers=auth_headers,
+    )
+    document_id = document_response.json()["data"]["id"]
+
+    create_response = client.post(
+        f"/api/v1/documents/{document_id}/versions",
+        files={
+            "file": (
+                "external-v1.docx",
+                _build_docx_bytes([("Storage", "Heading 1"), ("Files live outside the backend root.", None)]),
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
+        data={"version_label": "v1.0"},
+        headers=auth_headers,
+    )
+
+    assert create_response.status_code == 201
+    payload = create_response.json()["data"]
+    assert not Path(payload["file_path"]).is_absolute()
+    assert (external_uploads_dir / payload["file_path"]).exists()
+
+    parse_response = client.post(
+        f"/api/v1/document-versions/{payload['id']}/parse",
+        headers=auth_headers,
+    )
+    assert parse_response.status_code == 200
+    assert parse_response.json()["data"]["parse_status"] == "parsed"
+
+    delete_response = client.delete(
+        f"/api/v1/document-versions/{payload['id']}",
+        headers=auth_headers,
+    )
+    assert delete_response.status_code == 204
+    assert not (external_uploads_dir / payload["file_path"]).exists()
+
+
+def test_document_version_upload_rejects_files_above_configured_limit(
+    client,
+    auth_headers,
+    tmp_path,
+    monkeypatch,
+):
+    uploads_dir = tmp_path / "limited-uploads"
+    monkeypatch.setattr(document_service.settings, "uploads_dir", str(uploads_dir), raising=False)
+    monkeypatch.setattr(document_service.settings, "document_upload_max_bytes", 8, raising=False)
+
+    project_response = client.post(
+        "/api/v1/projects",
+        json={"name": "Upload Limit Demo", "description": "Reject large files"},
+        headers=auth_headers,
+    )
+    project_id = project_response.json()["data"]["id"]
+    document_response = client.post(
+        f"/api/v1/projects/{project_id}/documents",
+        json={
+            "title": "Limited Upload Contract",
+            "document_type": "CONTRACT",
+            "description": "Upload limit target",
+        },
+        headers=auth_headers,
+    )
+    document_id = document_response.json()["data"]["id"]
+
+    create_response = client.post(
+        f"/api/v1/documents/{document_id}/versions",
+        files={
+            "file": (
+                "too-large.docx",
+                b"123456789",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
+        data={"version_label": "v1.0"},
+        headers=auth_headers,
+    )
+
+    assert create_response.status_code == 413
+    assert "Document upload must be smaller" in create_response.json()["detail"]
+    assert [path for path in uploads_dir.rglob("*") if path.is_file()] == []
 
 
 def test_document_version_upload_rejects_unsupported_file_suffix(client, auth_headers):

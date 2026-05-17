@@ -20,7 +20,6 @@ from docx.table import Table
 from docx.text.paragraph import Paragraph
 from sqlalchemy.orm import Session
 
-from app.core.config import BACKEND_ROOT
 from app.models import (
     DocumentBlock,
     DocumentParseRun,
@@ -35,6 +34,7 @@ from app.models.mixins import utcnow
 from app.services.document_parser_quality import (
     analyze_docx_parser_quality,
 )
+from app.services.upload_storage import resolve_stored_upload_path
 
 
 PARSER_VERSION = "v1"
@@ -1343,10 +1343,7 @@ def _collect_visible_text(element) -> str:
 
 
 def _resolve_file_path(version: DocumentVersion) -> Path:
-    file_path = Path(version.file_path)
-    if file_path.is_absolute():
-        return file_path
-    return BACKEND_ROOT / file_path
+    return resolve_stored_upload_path(version.file_path)
 
 
 def _get_style_name(paragraph: Paragraph) -> str:

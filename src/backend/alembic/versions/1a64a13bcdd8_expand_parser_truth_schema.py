@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Sequence, Union
 
-from alembic import op
+from alembic import context, op
 import sqlalchemy as sa
 
 
@@ -186,6 +186,132 @@ def _backfill_compare_context() -> None:
                 )
             """
         )
+    )
+
+
+def _emit_offline_legacy_parse_run_backfill() -> None:
+    op.execute(
+        """
+        INSERT INTO document_parse_runs (
+            document_version_id,
+            parser_version,
+            status,
+            started_at,
+            completed_at,
+            error_message,
+            warning_count,
+            summary_json
+        )
+        SELECT
+            dv.id,
+            'legacy-v1-body-only',
+            CASE
+                WHEN dv.parse_status = 'parsed' THEN 'parsed'
+                ELSE 'parsed_with_warnings'
+            END,
+            dv.uploaded_at,
+            dv.uploaded_at,
+            NULL,
+            0,
+            '{"legacy_backfill": true, "surface_types": ["body"]}'
+        FROM document_versions dv
+        WHERE dv.id IN (
+            SELECT DISTINCT document_version_id
+            FROM document_blocks
+        );
+        """
+    )
+    op.execute(
+        """
+        INSERT INTO document_surfaces (
+            parse_run_id,
+            surface_type,
+            surface_key,
+            logical_order_index,
+            section_ref,
+            notes
+        )
+        SELECT
+            dpr.id,
+            'body',
+            'body-main',
+            0,
+            NULL,
+            'legacy backfill surface'
+        FROM document_parse_runs dpr
+        WHERE dpr.parser_version = 'legacy-v1-body-only';
+        """
+    )
+    op.execute(
+        """
+        UPDATE document_blocks db
+        SET parse_run_id = dpr.id,
+            surface_id = ds.id,
+            surface_order_index = db.order_index
+        FROM document_parse_runs dpr
+        JOIN document_surfaces ds ON ds.parse_run_id = dpr.id
+        WHERE dpr.document_version_id = db.document_version_id
+          AND dpr.parser_version = 'legacy-v1-body-only'
+          AND ds.surface_key = 'body-main';
+        """
+    )
+    op.execute(
+        """
+        UPDATE document_versions dv
+        SET active_parse_run_id = dpr.id
+        FROM document_parse_runs dpr
+        WHERE dpr.document_version_id = dv.id
+          AND dpr.parser_version = 'legacy-v1-body-only';
+        """
+    )
+
+
+def _emit_offline_compare_context_backfill() -> None:
+    op.execute(
+        """
+        UPDATE compare_runs cr
+        SET source_parse_run_id = source_version.active_parse_run_id,
+            target_parse_run_id = target_version.active_parse_run_id
+        FROM document_versions source_version,
+             document_versions target_version
+        WHERE source_version.id = cr.source_version_id
+          AND target_version.id = cr.target_version_id;
+        """
+    )
+    op.execute(
+        """
+        UPDATE change_items ci
+        SET surface_type = COALESCE(target_surface.surface_type, source_surface.surface_type, 'body'),
+            surface_key = COALESCE(target_surface.surface_key, source_surface.surface_key, 'body-main')
+        FROM document_blocks target_block
+        LEFT JOIN document_surfaces target_surface ON target_surface.id = target_block.surface_id,
+             document_blocks source_block
+        LEFT JOIN document_surfaces source_surface ON source_surface.id = source_block.surface_id
+        WHERE target_block.id = ci.target_block_id
+          AND source_block.id = ci.source_block_id;
+        """
+    )
+    op.execute(
+        """
+        UPDATE change_items ci
+        SET surface_type = COALESCE(target_surface.surface_type, 'body'),
+            surface_key = COALESCE(target_surface.surface_key, 'body-main')
+        FROM document_blocks target_block
+        LEFT JOIN document_surfaces target_surface ON target_surface.id = target_block.surface_id
+        WHERE target_block.id = ci.target_block_id
+          AND ci.source_block_id IS NULL;
+        """
+    )
+    op.execute(
+        """
+        UPDATE change_items ci
+        SET surface_type = COALESCE(source_surface.surface_type, 'body'),
+            surface_key = COALESCE(source_surface.surface_key, 'body-main')
+        FROM document_blocks source_block
+        LEFT JOIN document_surfaces source_surface ON source_surface.id = source_block.surface_id
+        WHERE source_block.id = ci.source_block_id
+          AND ci.target_block_id IS NULL;
+        """
     )
 
 
@@ -438,8 +564,12 @@ def upgrade() -> None:
         batch_op.create_index(op.f("ix_change_items_table_key"), ["table_key"], unique=False)
         batch_op.create_index(op.f("ix_change_items_row_key"), ["row_key"], unique=False)
 
-    _backfill_legacy_parse_runs()
-    _backfill_compare_context()
+    if context.is_offline_mode():
+        _emit_offline_legacy_parse_run_backfill()
+        _emit_offline_compare_context_backfill()
+    else:
+        _backfill_legacy_parse_runs()
+        _backfill_compare_context()
 
     with op.batch_alter_table("document_blocks") as batch_op:
         batch_op.alter_column("parse_run_id", existing_type=sa.Integer(), nullable=False)

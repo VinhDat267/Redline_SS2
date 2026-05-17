@@ -10,7 +10,7 @@ Project → Contract → DOCX/PDF Draft Upload → Parse → Compare
 
 ## Current Status
 
-Updated: 2026-05-15
+Updated: 2026-05-17
 
 The application is fully functional with production deployments on Heroku (backend) and Vercel (frontend).
 
@@ -23,8 +23,8 @@ The application is fully functional with production deployments on Heroku (backe
 
 **Test suite:**
 
-- Backend: **211 passed** (Pytest, SQLite fixtures)
-- Frontend: **102 passed** (Vitest, 18 test files)
+- Backend: **238 passed** (Pytest, SQLite fixtures)
+- Frontend: **106 passed** (Vitest, 19 test files)
 - Frontend build: passes (Vite chunk-size warning only)
 
 **Core truth boundaries:**
@@ -52,7 +52,7 @@ RedlineSS2/
 ### Prerequisites
 
 - Docker (for PostgreSQL + pgvector)
-- Python 3.14+ with venv
+- Python 3.12 recommended; backend package supports Python 3.11+
 - Node.js 18+ with npm
 
 ### Backend
@@ -103,6 +103,13 @@ cd src/backend
 ```
 
 For manual end-to-end rehearsal, see `docs/testing/tutorial-redline-e2e-full-pass.md`.
+
+## Deploy Notes
+
+- **Vercel frontend:** deploy from `src/frontend` with `VITE_API_BASE_URL` pointing to the Heroku backend URL.
+- **Heroku backend:** backend deploy files live under `src/backend/`; deploy that directory as the app root, or push it with a subtree workflow.
+- **Uploads:** Heroku dynos use ephemeral disk. Set `REDLINE_UPLOAD_STORAGE_BACKEND=ephemeral-demo` only for demos, or use `persistent-local` with durable mounted storage.
+- **CORS:** set `REDLINE_CORS_ORIGINS` on Heroku to the exact Vercel frontend origin.
 
 ## Main Routes
 

@@ -1,17 +1,20 @@
 from pathlib import Path
-from shutil import copyfileobj
 from uuid import uuid4
 
 from fastapi import HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.config import BACKEND_ROOT, settings
+from app.core.config import settings
 from app.models import Document, DocumentVersion, User
 from app.schemas.document import DocumentCreate, DocumentUpdate
 from app.schemas.document_version import DocumentVersionUpdate
 from app.services import document_parser
+from app.services.upload_storage import resolve_stored_upload_path, to_stored_upload_path
 from app.services.projects import get_project_or_404
+
+
+DOCUMENT_UPLOAD_CHUNK_BYTES = 1024 * 1024
 
 
 def list_documents(session: Session, project_id: int) -> list[Document]:
@@ -106,20 +109,24 @@ def create_document_version(
     target_dir = Path(settings.uploads_dir) / f"document-{document_id}"
     target_dir.mkdir(parents=True, exist_ok=True)
     stored_file = target_dir / f"{uuid4().hex}{file_suffix}"
-    with stored_file.open("wb") as output_stream:
-        copyfileobj(upload_file.file, output_stream)
+    _copy_upload_file_with_limit(upload_file, stored_file)
 
     version = DocumentVersion(
         document_id=document_id,
         version_label=version_label,
         file_name=original_name,
-        file_path=stored_file.relative_to(BACKEND_ROOT).as_posix(),
+        file_path=to_stored_upload_path(stored_file),
         uploaded_by_user_id=actor_user_id,
         parse_status="pending",
         notes=notes,
     )
     session.add(version)
-    session.commit()
+    try:
+        session.commit()
+    except Exception:
+        session.rollback()
+        stored_file.unlink(missing_ok=True)
+        raise
     session.refresh(version)
     return version
 
@@ -152,7 +159,7 @@ def update_document_version(
 
 
 def delete_document_version(session: Session, version: DocumentVersion) -> None:
-    file_path = BACKEND_ROOT / version.file_path
+    file_path = resolve_stored_upload_path(version.file_path)
     session.delete(version)
     try:
         session.commit()
@@ -165,3 +172,26 @@ def delete_document_version(session: Session, version: DocumentVersion) -> None:
 
 def parse_document_version(session: Session, version: DocumentVersion) -> DocumentVersion:
     return document_parser.parse_document_version(session, version)
+
+
+def _copy_upload_file_with_limit(upload_file: UploadFile, stored_file: Path) -> None:
+    bytes_written = 0
+    try:
+        with stored_file.open("wb") as output_stream:
+            while True:
+                chunk = upload_file.file.read(DOCUMENT_UPLOAD_CHUNK_BYTES)
+                if not chunk:
+                    break
+                bytes_written += len(chunk)
+                if bytes_written > settings.document_upload_max_bytes:
+                    raise HTTPException(
+                        status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                        detail=(
+                            "Document upload must be smaller than "
+                            f"{settings.document_upload_max_bytes // (1024 * 1024)} MB."
+                        ),
+                    )
+                output_stream.write(chunk)
+    except Exception:
+        stored_file.unlink(missing_ok=True)
+        raise

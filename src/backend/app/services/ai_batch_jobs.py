@@ -181,10 +181,11 @@ def process_next_ai_batch_job(
         )
 
     try:
-        for item_index, item_id in enumerate(item_ids):
-            if item_index > 0:
+        item_batches = list(_chunked(item_ids, settings.ai_review_batch_size))
+        for batch_index, item_batch in enumerate(item_batches):
+            if batch_index > 0:
                 time.sleep(settings.ai_batch_inter_item_delay)
-            _process_batch_job_item(session_factory, item_id, adapter=adapter)
+            _process_batch_job_items(session_factory, item_batch, adapter=adapter)
     except Exception as exc:
         with session_factory() as session:
             job = session.get(AIBatchJob, job_id)
@@ -253,6 +254,14 @@ def requeue_stale_ai_batch_jobs(
     return len(stale_jobs)
 
 
+def _chunked(item_ids: list[int], batch_size: int) -> list[list[int]]:
+    safe_batch_size = max(int(batch_size or 1), 1)
+    return [
+        item_ids[start_index : start_index + safe_batch_size]
+        for start_index in range(0, len(item_ids), safe_batch_size)
+    ]
+
+
 def _load_selected_change_items(
     session: Session,
     compare_run_id: int,
@@ -270,75 +279,86 @@ def _load_selected_change_items(
     return change_items
 
 
-def _process_batch_job_item(
+def _process_batch_job_items(
     session_factory: sessionmaker,
-    job_item_id: int,
+    job_item_ids: list[int],
     *,
     adapter: LLMAdapter,
 ) -> None:
+    if not job_item_ids:
+        return
+
     with session_factory() as session:
-        job_item = session.get(AIBatchJobItem, job_item_id)
-        if job_item is None or job_item.status in TERMINAL_ITEM_STATUSES:
+        job_items = _load_active_job_items(session, job_item_ids)
+        if not job_items:
             return
+
         now = utcnow()
-        job_item.status = "running"
-        job_item.attempt_count += 1
-        job_item.started_at = job_item.started_at or now
-        job_item.last_heartbeat_at = now
-        session.add(job_item)
+        for job_item in job_items:
+            job_item.status = "running"
+            job_item.attempt_count += 1
+            job_item.started_at = job_item.started_at or now
+            job_item.last_heartbeat_at = now
+            session.add(job_item)
 
-        job = session.get(AIBatchJob, job_item.job_id)
-        if job is not None:
-            job.last_heartbeat_at = now
-            session.add(job)
+        job = session.get(AIBatchJob, job_items[0].job_id)
+        if job is None:
+            session.commit()
+            return
 
+        job.last_heartbeat_at = now
+        session.add(job)
+        job_context = {
+            "job_id": job.id,
+            "requested_by_user_id": job.requested_by_user_id,
+            "force_regenerate": job.force_regenerate,
+            "use_rag": job.use_rag,
+        }
+        change_item_ids = [job_item.change_item_id for job_item in job_items]
         session.commit()
 
-    with session_factory() as session:
-        job_item = session.get(AIBatchJobItem, job_item_id)
-        if job_item is None:
-            return
-
-        job = session.get(AIBatchJob, job_item.job_id)
-        if job is None:
-            return
-
-        try:
-            draft, skipped = ai_review_drafts.generate_change_item_ai_draft_record(
-                session,
-                change_item_id=job_item.change_item_id,
-                actor_user_id=job.requested_by_user_id,
-                force_regenerate=job.force_regenerate,
-                use_rag=job.use_rag,
-                adapter=adapter,
-            )
-            result_status = "skipped" if skipped else draft.generation_status
-            provider_used = draft.provider_used
-            fallback_used = draft.fallback_used
-            error_message = draft.error_message
-            session.commit()
-        except Exception as exc:
-            session.rollback()
-            result_status = "failed"
-            provider_used = None
-            fallback_used = False
-            error_message = str(exc)
+    try:
+        item_results = _generate_batch_item_results(
+            session_factory,
+            change_item_ids,
+            actor_user_id=job_context["requested_by_user_id"],
+            force_regenerate=bool(job_context["force_regenerate"]),
+            use_rag=bool(job_context["use_rag"]),
+            adapter=adapter,
+        )
+    except Exception as exc:
+        item_results = {
+            change_item_id: {
+                "status": "failed",
+                "provider_used": None,
+                "fallback_used": False,
+                "error_message": str(exc),
+            }
+            for change_item_id in change_item_ids
+        }
 
     with session_factory() as session:
-        job_item = session.get(AIBatchJobItem, job_item_id)
-        if job_item is None:
-            return
-
+        job_items = _load_job_items(session, job_item_ids)
         now = utcnow()
-        job_item.status = result_status
-        job_item.provider_used = provider_used
-        job_item.fallback_used = fallback_used
-        job_item.error_message = error_message
-        job_item.completed_at = now
-        job_item.last_heartbeat_at = now
-        session.add(job_item)
+        for job_item in job_items:
+            result = item_results.get(
+                job_item.change_item_id,
+                {
+                    "status": "failed",
+                    "provider_used": None,
+                    "fallback_used": False,
+                    "error_message": "AI batch item did not return a result.",
+                },
+            )
+            job_item.status = str(result["status"])
+            job_item.provider_used = result["provider_used"]
+            job_item.fallback_used = bool(result["fallback_used"])
+            job_item.error_message = result["error_message"]
+            job_item.completed_at = now
+            job_item.last_heartbeat_at = now
+            session.add(job_item)
 
-        job = session.get(AIBatchJob, job_item.job_id)
+        job = session.get(AIBatchJob, job_context["job_id"])
         if job is not None:
             _refresh_job_progress(session, job)
             job.last_heartbeat_at = now
@@ -350,6 +370,64 @@ def _process_batch_job_item(
             session.add(job)
 
         session.commit()
+
+
+def _load_active_job_items(session: Session, job_item_ids: list[int]) -> list[AIBatchJobItem]:
+    return [
+        item
+        for item in _load_job_items(session, job_item_ids)
+        if item.status not in TERMINAL_ITEM_STATUSES
+    ]
+
+
+def _load_job_items(session: Session, job_item_ids: list[int]) -> list[AIBatchJobItem]:
+    return list(
+        session.scalars(
+            select(AIBatchJobItem)
+            .where(AIBatchJobItem.id.in_(job_item_ids))
+            .order_by(AIBatchJobItem.id)
+        )
+    )
+
+
+def _generate_batch_item_results(
+    session_factory: sessionmaker,
+    change_item_ids: list[int],
+    *,
+    actor_user_id: int | None,
+    force_regenerate: bool,
+    use_rag: bool,
+    adapter: LLMAdapter,
+) -> dict[int, dict[str, object]]:
+    with session_factory() as session:
+        draft_results = ai_review_drafts.generate_change_item_ai_draft_records_batch(
+            session,
+            change_item_ids=change_item_ids,
+            actor_user_id=actor_user_id,
+            force_regenerate=force_regenerate,
+            use_rag=use_rag,
+            adapter=adapter,
+        )
+
+        item_results: dict[int, dict[str, object]] = {}
+        for change_item_id, draft, skipped in draft_results:
+            item_results[change_item_id] = {
+                "status": "skipped" if skipped else draft.generation_status,
+                "provider_used": draft.provider_used,
+                "fallback_used": draft.fallback_used,
+                "error_message": draft.error_message,
+            }
+        session.commit()
+        return item_results
+
+
+def _process_batch_job_item(
+    session_factory: sessionmaker,
+    job_item_id: int,
+    *,
+    adapter: LLMAdapter,
+) -> None:
+    _process_batch_job_items(session_factory, [job_item_id], adapter=adapter)
 
 
 def _refresh_job_progress(session: Session, job: AIBatchJob) -> None:

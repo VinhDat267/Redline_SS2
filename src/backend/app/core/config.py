@@ -63,6 +63,7 @@ class Settings(BaseSettings):
     ai_batch_stale_item_seconds: int = 300
     ai_batch_stale_job_seconds: int = 600
     ai_batch_inter_item_delay: float = 7.0
+    ai_review_batch_size: int = 5
     ai_rate_limit_window_seconds: int = 60
     ai_chat_rate_limit_max_attempts: int = 10
     ai_summary_rate_limit_max_attempts: int = 5

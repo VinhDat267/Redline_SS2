@@ -107,6 +107,89 @@ def test_adapter_rejects_resolved_status_and_unknown_assignee():
     )
 
 
+def test_adapter_generates_batched_ai_review_drafts_from_one_provider_call():
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.host or "")
+        payload = json.loads(request.content.decode("utf-8"))
+        prompt = payload["contents"][0]["parts"][0]["text"]
+        assert "Redline AI Review Batch Copilot" in prompt
+        assert '"change_item_id": 101' in prompt
+        assert '"change_item_id": 102' in prompt
+
+        return httpx.Response(
+            200,
+            json={
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [
+                                {
+                                    "text": json.dumps(
+                                        {
+                                            "reviews": [
+                                                {
+                                                    "change_item_id": 101,
+                                                    "suggested_assignee_user_id": 1,
+                                                    "recommended_review_status": "in_review",
+                                                    "explanation": "Batch review for authentication.",
+                                                    "risk_level": "medium",
+                                                    "draft_comment": "Check MFA rollout.",
+                                                    "suggested_checks": [
+                                                        "Review authentication tests.",
+                                                    ],
+                                                    "confidence": 0.84,
+                                                },
+                                                {
+                                                    "change_item_id": 102,
+                                                    "suggested_assignee_user_id": 2,
+                                                    "recommended_review_status": "open",
+                                                    "explanation": "Batch review for audit logs.",
+                                                    "risk_level": "low",
+                                                    "draft_comment": "Check audit coverage.",
+                                                    "suggested_checks": "Review logging tests.",
+                                                    "confidence": 0.74,
+                                                },
+                                            ]
+                                        }
+                                    )
+                                }
+                            ]
+                        }
+                    }
+                ]
+            },
+        )
+
+    adapter = LLMAdapter(
+        settings=_build_ai_settings(),
+        client_factory=_build_client_factory(handler),
+    )
+
+    results = adapter.generate_ai_review_drafts_batch(
+        [
+            _sample_payload(valid_assignee_ids={1, 2}),
+            {
+                **_sample_payload(valid_assignee_ids={1, 2}),
+                "change_item_id": 102,
+                "change_item": {
+                    "change_type": "modified",
+                    "section_title": "Audit Logging",
+                    "old_content": "Audit logs are retained.",
+                    "new_content": "Tamper-proof audit logs are retained.",
+                },
+            },
+        ]
+    )
+
+    assert calls == ["generativelanguage.googleapis.com"]
+    assert [result.generation_status for result in results] == ["generated", "generated"]
+    assert [result.suggested_assignee_user_id for result in results] == [1, 2]
+    assert results[0].suggested_checks == "Review authentication tests."
+    assert results[1].explanation == "Batch review for audit logs."
+
+
 def test_adapter_normalizes_requirement_extraction_candidates():
     def handler(request: httpx.Request) -> httpx.Response:
         payload = json.loads(request.content.decode("utf-8"))

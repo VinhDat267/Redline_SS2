@@ -39,17 +39,18 @@ def generate_compare_run_ai_drafts(
     change_items = _load_compare_run_change_items(session, compare_run_id, change_item_ids)
     adapter = get_llm_adapter()
 
-    results: list[dict[str, object]] = []
-    for change_item in change_items:
-        draft, _ = _generate_change_item_ai_review_draft_result(
-            change_item,
-            session=session,
-            adapter=adapter,
-            force_regenerate=force_regenerate,
-            use_rag=use_rag,
-            actor_user_id=actor_user_id,
-        )
-        results.append(_serialize_generation_result(change_item.id, draft))
+    draft_results = generate_change_item_ai_draft_records_batch(
+        session,
+        change_item_ids=[change_item.id for change_item in change_items],
+        actor_user_id=actor_user_id,
+        force_regenerate=force_regenerate,
+        use_rag=use_rag,
+        adapter=adapter,
+    )
+    results = [
+        _serialize_generation_result(change_item_id, draft)
+        for change_item_id, draft, _skipped in draft_results
+    ]
 
     session.commit()
     generated_count = sum(1 for item in results if item["generation_status"] == "generated")
@@ -106,6 +107,87 @@ def generate_change_item_ai_draft_record(
     )
 
 
+def generate_change_item_ai_draft_records_batch(
+    session: Session,
+    *,
+    change_item_ids: list[int],
+    actor_user_id: int | None,
+    force_regenerate: bool,
+    use_rag: bool = True,
+    adapter: LLMAdapter | None = None,
+) -> list[tuple[int, AIReviewDraft, bool]]:
+    if not change_item_ids:
+        return []
+
+    ordered_change_item_ids = list(dict.fromkeys(change_item_ids))
+    change_items = _load_change_items_by_ids(session, ordered_change_item_ids)
+    review_adapter = adapter or get_llm_adapter()
+
+    results_by_change_item_id: dict[int, tuple[AIReviewDraft, bool]] = {}
+    pending_change_items: list[ChangeItem] = []
+    pending_payloads: list[dict[str, object]] = []
+
+    for change_item in change_items:
+        existing_draft = change_item.ai_review_draft
+        if existing_draft is not None and existing_draft.generation_status == "generated" and not force_regenerate:
+            results_by_change_item_id[change_item.id] = (existing_draft, True)
+            continue
+        pending_change_items.append(change_item)
+        pending_payloads.append(
+            _build_generation_payload(
+                session,
+                change_item,
+                actor_user_id=actor_user_id,
+                use_rag=use_rag,
+            )
+        )
+
+    if pending_payloads:
+        batch_generate = getattr(review_adapter, "generate_ai_review_drafts_batch", None)
+        if callable(batch_generate):
+            normalized_drafts = batch_generate(pending_payloads)
+        else:
+            normalized_drafts = [
+                review_adapter.generate_ai_review_draft(payload)
+                for payload in pending_payloads
+            ]
+
+        for change_item, normalized_draft in zip(
+            pending_change_items,
+            normalized_drafts,
+            strict=True,
+        ):
+            if normalized_draft.generation_status == "generated":
+                normalized_draft.risk_level = calibrate_generated_risk_level(
+                    change_item,
+                    normalized_draft.risk_level,
+                )
+
+            existing_draft = change_item.ai_review_draft
+            draft = existing_draft or AIReviewDraft(
+                change_item_id=change_item.id,
+                explanation=normalized_draft.explanation,
+                generation_status=normalized_draft.generation_status,
+            )
+            if normalized_draft.generation_status == "generated":
+                _apply_generated_draft(draft, normalized_draft)
+            else:
+                _apply_failed_draft(
+                    draft,
+                    normalized_draft,
+                    preserve_existing=existing_draft is not None,
+                )
+
+            session.add(draft)
+            change_item.ai_review_draft = draft
+            results_by_change_item_id[change_item.id] = (draft, False)
+
+    return [
+        (change_item_id, results_by_change_item_id[change_item_id][0], results_by_change_item_id[change_item_id][1])
+        for change_item_id in ordered_change_item_ids
+    ]
+
+
 def _load_compare_run_change_items(
     session: Session,
     compare_run_id: int,
@@ -121,6 +203,21 @@ def _load_compare_run_change_items(
     if change_item_ids and len(change_items) != len(set(change_item_ids)):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Change items not found for compare run")
     return change_items
+
+
+def _load_change_items_by_ids(session: Session, change_item_ids: list[int]) -> list[ChangeItem]:
+    change_items = list(
+        session.execute(
+            _change_item_query()
+            .where(ChangeItem.id.in_(change_item_ids))
+        )
+        .unique()
+        .scalars()
+    )
+    change_items_by_id = {change_item.id: change_item for change_item in change_items}
+    if len(change_items_by_id) != len(change_item_ids):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Change items not found")
+    return [change_items_by_id[change_item_id] for change_item_id in change_item_ids]
 
 
 def _get_compare_run_or_404(session: Session, compare_run_id: int) -> CompareRun:
@@ -403,6 +500,7 @@ def _build_rag_context(session: Session, change_item: ChangeItem) -> list[dict[s
     if not query:
         return rag_context
 
+    query_embedding_payload = rag_service.build_query_embedding_payload(query)
     for draft_id in (change_item.target_version_id, change_item.source_version_id):
         retrieved_blocks = rag_service.retrieve_similar_blocks(
             session,
@@ -411,6 +509,7 @@ def _build_rag_context(session: Session, change_item: ChangeItem) -> list[dict[s
             query=query,
             limit=2,
             exclude_block_ids=seen_block_ids,
+            query_embedding_payload=query_embedding_payload,
         )
         for item in retrieved_blocks:
             block_id = int(item["block_id"])

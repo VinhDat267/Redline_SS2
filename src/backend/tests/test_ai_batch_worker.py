@@ -6,6 +6,7 @@ from docx import Document as DocxDocument
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from app.core.config import settings
 from app.models import AIBatchJob, AIBatchJobItem, AIReviewDraft, ChangeItem
 from app.main import create_app
 from app.models.mixins import utcnow
@@ -226,6 +227,90 @@ def test_process_next_batch_job_updates_drafts_and_job_counts(
         assert len(drafts) == 2
         assert drafts[0].generation_status == "generated"
         assert drafts[1].generation_status == "failed"
+
+
+def test_process_next_batch_job_groups_ai_review_provider_calls(
+    client,
+    auth_headers,
+    session_factory,
+    monkeypatch,
+):
+    compare_run_id = _create_compare_run(client, auth_headers)
+
+    from app.services import ai_batch_jobs as ai_batch_job_service
+
+    class StubAdapter:
+        def __init__(self):
+            self.batch_calls: list[list[int]] = []
+            self.single_calls = 0
+
+        def generate_ai_review_drafts_batch(self, payloads):
+            change_item_ids = [int(payload["change_item_id"]) for payload in payloads]
+            self.batch_calls.append(change_item_ids)
+            return [
+                NormalizedAIReviewDraft(
+                    suggested_assignee_user_id=1,
+                    recommended_review_status="in_review",
+                    explanation=f"Generated batch draft for item {change_item_id}",
+                    risk_level="medium",
+                    draft_comment="Verify the batch-generated review.",
+                    suggested_checks="Review impacted legal clauses.",
+                    confidence=0.82,
+                    generation_status="generated",
+                    provider_used="gemini",
+                    fallback_used=False,
+                    error_message=None,
+                )
+                for change_item_id in change_item_ids
+            ]
+
+        def generate_ai_review_draft(self, payload):
+            self.single_calls += 1
+            return NormalizedAIReviewDraft(
+                suggested_assignee_user_id=None,
+                recommended_review_status="open",
+                explanation="Single generation should not be used for a batch-capable adapter.",
+                risk_level=None,
+                draft_comment=None,
+                suggested_checks=None,
+                confidence=None,
+                generation_status="failed",
+                provider_used="stub",
+                fallback_used=False,
+                error_message="single path used",
+            )
+
+    adapter = StubAdapter()
+    monkeypatch.setattr(ai_batch_job_service, "get_llm_adapter", lambda: adapter)
+    monkeypatch.setattr(settings, "ai_review_batch_size", 2)
+    monkeypatch.setattr(settings, "ai_batch_inter_item_delay", 0.0)
+
+    with session_factory() as session:
+        created_job = ai_batch_job_service.create_compare_run_ai_batch_job(
+            session,
+            compare_run_id=compare_run_id,
+            actor_user_id=1,
+            force_regenerate=False,
+        )
+        session.commit()
+
+    processed = ai_batch_job_service.process_next_ai_batch_job(
+        session_factory,
+        concurrency=1,
+    )
+
+    assert processed is True
+    assert len(adapter.batch_calls) == 1
+    assert len(adapter.batch_calls[0]) == 2
+    assert adapter.single_calls == 0
+
+    with session_factory() as session:
+        job = session.get(AIBatchJob, created_job["job_id"])
+        assert job is not None
+        assert job.status == "completed"
+        assert job.processed_count == 2
+        assert job.generated_count == 2
+        assert job.failed_count == 0
 
 
 def test_recover_stale_running_job_requeues_job_and_item(client, auth_headers, session_factory):

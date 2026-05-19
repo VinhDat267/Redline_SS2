@@ -211,6 +211,63 @@ def test_ai_review_generation_includes_rag_context(
     assert "content" in first_rag_item
 
 
+def test_ai_review_generation_reuses_query_embedding_for_source_and_target_retrieval(
+    client,
+    auth_headers,
+    monkeypatch,
+):
+    compare_run_id = _create_compare_run(client, auth_headers)
+
+    queue_response = client.get(
+        f"/api/v1/compare-runs/{compare_run_id}/change-items",
+        headers=auth_headers,
+    )
+    assert queue_response.status_code == 200
+    change_item_id = queue_response.json()["data"][0]["id"]
+
+    class StubAdapter:
+        def generate_ai_review_draft(self, payload):
+            return NormalizedAIReviewDraft(
+                suggested_assignee_user_id=None,
+                recommended_review_status="open",
+                explanation="Legal review summary.",
+                risk_level="medium",
+                draft_comment="Review the clause update.",
+                suggested_checks="Check liability alignment.",
+                confidence=0.81,
+                generation_status="generated",
+                provider_used="stub",
+                fallback_used=False,
+                error_message=None,
+            )
+
+    from app.services import ai_review_drafts as ai_review_draft_service
+    from app.services import rag_service
+
+    original_build_query_embedding_payload = rag_service.build_query_embedding_payload
+    embedding_call_count = {"value": 0}
+
+    def counting_build_query_embedding_payload(query):
+        embedding_call_count["value"] += 1
+        return original_build_query_embedding_payload(query)
+
+    monkeypatch.setattr(ai_review_draft_service, "get_llm_adapter", lambda: StubAdapter())
+    monkeypatch.setattr(
+        rag_service,
+        "build_query_embedding_payload",
+        counting_build_query_embedding_payload,
+    )
+
+    response = client.post(
+        f"/api/v1/change-items/{change_item_id}/ai-review-draft/generate",
+        json={"force_regenerate": True},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    assert embedding_call_count["value"] == 1
+
+
 def test_ai_review_generation_can_disable_rag_context(
     client,
     auth_headers,

@@ -387,13 +387,17 @@ def retrieve_similar_blocks(
     limit: int = 5,
     draft_id: int | None = None,
     exclude_block_ids: set[int] | None = None,
+    query_embedding_payload: tuple[str, list[float]] | None = None,
     should_cancel: Callable[[], bool] | None = None,
 ) -> list[dict[str, object]]:
     _raise_if_cancelled(should_cancel)
     draft = resolve_contract_draft_or_404(session, document_id, draft_id)
     exclude_block_ids = exclude_block_ids or set()
     _raise_if_cancelled(should_cancel)
-    query_embedding_provider, query_embedding = build_query_embedding_payload(query)
+    if query_embedding_payload is None:
+        query_embedding_provider, query_embedding = build_query_embedding_payload(query)
+    else:
+        query_embedding_provider, query_embedding = query_embedding_payload
     _raise_if_cancelled(should_cancel)
 
     block_query = (

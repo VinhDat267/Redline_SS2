@@ -141,6 +141,58 @@ class LLMAdapter:
             error_message=last_error or "No AI provider is configured.",
         )
 
+    def generate_ai_review_drafts_batch(
+        self,
+        payloads: list[Mapping[str, Any]],
+    ) -> list[NormalizedAIReviewDraft]:
+        if not payloads:
+            return []
+
+        providers = self._build_provider_chain()
+        last_error: str | None = None
+
+        for index, provider_name in enumerate(providers):
+            fallback_used = index > 0
+            try:
+                raw_response = self._call_provider_with_retries(
+                    provider_name,
+                    {"reviews": payloads},
+                    task_type="review_batch",
+                )
+                return self._normalize_batch_results(
+                    raw_response,
+                    payloads=payloads,
+                    provider_used=provider_name,
+                    fallback_used=fallback_used,
+                )
+            except ProviderRetryableError as exc:
+                last_error = str(exc)
+                logger.warning(
+                    "Provider '%s' exhausted retries for batched review: %s. Moving to next provider.",
+                    provider_name,
+                    exc,
+                )
+                continue
+            except ProviderFatalError as exc:
+                logger.error("Provider '%s' fatal error for batched review: %s", provider_name, exc)
+                return [
+                    self._build_failed_result(
+                        provider_used=provider_name,
+                        fallback_used=fallback_used,
+                        error_message=str(exc),
+                    )
+                    for _payload in payloads
+                ]
+
+        return [
+            self._build_failed_result(
+                provider_used=providers[-1] if providers else self.settings.ai_primary_provider,
+                fallback_used=len(providers) > 1,
+                error_message=last_error or "No AI provider is configured.",
+            )
+            for _payload in payloads
+        ]
+
     def generate_ai_summary_draft(self, payload: Mapping[str, Any]) -> NormalizedAISummaryDraft:
         providers = self._build_provider_chain()
         last_error: str | None = None
@@ -512,6 +564,53 @@ class LLMAdapter:
             error_message=None,
         )
 
+    def _normalize_batch_results(
+        self,
+        raw_response: Mapping[str, Any],
+        *,
+        payloads: list[Mapping[str, Any]],
+        provider_used: str,
+        fallback_used: bool,
+    ) -> list[NormalizedAIReviewDraft]:
+        raw_reviews = raw_response.get("reviews")
+        if not isinstance(raw_reviews, list):
+            raise ProviderRetryableError("AI batch output is missing a reviews array.")
+
+        reviews_by_change_item_id: dict[int, Mapping[str, Any]] = {}
+        positional_reviews: list[Mapping[str, Any]] = []
+        for raw_review in raw_reviews:
+            if not isinstance(raw_review, Mapping):
+                raise ProviderRetryableError("AI batch output contains a non-object review.")
+            positional_reviews.append(raw_review)
+            raw_change_item_id = raw_review.get("change_item_id")
+            if isinstance(raw_change_item_id, int):
+                reviews_by_change_item_id[raw_change_item_id] = raw_review
+
+        if len(positional_reviews) < len(payloads):
+            raise ProviderRetryableError("AI batch output returned fewer reviews than requested.")
+
+        normalized_results: list[NormalizedAIReviewDraft] = []
+        for payload_index, payload in enumerate(payloads):
+            raw_change_item_id = payload.get("change_item_id")
+            raw_review = None
+            if isinstance(raw_change_item_id, int):
+                raw_review = reviews_by_change_item_id.get(raw_change_item_id)
+            if raw_review is None:
+                raw_review = positional_reviews[payload_index]
+
+            normalized_results.append(
+                self._normalize_result(
+                    raw_review,
+                    valid_assignee_ids=self._normalize_valid_assignee_ids(
+                        payload.get("valid_assignee_ids")
+                    ),
+                    provider_used=provider_used,
+                    fallback_used=fallback_used,
+                )
+            )
+
+        return normalized_results
+
     def _extract_gemini_text(self, response_json: Mapping[str, Any]) -> str:
         candidates = response_json.get("candidates")
         if not isinstance(candidates, list) or not candidates:
@@ -591,12 +690,33 @@ class LLMAdapter:
             "recommended_review_status must be open or in_review."
         )
 
+    def _build_review_batch_system_prompt(self) -> str:
+        return (
+            "You are Redline AI Review Batch Copilot. "
+            "Return JSON only. "
+            "Use only this top-level key: reviews. "
+            "reviews must be an array with one object for each requested review. "
+            "Each object must include change_item_id and these keys: suggested_assignee_user_id, "
+            "recommended_review_status, explanation, risk_level, draft_comment, suggested_checks, confidence. "
+            "recommended_review_status must be open or in_review. "
+            "Do not merge, skip, or reorder requested reviews."
+        )
+
     def _build_user_prompt(self, payload: Mapping[str, Any]) -> str:
         prompt_payload = self._to_json_safe(payload)
         prompt_body = json.dumps(prompt_payload, ensure_ascii=True, sort_keys=True, indent=2)
         return (
             f"{self._build_system_prompt()}\n"
             "Use the review context below and respond with a single JSON object.\n"
+            f"{prompt_body}"
+        )
+
+    def _build_review_batch_user_prompt(self, payload: Mapping[str, Any]) -> str:
+        prompt_payload = self._to_json_safe(payload)
+        prompt_body = json.dumps(prompt_payload, ensure_ascii=True, sort_keys=True, indent=2)
+        return (
+            f"{self._build_review_batch_system_prompt()}\n"
+            "Use the review contexts below and respond with a single JSON object.\n"
             f"{prompt_body}"
         )
 
@@ -657,6 +777,8 @@ class LLMAdapter:
         )
 
     def _build_system_prompt_for_task(self, task_type: str) -> str:
+        if task_type == "review_batch":
+            return self._build_review_batch_system_prompt()
         if task_type == "summary":
             return self._build_summary_system_prompt()
         if task_type == "requirement_extraction":
@@ -666,6 +788,8 @@ class LLMAdapter:
         return self._build_system_prompt()
 
     def _build_prompt_for_task(self, payload: Mapping[str, Any], task_type: str) -> str:
+        if task_type == "review_batch":
+            return self._build_review_batch_user_prompt(payload)
         if task_type == "summary":
             return self._build_summary_user_prompt(payload)
         if task_type == "requirement_extraction":

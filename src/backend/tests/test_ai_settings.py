@@ -12,6 +12,7 @@ def test_settings_expose_primary_and_fallback_ai_provider_env(monkeypatch):
     monkeypatch.setenv("REDLINE_AI_BATCH_POLL_INTERVAL_MS", "1500")
     monkeypatch.setenv("REDLINE_AI_BATCH_STALE_ITEM_SECONDS", "120")
     monkeypatch.setenv("REDLINE_AI_BATCH_STALE_JOB_SECONDS", "240")
+    monkeypatch.setenv("REDLINE_AI_REVIEW_BATCH_SIZE", "4")
 
     settings = Settings()
 
@@ -25,6 +26,7 @@ def test_settings_expose_primary_and_fallback_ai_provider_env(monkeypatch):
     assert settings.ai_batch_poll_interval_ms == 1500
     assert settings.ai_batch_stale_item_seconds == 120
     assert settings.ai_batch_stale_job_seconds == 240
+    assert settings.ai_review_batch_size == 4
 
 
 def test_settings_expose_rag_embedding_provider_env(monkeypatch):

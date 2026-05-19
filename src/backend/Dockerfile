@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.12-slim AS backend
 
 # System deps for PDF parsing (PyMuPDF) and OCR (Tesseract)
 RUN apt-get update && apt-get install -y --no-install-recommends \

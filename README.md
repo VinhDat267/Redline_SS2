@@ -51,11 +51,36 @@ RedlineSS2/
 
 ### Prerequisites
 
-- Docker (for PostgreSQL + pgvector)
+- Docker (for the full local stack or PostgreSQL + pgvector only)
 - Python 3.12 recommended; backend package supports Python 3.11+
 - Node.js 18+ with npm
 
-### Backend
+### Full Docker Stack
+
+Use this path when you want PostgreSQL, backend, and frontend to run from Docker:
+
+```powershell
+Copy-Item src/backend/.env.example src/backend/.env
+Copy-Item src/frontend/.env.example src/frontend/.env
+# Fill REDLINE_AI_GEMINI_API_KEY and REDLINE_GOOGLE_CLIENT_ID in src/backend/.env.
+# Fill VITE_GOOGLE_CLIENT_ID in src/frontend/.env with the same Google Web Client ID.
+docker compose up --build
+```
+
+Open:
+
+- Frontend: `http://localhost:5173`
+- Backend Swagger UI: `http://localhost:8000/docs`
+
+The Docker stack reads `src/backend/.env` and `src/frontend/.env`, then overrides container-specific values such as `REDLINE_DATABASE_URL`, upload paths, CORS, and Tesseract paths. To seed demo data:
+
+```powershell
+docker compose exec backend python -m app.seed
+```
+
+If you use Google login locally, the Google OAuth Web Client must allow `http://localhost:5173` as an authorized JavaScript origin.
+
+### Local Backend
 
 ```powershell
 docker compose up -d postgres
@@ -73,7 +98,7 @@ Swagger UI: `http://127.0.0.1:8000/docs`
 
 The backend always loads `src/backend/.env` by absolute path, so settings stay consistent regardless of working directory. RAG runtime uses PostgreSQL + pgvector via `compose.yml`; run Alembic after starting Docker so the `vector` extension exists.
 
-### Frontend
+### Local Frontend
 
 ```powershell
 cd src/frontend

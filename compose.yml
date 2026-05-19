@@ -17,5 +17,61 @@ services:
       retries: 10
     restart: unless-stopped
 
+  backend:
+    build:
+      context: ./src/backend
+      target: backend
+    container_name: redline-backend
+    env_file:
+      - ./src/backend/.env
+    environment:
+      - PORT=8000
+      - REDLINE_ENVIRONMENT=local
+      - REDLINE_DATABASE_URL=postgresql+psycopg://redline:redline@postgres:5432/redline
+      - REDLINE_UPLOADS_DIR=/app/uploads
+      - REDLINE_UPLOAD_STORAGE_BACKEND=persistent-local
+      - REDLINE_CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+      - REDLINE_CORS_ORIGIN_REGEX=
+      - REDLINE_AUTH_COOKIE_SAMESITE=lax
+      - REDLINE_AUTH_COOKIE_SECURE=false
+      - REDLINE_TESSERACT_CMD=tesseract
+      - REDLINE_TESSDATA_PREFIX=/usr/share/tesseract-ocr/5/tessdata
+    ports:
+      - "8000:8000"
+    volumes:
+      - redline_uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).read()\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./src/frontend
+      target: frontend
+    container_name: redline-frontend
+    env_file:
+      - ./src/frontend/.env
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8000
+      - VITE_CONTRACT_CHAT_STREAMING_ENABLED=true
+    ports:
+      - "5173:5173"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   redline_pgdata:
+  redline_uploads:

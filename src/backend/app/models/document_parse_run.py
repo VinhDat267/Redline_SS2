@@ -48,11 +48,13 @@ class DocumentParseRun(Base):
         "CompareRun",
         back_populates="source_parse_run",
         foreign_keys="CompareRun.source_parse_run_id",
+        cascade="all, delete",
     )
     target_compare_runs = relationship(
         "CompareRun",
         back_populates="target_parse_run",
         foreign_keys="CompareRun.target_parse_run_id",
+        cascade="all, delete",
     )
     requirement_candidates = relationship(
         "AIRequirementCandidate",

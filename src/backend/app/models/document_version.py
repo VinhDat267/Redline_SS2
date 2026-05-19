@@ -58,11 +58,13 @@ class DocumentVersion(Base):
         "CompareRun",
         back_populates="source_version",
         foreign_keys="CompareRun.source_version_id",
+        cascade="all, delete",
     )
     target_compare_runs = relationship(
         "CompareRun",
         back_populates="target_version",
         foreign_keys="CompareRun.target_version_id",
+        cascade="all, delete",
     )
     source_change_items = relationship(
         "ChangeItem",

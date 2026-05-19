@@ -1,3 +1,6 @@
+from app.models import CompareRun, Document, DocumentParseRun, DocumentVersion, Project
+
+
 def test_project_crud_flow(client, auth_headers):
     create_response = client.post(
         "/api/v1/projects",
@@ -31,6 +34,79 @@ def test_project_crud_flow(client, auth_headers):
 
     missing_response = client.get(f"/api/v1/projects/{project_id}", headers=auth_headers)
     assert missing_response.status_code == 404
+
+
+def test_delete_project_removes_compare_runs_without_nulling_required_foreign_keys(
+    client,
+    auth_headers,
+    session_factory,
+):
+    create_response = client.post(
+        "/api/v1/projects",
+        json={"name": "Deletion Regression", "description": "Project with compare history"},
+        headers=auth_headers,
+    )
+    assert create_response.status_code == 201
+    project_id = create_response.json()["data"]["id"]
+
+    with session_factory() as session:
+        document = Document(
+            project_id=project_id,
+            title="Master Services Agreement",
+            document_type="contract",
+        )
+        session.add(document)
+        session.flush()
+
+        source_version = DocumentVersion(
+            document_id=document.id,
+            version_label="v1",
+            file_name="msa-v1.docx",
+            file_path="uploads/msa-v1.docx",
+            parse_status="parsed",
+        )
+        target_version = DocumentVersion(
+            document_id=document.id,
+            version_label="v2",
+            file_name="msa-v2.docx",
+            file_path="uploads/msa-v2.docx",
+            parse_status="parsed",
+        )
+        session.add_all([source_version, target_version])
+        session.flush()
+
+        source_parse_run = DocumentParseRun(
+            document_version_id=source_version.id,
+            parser_version="test",
+            status="parsed",
+        )
+        target_parse_run = DocumentParseRun(
+            document_version_id=target_version.id,
+            parser_version="test",
+            status="parsed",
+        )
+        session.add_all([source_parse_run, target_parse_run])
+        session.flush()
+        source_version.active_parse_run_id = source_parse_run.id
+        target_version.active_parse_run_id = target_parse_run.id
+
+        compare_run = CompareRun(
+            source_version_id=source_version.id,
+            target_version_id=target_version.id,
+            source_parse_run_id=source_parse_run.id,
+            target_parse_run_id=target_parse_run.id,
+            compare_status="completed",
+        )
+        session.add(compare_run)
+        session.commit()
+        compare_run_id = compare_run.id
+
+    delete_response = client.delete(f"/api/v1/projects/{project_id}", headers=auth_headers)
+    assert delete_response.status_code == 204
+
+    with session_factory() as session:
+        assert session.get(Project, project_id) is None
+        assert session.get(CompareRun, compare_run_id) is None
 
 
 def test_project_member_crud_flow(client, seeded_users, auth_headers):

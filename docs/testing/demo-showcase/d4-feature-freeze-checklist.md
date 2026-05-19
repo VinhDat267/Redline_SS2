@@ -54,7 +54,7 @@ Before demo freeze can be treated as ready:
 - [x] Alembic is at head.
 - [x] `python -m app.rag_admin health --strict` returns healthy.
 - [x] Direct Gemini LLM configuration is supported by backend settings.
-- [x] Direct Gemini embedding configuration uses `gemini-embedding-001`.
+- [x] Direct Gemini embedding configuration uses `gemini-embedding-2`.
 - [x] Gemini embeddings remain 3072-dimensional for pgvector compatibility.
 - [x] Backend serves FastAPI at `http://127.0.0.1:8000`.
 - [x] Frontend serves Vite at `http://127.0.0.1:5173`.

@@ -18,7 +18,7 @@ def default_test_rag_embeddings(monkeypatch):
     monkeypatch.setattr(settings, "rag_embedding_provider", "local-hash")
     monkeypatch.setattr(settings, "rag_embedding_base_url", None)
     monkeypatch.setattr(settings, "rag_embedding_api_key", None)
-    monkeypatch.setattr(settings, "rag_embedding_model", "gemini/gemini-embedding-2-preview")
+    monkeypatch.setattr(settings, "rag_embedding_model", "gemini-embedding-2")
     monkeypatch.setattr(settings, "rag_embedding_dimensions", EMBEDDING_DIMENSIONS)
     monkeypatch.setattr(settings, "rag_embedding_timeout_seconds", 30.0)
     monkeypatch.setattr(settings, "rag_embedding_batch_size", 64)

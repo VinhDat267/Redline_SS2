@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     cors_origin_regex: str | None = LOCAL_CORS_ORIGIN_REGEX
     ai_primary_provider: str = "gemini"
     ai_gemini_api_key: str | None = None
-    ai_gemini_model: str = "gemini-2.0-flash"
+    ai_gemini_model: str = "gemini-3.1-flash-lite"
     ai_fallback_provider: str = "openai"
     ai_openai_api_key: str | None = None
     ai_openai_model: str = "gpt-4.1-mini"
@@ -71,7 +71,7 @@ class Settings(BaseSettings):
     rag_embedding_provider: str = "local-hash"
     rag_embedding_base_url: str | None = None
     rag_embedding_api_key: str | None = None
-    rag_embedding_model: str = "gemini/gemini-embedding-2-preview"
+    rag_embedding_model: str = "gemini-embedding-2"
     rag_embedding_dimensions: int = 3072
     rag_embedding_timeout_seconds: float = 30.0
     rag_embedding_batch_size: int = 64

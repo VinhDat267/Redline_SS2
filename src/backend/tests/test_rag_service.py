@@ -144,7 +144,7 @@ def test_gemini_openai_compatible_embeddings_reuse_gemini_api_key(monkeypatch):
                         "embedding": [0.002] * 3072,
                     }
                 ],
-                "model": "gemini-embedding-001",
+                "model": "gemini-embedding-2",
             },
         )
 
@@ -157,7 +157,7 @@ def test_gemini_openai_compatible_embeddings_reuse_gemini_api_key(monkeypatch):
         "https://generativelanguage.googleapis.com/v1beta/openai",
     )
     monkeypatch.setattr(settings, "rag_embedding_api_key", None)
-    monkeypatch.setattr(settings, "rag_embedding_model", "gemini-embedding-001")
+    monkeypatch.setattr(settings, "rag_embedding_model", "gemini-embedding-2")
     monkeypatch.setattr(settings, "rag_embedding_dimensions", 3072)
     monkeypatch.setattr(settings, "rag_embedding_fallback_to_local_hash", False)
     monkeypatch.setattr(
@@ -168,11 +168,11 @@ def test_gemini_openai_compatible_embeddings_reuse_gemini_api_key(monkeypatch):
 
     provider, vector, _vector_json = rag_service.build_text_embedding_payload("Redline RAG health check.")
 
-    assert provider == "openai-compatible:gemini-embedding-001"
+    assert provider == "openai-compatible:gemini-embedding-2"
     assert vector == [0.002] * 3072
     assert captured_request["url"] == "https://generativelanguage.googleapis.com/v1beta/openai/embeddings"
     assert captured_request["authorization"] == "Bearer gemini-key"
-    assert '"model":"gemini-embedding-001"' in captured_request["payload"]
+    assert '"model":"gemini-embedding-2"' in captured_request["payload"]
 
 
 def test_parse_batches_openai_compatible_embeddings_for_document_blocks(

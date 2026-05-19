@@ -166,7 +166,7 @@ Tai lieu nay tong hop cac thong tin "dictionary" de nguoi test mo dung route, du
 | `REDLINE_AUTH_SECRET` | local dev secret | ky auth session |
 | `REDLINE_AUTH_COOKIE_SAMESITE` | `lax` | SameSite policy cho auth cookie |
 | `REDLINE_AI_GEMINI_API_KEY` | none | AI primary |
-| `REDLINE_AI_GEMINI_MODEL` | `gemini-2.0-flash` | model primary |
+| `REDLINE_AI_GEMINI_MODEL` | `gemini-3.1-flash-lite` | model primary |
 | `REDLINE_AI_OPENAI_API_KEY` | none | AI fallback |
 | `REDLINE_AI_OPENAI_MODEL` | `gpt-4.1-mini` | model fallback |
 | `REDLINE_AI_OPENAI_BASE_URL` | none | OpenAI-compatible endpoint |

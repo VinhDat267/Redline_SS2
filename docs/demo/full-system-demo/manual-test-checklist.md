@@ -10,7 +10,7 @@ Use this before recording or presenting the demo. Mark each line while testing.
 - [ ] `REDLINE_AI_GEMINI_API_KEY` is set in `src/backend/.env`.
 - [ ] `REDLINE_AI_PRIMARY_PROVIDER=gemini`.
 - [ ] `REDLINE_RAG_EMBEDDING_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai`.
-- [ ] `REDLINE_RAG_EMBEDDING_MODEL=gemini-embedding-001`.
+- [ ] `REDLINE_RAG_EMBEDDING_MODEL=gemini-embedding-2`.
 - [ ] `.\.venv\Scripts\python -m app.rag_admin health --strict` passes from `src/backend`.
 - [ ] `.\.venv\Scripts\python -m app.parser_admin pdf-ocr-health --strict` passes if scanned PDF OCR will be shown.
 

@@ -39,10 +39,10 @@ Expected model config:
 | Variable | Expected local value |
 | --- | --- |
 | `REDLINE_AI_PRIMARY_PROVIDER` | `gemini` |
-| `REDLINE_AI_GEMINI_MODEL` | `gemini-2.0-flash` |
+| `REDLINE_AI_GEMINI_MODEL` | `gemini-3.1-flash-lite` |
 | `REDLINE_RAG_EMBEDDING_PROVIDER` | `openai_compatible` |
 | `REDLINE_RAG_EMBEDDING_BASE_URL` | `https://generativelanguage.googleapis.com/v1beta/openai` |
-| `REDLINE_RAG_EMBEDDING_MODEL` | `gemini-embedding-001` |
+| `REDLINE_RAG_EMBEDDING_MODEL` | `gemini-embedding-2` |
 | `REDLINE_RAG_EMBEDDING_DIMENSIONS` | `3072` |
 
 ## Start Sequence
@@ -95,7 +95,7 @@ Required result:
 
 - `healthy=true`
 - `embedding_provider_ok=true`
-- `configured_provider=openai-compatible:gemini-embedding-001`
+- `configured_provider=openai-compatible:gemini-embedding-2`
 - `embedding_dimensions_ok=true`
 - `pgvector_dimensions_ok=true`
 - `stale_block_count=0`

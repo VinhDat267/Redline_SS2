@@ -653,6 +653,21 @@ export function createRequirementLink(token, changeItemId, requirementId, notes 
   });
 }
 
+export function acceptTraceabilitySuggestion(token, changeItemId, requirementId, suggestionToken, notes = "") {
+  return apiRequest(`/api/v1/change-items/${changeItemId}/requirement-links/ai-suggested`, {
+    method: "POST",
+    token,
+    body: { requirement_id: requirementId, suggestion_token: suggestionToken, notes }
+  });
+}
+
+export function suggestTraceabilityLinks(token, changeItemId) {
+  return apiRequest(`/api/v1/change-items/${changeItemId}/suggest-links`, {
+    method: "POST",
+    token
+  });
+}
+
 export function deleteRequirementLink(token, changeItemId, requirementId) {
   return apiRequest(`/api/v1/change-items/${changeItemId}/requirement-links/${requirementId}`, {
     method: "DELETE",

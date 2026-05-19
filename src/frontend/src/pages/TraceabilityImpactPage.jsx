@@ -18,6 +18,7 @@ import { diffWords } from "diff";
 
 import { useAuth } from "../auth/AuthContext";
 import {
+  acceptTraceabilitySuggestion,
   ApiError,
   createRequirementLink,
   createRequirementTestCaseMapping,
@@ -27,7 +28,8 @@ import {
   getCompareRun,
   listCompareRunChangeItems,
   listProjectRequirements,
-  listProjectTestCases
+  listProjectTestCases,
+  suggestTraceabilityLinks
 } from "../lib/api";
 import {
   buildChangeHeadline,
@@ -55,6 +57,10 @@ export function TraceabilityImpactPage() {
   const [mappingDeletingKey, setMappingDeletingKey] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [aiSuggestions, setAiSuggestions] = useState([]);
+  const [isSuggesting, setIsSuggesting] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [acceptingReqId, setAcceptingReqId] = useState(null);
 
   useEffect(() => {
     let isCurrent = true;
@@ -103,6 +109,44 @@ export function TraceabilityImpactPage() {
       setChangeItem(updated);
     } catch (e) { setError(e instanceof ApiError ? e.message : "Failed to unlink"); }
     finally { setUnlinkingId(null); }
+  };
+
+  const handleSuggestLinks = async () => {
+    if (!changeItem) return;
+    setIsSuggesting(true); setError(""); setShowSuggestions(true);
+    try {
+      const result = await suggestTraceabilityLinks(token, changeItem.id);
+      // Filter out already-linked requirements
+      const alreadyLinked = new Set((changeItem.linked_requirements ?? []).map(r => r.requirement_id));
+      const fresh = (result.suggestions ?? []).filter(s => !alreadyLinked.has(s.requirement_id));
+      setAiSuggestions(fresh);
+      if (fresh.length === 0 && !result.error_message) setError("AI found no new obligation matches above 30% confidence.");
+      if (result.error_message) setError(`AI error: ${result.error_message}`);
+    } catch (e) { setError(e instanceof ApiError ? e.message : "AI suggestion failed"); setShowSuggestions(false); }
+    finally { setIsSuggesting(false); }
+  };
+
+  const handleAcceptSuggestion = async (suggestion) => {
+    if (!changeItem) return;
+    setAcceptingReqId(suggestion.requirement_id); setError("");
+    try {
+      if (!suggestion.suggestion_token) {
+        throw new ApiError("Missing AI suggestion token", 400);
+      }
+      const updated = await acceptTraceabilitySuggestion(
+        token,
+        changeItem.id,
+        suggestion.requirement_id,
+        suggestion.suggestion_token
+      );
+      setChangeItem(updated);
+      setAiSuggestions(prev => prev.filter(s => s.requirement_id !== suggestion.requirement_id));
+    } catch (e) { setError(e instanceof ApiError ? e.message : "Failed to accept suggestion"); }
+    finally { setAcceptingReqId(null); }
+  };
+
+  const handleDismissSuggestion = (reqId) => {
+    setAiSuggestions(prev => prev.filter(s => s.requirement_id !== reqId));
   };
 
   const handleCreateMapping = async () => {
@@ -170,7 +214,7 @@ export function TraceabilityImpactPage() {
         .ti-node { flex:1; display:flex; flex-direction:column; min-height:0; }
         .ti-select { width:100%; padding:6px 10px; border-radius:7px; border:1px solid #E6E8EA; background:#F4F5F7; color:#1E2026; font-size:12px; outline:none; transition:border-color 150ms; }
         .ti-select:focus { border-color:#F0B90B; }
-        .ti-btn-primary { display:flex; align-items:center; justify-content:center; gap:5px; padding:7px 14px; border-radius:7px; background:#F0B90B; color:#1E2026; border:none; font-size:12px; font-weight:700; cursor:pointer; transition:all 150ms; }
+        .ti-btn-primary { display:flex; align-items:center; justify-content:center; gap:5px; padding:8px 16px; border-radius:50px; background:#F0B90B; color:#1E2026; border:none; font-size:12px; font-weight:700; cursor:pointer; transition:all 150ms; box-shadow:0 2px 4px rgba(240,185,11,0.12); }
         .ti-btn-primary:hover:not(:disabled) { background:#FFD000; transform:translateY(-1px); }
         .ti-btn-primary:disabled { opacity:0.4; cursor:not-allowed; }
         .ti-diff-old mark { background:rgba(246,70,93,0.15); color:#A82045; text-decoration:line-through; text-decoration-color:#F6465D; border-radius:3px; padding:0 2px; font-weight:600; }
@@ -247,7 +291,7 @@ export function TraceabilityImpactPage() {
       <div style={{ flex: 1, display: "flex", overflow: "hidden", padding: "16px", gap: "12px" }}>
 
         {/* LEFT — Diff Context ──────────────────────────────── */}
-        <div className="ti-card" style={{ width: "300px", flexShrink: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div className="ti-card" style={{ width: "280px", flexShrink: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           {/* Header */}
           <div style={{ flexShrink: 0, padding: "10px 14px", borderBottom: "1px solid #E6E8EA", display: "flex", alignItems: "center", gap: "7px" }}>
             <FileDiff size={14} style={{ color: "#848E9C" }} />
@@ -325,12 +369,93 @@ export function TraceabilityImpactPage() {
               <GitCommit size={14} style={{ color: "#848E9C" }} />
               <h2 style={{ fontSize: "11px", fontWeight: 700, color: "#1E2026", margin: 0 }}>Impact Chain</h2>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <span style={{ fontSize: "10px", fontWeight: 700, padding: "2px 9px", borderRadius: "20px", background: "#FFF8E6", color: "#B07D0A", border: "1px solid #F0B90B44" }}>{linkedRequirementCount} obligations</span>
               <ArrowRight size={12} style={{ color: "#C0C6CF" }} />
               <span style={{ fontSize: "10px", fontWeight: 700, padding: "2px 9px", borderRadius: "20px", background: "#EFF6FF", color: "#0369A1", border: "1px solid #0EA5E944" }}>{impactedTestCount} checks</span>
+              {changeItem && (
+                <button
+                  type="button"
+                  onClick={handleSuggestLinks}
+                  disabled={isSuggesting || !changeItem}
+                  style={{ display: "flex", alignItems: "center", gap: "5px", padding: "5px 14px", borderRadius: "50px", background: isSuggesting ? "#F5F5F5" : "#fff", border: "1px solid #F0B90B", color: "#B07D0A", fontSize: "11px", fontWeight: 700, cursor: isSuggesting ? "not-allowed" : "pointer", transition: "all 150ms", opacity: isSuggesting ? 0.7 : 1, boxShadow: "0 1px 3px rgba(240,185,11,0.12)" }}
+                  title="Ask AI to suggest obligation links for this change"
+                >
+                  {isSuggesting
+                    ? <><div style={{ width: "10px", height: "10px", borderRadius: "50%", border: "2px solid #E6E8EA", borderTopColor: "#F0B90B", animation: "tiSpin 0.8s linear infinite" }} />Analyzing…</>
+                    : <><Sparkles size={11} style={{ color: "#F0B90B" }} />Suggest Links</>}
+                </button>
+              )}
             </div>
           </div>
+
+          {/* AI Suggestion Panel */}
+          {showSuggestions && (
+            <div style={{ flexShrink: 0, borderBottom: "1px solid #E6E8EA", borderLeft: "3px solid #F0B90B", background: "#FAFAFA", padding: "12px 16px", animation: "tiFade 220ms ease-out both" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <Sparkles size={13} style={{ color: "#F0B90B" }} />
+                  <span style={{ fontSize: "11px", fontWeight: 700, color: "#1E2026" }}>AI Suggested Links</span>
+                  {aiSuggestions.length > 0 && (
+                    <span style={{ fontSize: "10px", fontWeight: 700, background: "rgba(240,185,11,0.1)", color: "#B07D0A", padding: "1px 7px", borderRadius: "20px", border: "1px solid rgba(240,185,11,0.3)" }}>{aiSuggestions.length} found</span>
+                  )}
+                </div>
+                <button type="button" aria-label="Close AI suggestions" onClick={() => { setShowSuggestions(false); setAiSuggestions([]); }}
+                  style={{ fontSize: "11px", color: "#848E9C", background: "transparent", border: "none", cursor: "pointer", padding: "2px 6px", borderRadius: "4px", transition: "color 120ms" }}
+                  onMouseEnter={e => { e.currentTarget.style.color = "#F6465D"; }}
+                  onMouseLeave={e => { e.currentTarget.style.color = "#848E9C"; }}
+                >✕ Close</button>
+              </div>
+              {isSuggesting ? (
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "12px", color: "#686A6C", fontSize: "12px" }}>
+                  <div style={{ width: "14px", height: "14px", borderRadius: "50%", border: "2px solid #E6E8EA", borderTopColor: "#F0B90B", animation: "tiSpin 0.8s linear infinite" }} />
+                  Analyzing clause change against project obligations…
+                </div>
+              ) : aiSuggestions.length === 0 ? (
+                <div style={{ padding: "12px", color: "#848E9C", fontSize: "12px", textAlign: "center" }}>No suggestions above 30% confidence threshold.</div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "240px", overflowY: "auto" }}>
+                  {aiSuggestions.map(s => {
+                    const pct = Math.round(s.confidence * 100);
+                    const barColor = pct >= 80 ? "#0ECB81" : pct >= 50 ? "#F0B90B" : "#848E9C";
+                    const relevanceLabel = { directly_affected: "Direct", indirectly_affected: "Indirect", related: "Related" }[s.relevance_type] ?? s.relevance_type;
+                    return (
+                      <div key={s.requirement_id} style={{ background: "#fff", border: "1px solid #E6E8EA", borderRadius: "8px", padding: "10px 12px", display: "flex", gap: "10px", alignItems: "flex-start", flexShrink: 0, borderLeft: "3px solid #F0B90B", boxShadow: "0 1px 3px rgba(32,32,37,0.04)" }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px", flexWrap: "wrap" }}>
+                            <span style={{ fontSize: "10px", fontWeight: 700, color: "#B07D0A" }}>{s.requirement_code}</span>
+                            <span style={{ fontSize: "9px", fontWeight: 600, padding: "1px 6px", borderRadius: "4px", background: `${barColor}15`, color: barColor, border: `1px solid ${barColor}33` }}>{relevanceLabel}</span>
+                            <span style={{ marginLeft: "auto", fontSize: "10px", fontWeight: 700, color: barColor }}>{pct}%</span>
+                          </div>
+                          {/* Confidence bar */}
+                          <div style={{ height: "3px", background: "#E6E8EA", borderRadius: "2px", marginBottom: "6px" }}>
+                            <div style={{ height: "100%", width: `${pct}%`, background: barColor, borderRadius: "2px", transition: "width 600ms ease" }} />
+                          </div>
+                          <div style={{ fontSize: "11px", color: "#474D57", fontWeight: 600, marginBottom: "3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.title}</div>
+                          {s.rationale && <div style={{ fontSize: "10px", color: "#848E9C", lineHeight: 1.5 }}>{s.rationale}</div>}
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "5px", flexShrink: 0 }}>
+                          <button type="button"
+                            aria-label={`Link AI suggestion ${s.requirement_code}`}
+                            disabled={acceptingReqId === s.requirement_id}
+                            onClick={() => handleAcceptSuggestion(s)}
+                            style={{ padding: "4px 12px", borderRadius: "50px", background: "#F0B90B", color: "#1E2026", border: "none", fontSize: "11px", fontWeight: 700, cursor: acceptingReqId === s.requirement_id ? "not-allowed" : "pointer", opacity: acceptingReqId === s.requirement_id ? 0.6 : 1, transition: "all 120ms", boxShadow: "0 1px 2px rgba(240,185,11,0.15)" }}
+                          >
+                            {acceptingReqId === s.requirement_id ? "…" : "✓ Link"}
+                          </button>
+                          <button type="button"
+                            aria-label={`Dismiss AI suggestion ${s.requirement_code}`}
+                            onClick={() => handleDismissSuggestion(s.requirement_id)}
+                            style={{ padding: "4px 12px", borderRadius: "50px", background: "#fff", color: "#848E9C", border: "1px solid #E6E8EA", fontSize: "11px", fontWeight: 600, cursor: "pointer", transition: "all 120ms" }}
+                          >✕</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Chain content */}
           <div style={{ flex: 1, overflowY: "auto", padding: "16px", display: "flex", gap: "12px" }}>
@@ -344,10 +469,15 @@ export function TraceabilityImpactPage() {
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "6px", flex: 1 }}>
                 {linkedReqs.length ? linkedReqs.map(req => (
-                  <div key={req.requirement_id} className="ti-req-row">
+                  <div key={req.requirement_id} className="ti-req-row" style={{ flexShrink: 0 }}>
                     <Database size={12} style={{ color: "#F0B90B", flexShrink: 0 }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: "10px", fontWeight: 700, color: "#0369A1" }}>{req.requirement_code}</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span style={{ fontSize: "10px", fontWeight: 700, color: "#0369A1" }}>{req.requirement_code}</span>
+                        {req.link_type === "ai_suggested" && (
+                          <span style={{ fontSize: "8px", fontWeight: 800, padding: "1px 5px", borderRadius: "10px", background: "rgba(240, 185, 11, 0.12)", color: "#B07D0A", border: "1px solid rgba(240, 185, 11, 0.3)", textTransform: "uppercase" }}>✨ AI</span>
+                        )}
+                      </div>
                       <div style={{ fontSize: "11px", color: "#474D57", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{req.title}</div>
                       {req.mapped_test_cases?.length > 0 && (
                         <div style={{ marginTop: "3px", display: "flex", gap: "3px", flexWrap: "wrap" }}>
@@ -395,7 +525,7 @@ export function TraceabilityImpactPage() {
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "6px", flex: 1 }}>
                 {changeItem?.impacted_tests?.length ? changeItem.impacted_tests.map(tc => (
-                  <div key={tc.test_case_id} className="ti-req-row" style={{ cursor: "default" }}>
+                  <div key={tc.test_case_id} className="ti-req-row" style={{ cursor: "default", flexShrink: 0 }}>
                     <TestTubeDiagonal size={12} style={{ color: "#0EA5E9", flexShrink: 0 }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: "10px", fontWeight: 700, color: "#0369A1" }}>{tc.test_case_code}</div>
@@ -417,7 +547,7 @@ export function TraceabilityImpactPage() {
         </div>
 
         {/* RIGHT — Action Console ───────────────────────────── */}
-        <div style={{ width: "296px", flexShrink: 0, display: "flex", flexDirection: "column", gap: "12px", overflowY: "auto" }}>
+        <div style={{ width: "360px", flexShrink: 0, display: "flex", flexDirection: "column", gap: "12px", overflowY: "auto" }}>
 
           {/* Link Obligation card */}
           <div className="ti-card" style={{ flexShrink: 0, padding: "14px" }}>
@@ -494,22 +624,25 @@ export function TraceabilityImpactPage() {
               {linkedReqs.length ? linkedReqs.map(req => {
                 const reqTests = req.mapped_test_cases ?? [];
                 return (
-                  <div key={req.requirement_id} style={{ borderRadius: "7px", border: "1px solid #E6E8EA", overflow: "hidden" }}>
-                    <div style={{ padding: "7px 10px", background: "#FFF8E6", borderBottom: reqTests.length ? "1px solid #F0B90B22" : "none", display: "flex", alignItems: "center", gap: "5px" }}>
-                      <Database size={11} style={{ color: "#F0B90B", flexShrink: 0 }} />
-                      <span style={{ fontSize: "11px", fontWeight: 700, color: "#B07D0A", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{req.requirement_code}</span>
-                      <span style={{ fontSize: "10px", color: "#848E9C", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{req.title}</span>
-                      <span style={{ marginLeft: "auto", fontSize: "9px", fontWeight: 700, background: "#FFF8E6", color: "#B07D0A", flexShrink: 0 }}>{reqTests.length}</span>
+                  <div key={req.requirement_id} style={{ borderRadius: "7px", border: "1px solid #E6E8EA", overflow: "hidden", flexShrink: 0, background: "#fff", display: "flex", flexDirection: "column" }}>
+                    <div style={{ padding: "8px 10px", background: "#F8F9FA", borderBottom: reqTests.length ? "1px solid #E6E8EA" : "none", borderLeft: "3px solid #F0B90B", display: "flex", alignItems: "center", gap: "6px" }}>
+                      <Database size={12} style={{ color: "#F0B90B", flexShrink: 0 }} />
+                      <span style={{ fontSize: "11px", fontWeight: 700, color: "#1E2026", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{req.requirement_code}</span>
+                      {req.link_type === "ai_suggested" && (
+                        <span style={{ fontSize: "8px", fontWeight: 800, padding: "1px 5px", borderRadius: "10px", background: "rgba(240, 185, 11, 0.12)", color: "#B07D0A", border: "1px solid rgba(240, 185, 11, 0.3)", textTransform: "uppercase", flexShrink: 0 }}>✨ AI</span>
+                      )}
+                      <span style={{ fontSize: "11px", color: "#686A6C", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{req.title}</span>
+                      <span style={{ fontSize: "10px", fontWeight: 700, background: "#E6E8EA", color: "#1E2026", padding: "1px 6px", borderRadius: "10px", flexShrink: 0 }}>{reqTests.length}</span>
                     </div>
                     {reqTests.length ? (
-                      <div style={{ display: "flex", flexDirection: "column", gap: "2px", padding: "6px 8px" }}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "4px", padding: "6px 8px" }}>
                         {reqTests.map(tc => {
                           const key = `${req.requirement_id}-${tc.test_case_id}`;
                           return (
-                            <div key={key} className="ti-tc-row">
-                              <div style={{ display: "flex", alignItems: "center", gap: "5px", minWidth: 0 }}>
+                            <div key={key} className="ti-tc-row" style={{ minHeight: "28px" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0, flex: 1 }}>
                                 <TestTubeDiagonal size={11} style={{ color: "#0EA5E9", flexShrink: 0 }} />
-                                <span style={{ fontSize: "10px", fontWeight: 600, color: "#0369A1" }}>{tc.test_case_code}</span>
+                                <span style={{ fontSize: "10px", fontWeight: 700, color: "#0EA5E9", marginRight: "4px" }}>{tc.test_case_code}</span>
                                 <span style={{ fontSize: "10px", color: "#474D57", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tc.title}</span>
                               </div>
                               <button type="button" className="ti-del-btn"
@@ -524,7 +657,10 @@ export function TraceabilityImpactPage() {
                         })}
                       </div>
                     ) : (
-                      <p style={{ fontSize: "10px", color: "#C0C6CF", padding: "6px 10px" }}>No checks mapped.</p>
+                      <div style={{ fontSize: "10.5px", color: "#848E9C", padding: "8px 10px", display: "flex", alignItems: "center", gap: "5px" }}>
+                        <span style={{ width: "4px", height: "4px", borderRadius: "50%", background: "#C0C6CF", display: "block" }} />
+                        No compliance checks mapped.
+                      </div>
                     )}
                   </div>
                 );

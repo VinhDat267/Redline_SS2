@@ -427,157 +427,435 @@ function RequirementCandidatePanel({
   const canExtract = isVersionCompareReady(selectedVersion);
   const hasPending = summary.pending > 0;
   const allBusy = isActionDisabled || isBatchProcessing;
+  const total = summary.total ?? (summary.pending + summary.accepted + summary.rejected);
+
+  const statusConfig = {
+    pending: { label: "Pending", color: "#B07D0A", dot: "#F0B90B" },
+    accepted: { label: "Accepted", color: "#0ECB81", dot: "#0ECB81" },
+    rejected: { label: "Rejected", color: "#F6465D", dot: "#F6465D" },
+  };
 
   return (
-    <SectionCard
-      title="AI Obligation Extraction"
-      subtitle="Review AI-detected obligation candidates before they become project truth."
-      aside={`${summary.pending} pending`}
+    <section
+      style={{
+        background: "#fff",
+        border: "1px solid #E6E8EA",
+        borderRadius: "12px",
+        overflow: "hidden",
+        boxShadow: "rgba(32, 32, 37, 0.05) 0px 3px 5px 0px",
+      }}
+      aria-label="AI Obligation Extraction"
     >
-      {/* Status badge pills */}
-      <div className="flex items-center gap-2 flex-wrap mb-3" aria-label="Obligation candidate summary">
-        {[
-          { label: "Pending", count: summary.pending, color: "text-primary-container", bg: "bg-primary-container/10", dot: "bg-primary-container" },
-          { label: "Accepted", count: summary.accepted, color: "text-status-emerald", bg: "bg-status-emerald/10", dot: "bg-status-emerald" },
-          { label: "Rejected", count: summary.rejected, color: "text-error", bg: "bg-error/10", dot: "bg-error" }
-        ].map((badge) => (
-          <span key={badge.label} aria-label={`${badge.label} ${badge.count}`} className={`inline-flex items-center gap-1.5 px-2.5 py-1 ${badge.bg} border border-border-subtle text-[11px] font-semibold`} style={{ borderRadius: "20px" }}>
-            <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`} />
-            <span className="text-text-tertiary font-normal">{badge.label}</span>
-            <span className={badge.color}>{badge.count}</span>
-          </span>
-        ))}
-      </div>
-
-      {/* Primary action row */}
-      <div className="parser-candidate-actions">
-        <button
-          className="workspace-action workspace-action-primary"
-          disabled={!canExtract || allBusy || isGeneratingCandidates}
-          onClick={onGenerate}
-          type="button"
-          style={{ display: "inline-flex", alignItems: "center" }}
-        >
-          <Sparkles size={16} style={{ marginRight: "0.4rem" }} />
-          {isGeneratingCandidates ? "Extracting..." : "Extract Obligations with AI"}
-        </button>
-        {candidates.length > 0 ? (
-          <button
-            className="workspace-action workspace-action-secondary"
-            disabled={!canExtract || allBusy || isGeneratingCandidates}
-            onClick={onRegenerate}
-            type="button"
-          >
-            Rescan
-          </button>
-        ) : null}
-      </div>
-
-      {/* Batch accept/reject row */}
-      {hasPending && candidates.length > 1 ? (
-        <div className="parser-candidate-actions" style={{ marginTop: "0.4rem" }}>
-          <button
-            className="workspace-action workspace-action-primary"
-            disabled={allBusy}
-            onClick={onAcceptAllPending}
-            type="button"
-            style={{ display: "inline-flex", alignItems: "center" }}
-          >
-            <CheckCircle2 size={14} style={{ marginRight: "0.3rem" }} />
-            {isBatchProcessing ? "Processing..." : `Accept All Pending (${summary.pending})`}
-          </button>
-          <button
-            className="workspace-action workspace-action-secondary"
-            disabled={allBusy}
-            onClick={onRejectAllPending}
-            type="button"
-            style={{ display: "inline-flex", alignItems: "center" }}
-          >
-            <XCircle size={14} style={{ marginRight: "0.3rem" }} />
-            Reject All Pending
-          </button>
+      {/* ── Panel Header ────────────────────────────────── */}
+      <div style={{
+        padding: "18px 22px 16px",
+        background: "#FAFAFA",
+        borderBottom: "1px solid #E6E8EA",
+        borderLeft: "3px solid #F0B90B",
+        display: "flex",
+        alignItems: "flex-start",
+        justifyContent: "space-between",
+        gap: "12px",
+        flexWrap: "wrap",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <div style={{
+            width: "34px", height: "34px", borderRadius: "8px",
+            background: "rgba(240,185,11,0.1)", border: "1px solid rgba(240,185,11,0.25)",
+            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+          }}>
+            <Sparkles size={16} style={{ color: "#F0B90B" }} />
+          </div>
+          <div>
+            <h2 style={{ margin: 0, fontSize: "15px", fontWeight: 700, color: "#1E2026", letterSpacing: "-0.01em" }}>
+              AI Obligation Extraction
+            </h2>
+            <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#848E9C", lineHeight: 1.4 }}>
+              Review AI-detected candidates before they become project truth
+            </p>
+          </div>
         </div>
-      ) : null}
 
-      {!canExtract ? (
-        <p className="workspace-note">Parse this version before running AI obligation extraction.</p>
-      ) : null}
-
-      {candidateResult?.provider_used ? (
-        <p className="workspace-note">
-          Provider: {candidateResult.provider_used}
-          {candidateResult.fallback_used ? " (fallback)" : ""}
-        </p>
-      ) : null}
-
-      {candidateResult?.error_message ? (
-        <div className="workspace-form-feedback workspace-form-feedback-error">
-          {candidateResult.error_message}
-        </div>
-      ) : null}
-
-      {isCandidatesLoading ? (
-        <p className="workspace-note">Loading obligation candidates...</p>
-      ) : candidates.length > 0 ? (
-        <div className="parser-candidate-list">
-          {candidates.map((candidate) => {
-            const isPending = candidate.status === "pending";
-            const isCandidateBusy = pendingCandidateActionId === candidate.id;
+        {/* Stats summary row */}
+        <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
+          {[
+            { key: "pending", count: summary.pending },
+            { key: "accepted", count: summary.accepted },
+            { key: "rejected", count: summary.rejected },
+          ].map(({ key, count }) => {
+            const cfg = statusConfig[key];
             return (
-              <article className="parser-candidate-row" key={candidate.id}>
-                <div className="parser-candidate-main">
-                  <div className="parser-candidate-title-row">
-                    <span className="parser-candidate-code">{candidate.requirement_code}</span>
-                    <span className={`workspace-chip ${candidate.status === "accepted" ? "workspace-chip-teal" : candidate.status === "rejected" ? "workspace-chip-amber" : "workspace-chip-slate"}`}>
-                      {candidate.status}
-                    </span>
-                  </div>
-                  <h3 className="parser-candidate-title">{candidate.title}</h3>
-                  {candidate.description ? (
-                    <p className="parser-candidate-description">{candidate.description}</p>
-                  ) : null}
-                  <p className="parser-block-meta">
-                    Source {candidate.source_section || "Unscoped"} / {candidate.source_block_key}
-                    {typeof candidate.confidence === "number"
-                      ? ` / confidence ${Math.round(candidate.confidence * 100)}%`
-                      : ""}
-                  </p>
-                  {candidate.rejection_reason ? (
-                    <p className="workspace-note">Reason: {candidate.rejection_reason}</p>
-                  ) : null}
-                </div>
-                <div className="parser-candidate-row-actions">
-                  <button
-                    aria-label={`Confirm ${candidate.requirement_code}`}
-                    className="workspace-action workspace-action-primary"
-                    disabled={!isPending || isCandidateBusy || allBusy}
-                    onClick={() => onAccept(candidate)}
-                    type="button"
-                    style={{ display: "inline-flex", alignItems: "center" }}
-                  >
-                    <CheckCircle2 size={14} style={{ marginRight: "0.3rem" }} />
-                    Confirm
-                  </button>
-                  <button
-                    aria-label={`Reject ${candidate.requirement_code}`}
-                    className="workspace-action workspace-action-secondary"
-                    disabled={!isPending || isCandidateBusy || allBusy}
-                    onClick={() => onReject(candidate)}
-                    type="button"
-                    style={{ display: "inline-flex", alignItems: "center" }}
-                  >
-                    <XCircle size={14} style={{ marginRight: "0.3rem" }} />
-                    Reject
-                  </button>
-                </div>
-              </article>
+              <span key={key} aria-label={`${cfg.label} ${count}`} style={{
+                display: "inline-flex", alignItems: "center", gap: "5px",
+                padding: "4px 10px", borderRadius: "10px",
+                background: "#fff", border: "1px solid #E6E8EA",
+                fontSize: "11px", fontWeight: 600,
+                boxShadow: "0 1px 2px rgba(32,32,37,0.04)",
+              }}>
+                <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: cfg.dot, flexShrink: 0 }} />
+                <span style={{ color: "#848E9C", fontWeight: 400 }}>{cfg.label}</span>
+                <span style={{ color: cfg.color, fontWeight: 700 }}>{count}</span>
+              </span>
             );
           })}
         </div>
-      ) : (
-        <p className="workspace-note">No AI obligation candidates have been extracted for this parse run.</p>
+      </div>
+
+      {/* ── Progress bar (only when there are candidates) ── */}
+      {total > 0 && (
+        <div style={{ height: "4px", background: "#F0F1F3", display: "flex", overflow: "hidden" }}>
+          {summary.accepted > 0 && (
+            <div style={{ width: `${(summary.accepted / total) * 100}%`, background: "#0ECB81", transition: "width 400ms ease" }} />
+          )}
+          {summary.pending > 0 && (
+            <div style={{ width: `${(summary.pending / total) * 100}%`, background: "#F0B90B", transition: "width 400ms ease" }} />
+          )}
+          {summary.rejected > 0 && (
+            <div style={{ width: `${(summary.rejected / total) * 100}%`, background: "#F6465D", transition: "width 400ms ease" }} />
+          )}
+        </div>
       )}
-    </SectionCard>
+
+      {/* ── Body ────────────────────────────────────────── */}
+      <div style={{ padding: "18px 22px 20px" }}>
+
+        {/* Not-parsed info message */}
+        {!canExtract && (
+          <div style={{
+            display: "flex", alignItems: "center", gap: "10px",
+            padding: "10px 14px", borderRadius: "8px",
+            background: "rgba(240,185,11,0.06)", border: "1px solid rgba(240,185,11,0.22)",
+            marginBottom: "14px",
+          }}>
+            <AlertTriangle size={14} style={{ color: "#B07D0A", flexShrink: 0 }} />
+            <p style={{ margin: 0, fontSize: "12px", color: "#B07D0A", lineHeight: 1.5 }}>
+              Parse this document version first before running AI obligation extraction.
+            </p>
+          </div>
+        )}
+
+        {/* Primary + rescan action row */}
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center", marginBottom: hasPending && candidates.length > 1 ? "8px" : "0" }}>
+          <button
+            disabled={!canExtract || allBusy || isGeneratingCandidates}
+            onClick={onGenerate}
+            type="button"
+            style={{
+              display: "inline-flex", alignItems: "center", gap: "6px",
+              padding: "9px 18px", borderRadius: "50px", border: "none",
+              background: !canExtract || allBusy || isGeneratingCandidates ? "#E6E8EA" : "#F0B90B",
+              color: !canExtract || allBusy || isGeneratingCandidates ? "#848E9C" : "#1E2026",
+              fontWeight: 700, fontSize: "13px", cursor: !canExtract || allBusy || isGeneratingCandidates ? "not-allowed" : "pointer",
+              transition: "all 180ms ease",
+              boxShadow: !canExtract || allBusy || isGeneratingCandidates ? "none" : "0 2px 8px rgba(240,185,11,0.24)",
+            }}
+          >
+            {isGeneratingCandidates ? (
+              <>
+                <span style={{
+                  width: "13px", height: "13px", borderRadius: "50%",
+                  border: "2px solid #1E2026", borderTopColor: "transparent",
+                  animation: "spin 0.7s linear infinite", display: "inline-block",
+                }} />
+                Extracting…
+              </>
+            ) : (
+              <>
+                <Sparkles size={14} />
+                Extract Obligations with AI
+              </>
+            )}
+          </button>
+
+          {candidates.length > 0 && (
+            <button
+              disabled={!canExtract || allBusy || isGeneratingCandidates}
+              onClick={onRegenerate}
+              type="button"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: "6px",
+                padding: "8px 16px", borderRadius: "50px",
+                border: "1px solid #E6E8EA", background: "#fff",
+                color: "#474D57", fontSize: "13px", fontWeight: 600,
+                cursor: !canExtract || allBusy || isGeneratingCandidates ? "not-allowed" : "pointer",
+                opacity: !canExtract || allBusy || isGeneratingCandidates ? 0.5 : 1,
+                transition: "all 150ms ease",
+              }}
+            >
+              Rescan
+            </button>
+          )}
+
+          {candidateResult?.provider_used && (
+            <span style={{ fontSize: "11px", color: "#848E9C", marginLeft: "auto" }}>
+              via {candidateResult.provider_used}{candidateResult.fallback_used ? " (fallback)" : ""}
+            </span>
+          )}
+        </div>
+
+        {/* Batch actions row */}
+        {hasPending && candidates.length > 1 && (
+          <div style={{
+            display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center",
+            padding: "10px 12px", borderRadius: "8px", marginTop: "4px",
+            background: "rgba(240,185,11,0.04)", border: "1px solid rgba(240,185,11,0.16)",
+          }}>
+            <span style={{ fontSize: "11px", fontWeight: 600, color: "#B07D0A", flexGrow: 1 }}>
+              {summary.pending} pending — bulk actions:
+            </span>
+            <button
+              disabled={allBusy}
+              onClick={onAcceptAllPending}
+              type="button"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: "5px",
+                padding: "6px 12px", borderRadius: "50px", border: "none",
+                background: "#F0B90B", color: "#1E2026",
+                fontSize: "12px", fontWeight: 700,
+                cursor: allBusy ? "not-allowed" : "pointer", opacity: allBusy ? 0.6 : 1,
+                transition: "background 200ms ease",
+              }}
+            >
+              <CheckCircle2 size={13} />
+              {isBatchProcessing ? "Processing…" : `Accept All (${summary.pending})`}
+            </button>
+            <button
+              disabled={allBusy}
+              onClick={onRejectAllPending}
+              type="button"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: "5px",
+                padding: "6px 12px", borderRadius: "50px",
+                border: "1px solid #E6E8EA", background: "#FFFFFF",
+                color: "#474D57", fontSize: "12px", fontWeight: 700,
+                cursor: allBusy ? "not-allowed" : "pointer", opacity: allBusy ? 0.6 : 1,
+                transition: "background 200ms ease",
+              }}
+            >
+              <XCircle size={13} />
+              Reject All
+            </button>
+          </div>
+        )}
+
+        {/* Error banner */}
+        {candidateResult?.error_message && (
+          <div style={{
+            display: "flex", alignItems: "flex-start", gap: "10px",
+            padding: "10px 14px", borderRadius: "8px", marginTop: "12px",
+            background: "rgba(246,70,93,0.06)", border: "1px solid rgba(246,70,93,0.2)",
+          }}>
+            <AlertTriangle size={14} style={{ color: "#F6465D", flexShrink: 0, marginTop: "1px" }} />
+            <p style={{ margin: 0, fontSize: "12px", color: "#F6465D", lineHeight: 1.5 }}>
+              {candidateResult.error_message}
+            </p>
+          </div>
+        )}
+
+        {/* Loading state */}
+        {isCandidatesLoading && (
+          <div style={{
+            display: "flex", alignItems: "center", gap: "10px",
+            padding: "16px", marginTop: "14px", borderRadius: "8px",
+            background: "#FAFAFA", border: "1px solid #F0F1F3",
+          }}>
+            <span style={{
+              width: "14px", height: "14px", borderRadius: "50%",
+              border: "2px solid #E6E8EA", borderTopColor: "#F0B90B",
+              animation: "spin 0.7s linear infinite", display: "inline-block", flexShrink: 0,
+            }} />
+            <p style={{ margin: 0, fontSize: "13px", color: "#848E9C" }}>Loading obligation candidates…</p>
+          </div>
+        )}
+
+        {/* Candidate list */}
+        {!isCandidatesLoading && candidates.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "16px" }}>
+            {candidates.map((candidate) => {
+              const isPending = candidate.status === "pending";
+              const isCandidateBusy = pendingCandidateActionId === candidate.id;
+              const cfg = statusConfig[candidate.status] ?? statusConfig.pending;
+              const confidence = typeof candidate.confidence === "number" ? Math.round(candidate.confidence * 100) : null;
+
+              return (
+                <article
+                  key={candidate.id}
+                  style={{
+                    borderRadius: "8px",
+                    border: "1px solid #E6E8EA",
+                    borderLeft: `3px solid ${cfg.dot}`,
+                    background: "#FFFFFF",
+                    overflow: "hidden",
+                    transition: "box-shadow 200ms ease",
+                    boxShadow: "0 1px 3px rgba(32, 32, 37, 0.05)",
+                  }}
+                >
+                  {/* Card header — compact single row */}
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: "8px",
+                    padding: "7px 12px",
+                    background: "#FAFAFA",
+                    borderBottom: "1px solid #E6E8EA",
+                    minHeight: "32px",
+                  }}>
+                    <span style={{
+                      padding: "2px 7px", borderRadius: "4px",
+                      background: "#fff", border: "1px solid #E6E8EA",
+                      fontSize: "10px", fontWeight: 800, color: "#1E2026",
+                      fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.02em",
+                      whiteSpace: "nowrap", flexShrink: 0,
+                    }}>
+                      {candidate.requirement_code}
+                    </span>
+
+                    <span style={{
+                      padding: "1px 7px", borderRadius: "10px",
+                      background: `${cfg.dot}12`, border: `1px solid ${cfg.dot}33`,
+                      fontSize: "9px", fontWeight: 700, color: cfg.color,
+                      textTransform: "uppercase", letterSpacing: "0.05em",
+                      whiteSpace: "nowrap", flexShrink: 0,
+                    }}>
+                      {candidate.status}
+                    </span>
+
+                    {/* Spacer */}
+                    <div style={{ flex: 1 }} />
+
+                    {/* Confidence indicator */}
+                    {confidence !== null && !isCandidateBusy && (
+                      <span style={{
+                        display: "inline-flex", alignItems: "center", gap: "4px",
+                        fontSize: "11px", fontWeight: 700, flexShrink: 0,
+                        color: confidence >= 80 ? "#0ECB81" : confidence >= 50 ? "#B07D0A" : "#F6465D",
+                      }}>
+                        <span style={{
+                          width: "32px", height: "3px", borderRadius: "2px", background: "#E6E8EA", overflow: "hidden",
+                          display: "inline-block", position: "relative",
+                        }}>
+                          <span style={{
+                            position: "absolute", left: 0, top: 0, height: "100%",
+                            width: `${confidence}%`,
+                            background: confidence >= 80 ? "#0ECB81" : confidence >= 50 ? "#F0B90B" : "#F6465D",
+                            borderRadius: "2px",
+                          }} />
+                        </span>
+                        {confidence}%
+                      </span>
+                    )}
+
+                    {/* Busy spinner */}
+                    {isCandidateBusy && (
+                      <span style={{
+                        width: "12px", height: "12px", borderRadius: "50%",
+                        border: "2px solid #E6E8EA", borderTopColor: "#F0B90B",
+                        animation: "spin 0.7s linear infinite", display: "inline-block", flexShrink: 0,
+                      }} />
+                    )}
+                  </div>
+
+                  {/* Card body */}
+                  <div style={{ padding: "10px 12px 12px" }}>
+                    <h3 style={{ margin: "0 0 4px", fontSize: "13px", fontWeight: 700, color: "#1E2026", lineHeight: 1.4 }}>
+                      {candidate.title}
+                    </h3>
+
+                    {candidate.description && (
+                      <p style={{ margin: "0 0 6px", fontSize: "12px", color: "#474D57", lineHeight: 1.55 }}>
+                        {candidate.description}
+                      </p>
+                    )}
+
+                    <div style={{ fontSize: "10px", color: "#848E9C", lineHeight: 1.4, display: "flex", alignItems: "center", gap: "4px" }}>
+                      <span style={{ fontWeight: 700, color: "#686A6C", textTransform: "uppercase", letterSpacing: "0.04em" }}>Source</span>
+                      <span style={{ color: "#C0C6CF" }}>·</span>
+                      {candidate.source_section || "Unscoped"}{candidate.source_block_key ? ` / ${candidate.source_block_key}` : ""}
+                    </div>
+
+                    {candidate.rejection_reason && (
+                      <div style={{
+                        marginTop: "6px", fontSize: "10px", color: "#B07D0A", lineHeight: 1.5,
+                        padding: "4px 8px", borderRadius: "4px", background: "rgba(240,185,11,0.06)", border: "1px solid rgba(240,185,11,0.15)",
+                      }}>
+                        <span style={{ fontWeight: 700 }}>Rejection:</span> {candidate.rejection_reason}
+                      </div>
+                    )}
+
+                    {/* Action buttons — only shown when pending */}
+                    {isPending && (
+                      <div style={{ display: "flex", gap: "6px", marginTop: "10px" }}>
+                        <button
+                          aria-label={`Confirm ${candidate.requirement_code}`}
+                          disabled={isCandidateBusy || allBusy}
+                          onClick={() => onAccept(candidate)}
+                          type="button"
+                          style={{
+                            display: "inline-flex", alignItems: "center", gap: "5px",
+                            padding: "5px 14px", borderRadius: "50px", border: "none",
+                            background: "#F0B90B", color: "#1E2026",
+                            fontSize: "11px", fontWeight: 700,
+                            cursor: isCandidateBusy || allBusy ? "not-allowed" : "pointer",
+                            opacity: isCandidateBusy || allBusy ? 0.6 : 1,
+                            transition: "all 150ms ease",
+                            boxShadow: "0 1px 3px rgba(240,185,11,0.18)",
+                          }}
+                        >
+                          <CheckCircle2 size={12} />
+                          Confirm
+                        </button>
+                        <button
+                          aria-label={`Reject ${candidate.requirement_code}`}
+                          disabled={isCandidateBusy || allBusy}
+                          onClick={() => onReject(candidate)}
+                          type="button"
+                          style={{
+                            display: "inline-flex", alignItems: "center", gap: "5px",
+                            padding: "5px 12px", borderRadius: "50px",
+                            border: "1px solid #E6E8EA", background: "#fff",
+                            color: "#686A6C", fontSize: "11px", fontWeight: 600,
+                            cursor: isCandidateBusy || allBusy ? "not-allowed" : "pointer",
+                            opacity: isCandidateBusy || allBusy ? 0.6 : 1,
+                            transition: "all 150ms ease",
+                          }}
+                        >
+                          <XCircle size={12} />
+                          Reject
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Empty state */}
+        {!isCandidatesLoading && candidates.length === 0 && canExtract && (
+          <div style={{
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+            padding: "32px 20px", textAlign: "center", marginTop: "14px",
+            borderRadius: "8px", border: "1px dashed #E6E8EA", background: "#F5F5F5",
+          }}>
+            <div style={{
+              width: "44px", height: "44px", borderRadius: "12px", marginBottom: "12px",
+              background: "rgba(240,185,11,0.08)", border: "1px solid rgba(240,185,11,0.2)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <Sparkles size={20} style={{ color: "#F0B90B", opacity: 0.7 }} />
+            </div>
+            <p style={{ margin: "0 0 4px", fontSize: "14px", fontWeight: 700, color: "#1E2026" }}>
+              No candidates yet
+            </p>
+            <p style={{ margin: 0, fontSize: "12px", color: "#848E9C", maxWidth: "240px", lineHeight: 1.6 }}>
+              Click <strong>Extract Obligations with AI</strong> to scan this document version.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Keyframe for spinner */}
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </section>
   );
 }
 
@@ -1014,7 +1292,7 @@ export function ParserWorkspacePage() {
     <div className="flex overflow-hidden w-full" style={{ height: 'calc(100vh - 64px)', background: '#FAFAFA', color: '#1E2026', position: 'relative' }}>
 
       {/* Left Panel: Context & Diagnostics */}
-      <aside className="flex-shrink-0 flex flex-col h-full overflow-y-auto" style={{ width: '288px', background: '#fff', borderRight: '1px solid #E6E8EA' }}>
+      <aside className="flex-shrink-0 flex flex-col h-full overflow-y-auto" style={{ width: '340px', background: '#fff', borderRight: '1px solid #E6E8EA' }}>
         {/* Sidebar header: back nav only (Re-parse is now a FAB) */}
         <div className="flex items-center gap-2 px-4 flex-shrink-0" style={{ height: '52px', borderBottom: '1px solid #E6E8EA' }}>
           <Link

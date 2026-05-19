@@ -74,6 +74,17 @@ def enforce_ai_chat_attempt_rate_limit(session: Session, user_id: int) -> None:
     _raise_if_limited(retry_after)
 
 
+def enforce_ai_traceability_suggest_rate_limit(session: Session, user_id: int) -> None:
+    """AI traceability link suggestion — per-user limit."""
+    retry_after = _hit_ai_rate_limit(
+        session,
+        keys=(f"ai:traceability-suggest:user:{user_id}",),
+        max_attempts=settings.ai_review_draft_rate_limit_max_attempts,  # reuse review limit (10/min)
+        window_seconds=settings.ai_rate_limit_window_seconds,
+    )
+    _raise_if_limited(retry_after)
+
+
 # ---------------------------------------------------------------------------
 #  Internal helpers (mirrors auth_rate_limit pattern)
 # ---------------------------------------------------------------------------

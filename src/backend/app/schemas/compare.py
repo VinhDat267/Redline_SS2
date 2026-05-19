@@ -191,3 +191,26 @@ class CompareRunAISummaryResponse(BaseModel):
 class LinkedRequirementCreate(BaseModel):
     requirement_id: int
     notes: str | None = None
+
+
+class AISuggestedRequirementLinkCreate(BaseModel):
+    requirement_id: int
+    suggestion_token: str = Field(min_length=32, max_length=256)
+    notes: str | None = None
+
+
+class TraceabilitySuggestionItem(BaseModel):
+    requirement_id: int
+    requirement_code: str
+    title: str
+    confidence: float
+    rationale: str | None = None
+    relevance_type: str  # "directly_affected" | "indirectly_affected" | "related"
+    suggestion_token: str
+
+
+class TraceabilitySuggestResponse(BaseModel):
+    suggestions: list[TraceabilitySuggestionItem]
+    provider_used: str | None = None
+    fallback_used: bool = False
+    error_message: str | None = None

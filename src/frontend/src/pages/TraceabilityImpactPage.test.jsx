@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -408,5 +408,90 @@ describe("TraceabilityImpactPage", () => {
     const allTcSec = screen.getAllByText("TC-SEC-002");
     expect(allTcLogin.length).toBeGreaterThanOrEqual(1);
     expect(allTcSec.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test("accepts AI suggested links through the dedicated tokenized endpoint", async () => {
+    const acceptedPayload = buildChangeItemPayload({
+      linked_requirements: [
+        ...buildChangeItemPayload().data.linked_requirements,
+        {
+          requirement_id: 701,
+          requirement_code: "REQ-SEC-002",
+          title: "Admin MFA",
+          link_type: "ai_suggested",
+          notes: null,
+          mapped_test_cases: []
+        }
+      ]
+    });
+
+    fetch.mockImplementation((input, init = {}) => {
+      const url = String(input);
+      const method = init.method || "GET";
+
+      if (url.endsWith("/api/v1/compare-runs/55")) {
+        return Promise.resolve(jsonResponse(buildCompareRunPayload()));
+      }
+
+      if (url.endsWith("/api/v1/compare-runs/55/change-items")) {
+        return Promise.resolve(jsonResponse(buildQueuePayload()));
+      }
+
+      if (url.endsWith("/api/v1/change-items/900") && method === "GET") {
+        return Promise.resolve(jsonResponse(buildChangeItemPayload()));
+      }
+
+      if (url.endsWith("/api/v1/projects/1/requirements")) {
+        return Promise.resolve(jsonResponse(buildRequirementsPayload()));
+      }
+
+      if (url.endsWith("/api/v1/projects/1/test-cases")) {
+        return Promise.resolve(jsonResponse(buildTestCasesPayload()));
+      }
+
+      if (url.endsWith("/api/v1/change-items/900/suggest-links") && method === "POST") {
+        return Promise.resolve(jsonResponse({
+          data: {
+            suggestions: [
+              {
+                requirement_id: 701,
+                requirement_code: "REQ-SEC-002",
+                title: "Admin MFA",
+                confidence: 0.84,
+                rationale: "The clause change affects security controls.",
+                relevance_type: "directly_affected",
+                suggestion_token: "signed-suggestion-token"
+              }
+            ],
+            provider_used: "test-provider",
+            fallback_used: false,
+            error_message: null
+          }
+        }));
+      }
+
+      if (url.endsWith("/api/v1/change-items/900/requirement-links/ai-suggested") && method === "POST") {
+        expect(JSON.parse(init.body)).toEqual({
+          requirement_id: 701,
+          suggestion_token: "signed-suggestion-token",
+          notes: ""
+        });
+        return Promise.resolve(jsonResponse(acceptedPayload, 201));
+      }
+
+      return Promise.reject(new Error(`Unhandled request: ${url} ${method}`));
+    });
+
+    renderImpactPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: /suggest links/i }));
+    expect(await screen.findByText("REQ-SEC-002")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /link ai suggestion req-sec-002/i }));
+
+    await waitFor(() => {
+      expect(screen.getAllByText("REQ-SEC-002").length).toBeGreaterThan(0);
+    });
+    expect(screen.getAllByText("✨ AI").length).toBeGreaterThan(0);
   });
 });

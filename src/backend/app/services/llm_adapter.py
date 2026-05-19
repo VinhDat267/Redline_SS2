@@ -90,7 +90,27 @@ class NormalizedRequirementExtractionResult:
     error_message: str | None
 
 
+
+
+@dataclass(slots=True)
+class NormalizedTraceabilitySuggestion:
+    requirement_code: str
+    title: str
+    confidence: float
+    rationale: str | None
+    relevance_type: str  # "directly_affected" | "indirectly_affected" | "related"
+
+
+@dataclass(slots=True)
+class NormalizedTraceabilitySuggestionResult:
+    suggestions: list[NormalizedTraceabilitySuggestion]
+    provider_used: str
+    fallback_used: bool
+    error_message: str | None
+
+
 class LLMAdapter:
+
     def __init__(
         self,
         settings: Settings | None = None,
@@ -268,6 +288,49 @@ class LLMAdapter:
 
         return NormalizedRequirementExtractionResult(
             candidates=[],
+            provider_used=providers[-1] if providers else self.settings.ai_primary_provider,
+            fallback_used=len(providers) > 1,
+            error_message=last_error or "No AI provider is configured.",
+        )
+
+    def generate_traceability_suggestions(
+        self, payload: Mapping[str, Any]
+    ) -> "NormalizedTraceabilitySuggestionResult":
+        providers = self._build_provider_chain()
+        last_error: str | None = None
+
+        for index, provider_name in enumerate(providers):
+            fallback_used = index > 0
+            try:
+                raw_response = self._call_provider_with_retries(
+                    provider_name,
+                    payload,
+                    task_type="traceability_suggest",
+                )
+                return NormalizedTraceabilitySuggestionResult(
+                    suggestions=self._normalize_traceability_suggestions(raw_response),
+                    provider_used=provider_name,
+                    fallback_used=fallback_used,
+                    error_message=None,
+                )
+            except ProviderRetryableError as exc:
+                last_error = str(exc)
+                logger.warning(
+                    "Provider '%s' exhausted retries for traceability suggest: %s. Moving to next provider.",
+                    provider_name, exc,
+                )
+                continue
+            except ProviderFatalError as exc:
+                logger.error("Provider '%s' fatal error for traceability suggest: %s", provider_name, exc)
+                return NormalizedTraceabilitySuggestionResult(
+                    suggestions=[],
+                    provider_used=provider_name,
+                    fallback_used=fallback_used,
+                    error_message=str(exc),
+                )
+
+        return NormalizedTraceabilitySuggestionResult(
+            suggestions=[],
             provider_used=providers[-1] if providers else self.settings.ai_primary_provider,
             fallback_used=len(providers) > 1,
             error_message=last_error or "No AI provider is configured.",
@@ -776,6 +839,32 @@ class LLMAdapter:
             f"{prompt_body}"
         )
 
+    def _build_traceability_suggest_system_prompt(self) -> str:
+        return (
+            "You are Redline Traceability AI. "
+            "Return JSON only. "
+            "Use only this top-level key: suggestions. "
+            "suggestions must be an array of objects, each with keys: "
+            "requirement_code (string, must exactly match from the provided list), "
+            "title (string, copy from provided list), "
+            "confidence (float 0.0-1.0), "
+            "rationale (string, max 2 sentences explaining the link), "
+            "relevance_type (one of: directly_affected, indirectly_affected, related). "
+            "Only include obligations with confidence >= 0.30. "
+            "Sort by confidence descending. "
+            "Do not include obligations not in the provided list. "
+            "Do not invent or paraphrase requirement_codes."
+        )
+
+    def _build_traceability_suggest_user_prompt(self, payload: Mapping[str, Any]) -> str:
+        prompt_payload = self._to_json_safe(payload)
+        prompt_body = json.dumps(prompt_payload, ensure_ascii=True, sort_keys=True, indent=2)
+        return (
+            f"{self._build_traceability_suggest_system_prompt()}\n"
+            "Use the change context and obligations list below and respond with a single JSON object.\n"
+            f"{prompt_body}"
+        )
+
     def _build_system_prompt_for_task(self, task_type: str) -> str:
         if task_type == "review_batch":
             return self._build_review_batch_system_prompt()
@@ -785,6 +874,8 @@ class LLMAdapter:
             return self._build_requirement_extraction_system_prompt()
         if task_type == "contract_chat":
             return self._build_contract_chat_system_prompt()
+        if task_type == "traceability_suggest":
+            return self._build_traceability_suggest_system_prompt()
         return self._build_system_prompt()
 
     def _build_prompt_for_task(self, payload: Mapping[str, Any], task_type: str) -> str:
@@ -796,6 +887,8 @@ class LLMAdapter:
             return self._build_requirement_extraction_user_prompt(payload)
         if task_type == "contract_chat":
             return self._build_contract_chat_user_prompt(payload)
+        if task_type == "traceability_suggest":
+            return self._build_traceability_suggest_user_prompt(payload)
         return self._build_user_prompt(payload)
 
     def _to_json_safe(self, value: Any) -> Any:
@@ -857,6 +950,44 @@ class LLMAdapter:
             ]
             return "\n".join(normalized_items) if normalized_items else None
         return self._normalize_optional_text(value)
+
+    def _normalize_traceability_suggestions(
+        self,
+        raw_response: Mapping[str, Any],
+    ) -> list[NormalizedTraceabilitySuggestion]:
+        raw_items = raw_response.get("suggestions")
+        if not isinstance(raw_items, list):
+            raise ProviderRetryableError("AI output is missing a suggestions array.")
+
+        valid_relevance_types = {"directly_affected", "indirectly_affected", "related"}
+        suggestions: list[NormalizedTraceabilitySuggestion] = []
+        seen_codes: set[str] = set()
+        for item in raw_items:
+            if not isinstance(item, Mapping):
+                continue
+            requirement_code = self._normalize_optional_text(item.get("requirement_code"))
+            if not requirement_code:
+                continue
+            if requirement_code in seen_codes:
+                continue
+            seen_codes.add(requirement_code)
+            confidence = self._normalize_confidence(item.get("confidence")) or 0.0
+            if confidence < 0.30:
+                continue
+            relevance_type = self._normalize_optional_text(item.get("relevance_type")) or "related"
+            if relevance_type not in valid_relevance_types:
+                relevance_type = "related"
+            suggestions.append(
+                NormalizedTraceabilitySuggestion(
+                    requirement_code=requirement_code[:100],
+                    title=self._normalize_optional_text(item.get("title")) or requirement_code,
+                    confidence=confidence,
+                    rationale=self._normalize_optional_text(item.get("rationale")),
+                    relevance_type=relevance_type,
+                )
+            )
+        suggestions.sort(key=lambda s: s.confidence, reverse=True)
+        return suggestions
 
     def _normalize_requirement_candidates(
         self,

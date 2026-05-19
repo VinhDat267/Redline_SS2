@@ -11,6 +11,10 @@ from app.models import (
     RequirementTestCaseMapping,
     TestCase as CaseModel,
 )
+from app.services.llm_adapter import (
+    NormalizedTraceabilitySuggestion,
+    NormalizedTraceabilitySuggestionResult,
+)
 
 
 def _build_compare_docx(requirement_line: str) -> bytes:
@@ -144,6 +148,23 @@ def _create_compare_run_with_requirement_links(client, auth_headers, session_fac
         session.commit()
 
         return change_item.id
+
+
+def _seed_active_requirement(session_factory, change_item_id: int, *, code: str = "REQ-LOGIN-001") -> int:
+    with session_factory() as session:
+        change_item = session.get(ChangeItem, change_item_id)
+        assert change_item is not None
+        requirement = Requirement(
+            document_id=change_item.source_version.document_id,
+            requirement_code=code,
+            title="Secure login",
+            description="The system shall support secure login.",
+            source_section=change_item.section_title,
+            status="active",
+        )
+        session.add(requirement)
+        session.commit()
+        return requirement.id
 
 
 def test_get_change_item_returns_review_context_and_impact_aggregate(
@@ -347,3 +368,93 @@ def test_change_item_detail_returns_requirement_specific_test_mappings(
         "TC-LOGIN-001",
         "TC-MFA-002",
     ]
+
+
+def test_manual_requirement_link_ignores_client_supplied_ai_link_type(
+    client,
+    auth_headers,
+    session_factory,
+):
+    change_item_id = _create_compare_run(client, auth_headers)
+    requirement_id = _seed_active_requirement(session_factory, change_item_id)
+
+    response = client.post(
+        f"/api/v1/change-items/{change_item_id}/requirement-links",
+        json={
+            "requirement_id": requirement_id,
+            "notes": "Manual traceability link",
+            "link_type": "ai_suggested",
+        },
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 201
+    payload = response.json()["data"]
+    assert payload["linked_requirements"][0]["link_type"] == "manual"
+
+
+def test_ai_traceability_suggestion_acceptance_requires_server_token(
+    client,
+    auth_headers,
+    session_factory,
+    monkeypatch,
+):
+    from app.services import ai_traceability as ai_traceability_service
+
+    change_item_id = _create_compare_run(client, auth_headers)
+    requirement_id = _seed_active_requirement(session_factory, change_item_id)
+
+    class FakeTraceabilityAdapter:
+        def generate_traceability_suggestions(self, payload):
+            return NormalizedTraceabilitySuggestionResult(
+                suggestions=[
+                    NormalizedTraceabilitySuggestion(
+                        requirement_code="REQ-LOGIN-001",
+                        title="Secure login",
+                        confidence=0.86,
+                        rationale="The change strengthens login security.",
+                        relevance_type="directly_affected",
+                    ),
+                    NormalizedTraceabilitySuggestion(
+                        requirement_code="REQ-HALLUCINATED-999",
+                        title="Hallucinated obligation",
+                        confidence=0.99,
+                        rationale="Should be discarded because it was not in the prompt.",
+                        relevance_type="related",
+                    ),
+                ],
+                provider_used="test-provider",
+                fallback_used=False,
+                error_message=None,
+            )
+
+    monkeypatch.setattr(ai_traceability_service, "get_llm_adapter", lambda: FakeTraceabilityAdapter())
+
+    suggest_response = client.post(
+        f"/api/v1/change-items/{change_item_id}/suggest-links",
+        headers=auth_headers,
+    )
+
+    assert suggest_response.status_code == 200
+    suggestion_payload = suggest_response.json()["data"]
+    assert suggestion_payload["provider_used"] == "test-provider"
+    assert [item["requirement_id"] for item in suggestion_payload["suggestions"]] == [requirement_id]
+    suggestion_token = suggestion_payload["suggestions"][0]["suggestion_token"]
+    assert suggestion_token
+
+    spoof_response = client.post(
+        f"/api/v1/change-items/{change_item_id}/requirement-links/ai-suggested",
+        json={"requirement_id": requirement_id, "suggestion_token": "0" * 64},
+        headers=auth_headers,
+    )
+    assert spoof_response.status_code == 400
+
+    accept_response = client.post(
+        f"/api/v1/change-items/{change_item_id}/requirement-links/ai-suggested",
+        json={"requirement_id": requirement_id, "suggestion_token": suggestion_token},
+        headers=auth_headers,
+    )
+
+    assert accept_response.status_code == 201
+    payload = accept_response.json()["data"]
+    assert payload["linked_requirements"][0]["link_type"] == "ai_suggested"

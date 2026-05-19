@@ -86,6 +86,7 @@ def create_requirement_link(
     change_item_id: int,
     requirement_id: int,
     notes: str | None = None,
+    link_type: str = "manual",
 ) -> dict[str, object]:
     change_item = _get_change_item_or_404(session, change_item_id)
     requirement = session.get(Requirement, requirement_id)
@@ -119,10 +120,14 @@ def create_requirement_link(
     if existing_link:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Requirement is already linked")
 
+    normalized_link_type = link_type.strip().lower() if link_type else "manual"
+    if normalized_link_type not in {"manual", "ai_suggested"}:
+        normalized_link_type = "manual"
+
     link = ChangeItemRequirementLink(
         change_item_id=change_item_id,
         requirement_id=requirement_id,
-        link_type="manual",
+        link_type=normalized_link_type,
         notes=notes,
     )
     session.add(link)

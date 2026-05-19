@@ -4,16 +4,20 @@ from sqlalchemy.orm import Session
 from app.api.dependencies import get_current_user, get_db_session
 from app.models import User
 from app.schemas.compare import (
+    AISuggestedRequirementLinkCreate,
     ChangeItemDetailRead,
     ChangeItemAIGenerationResultRead,
     AIReviewDraftGenerateRequest,
     ChangeItemUpdate,
+    LinkedRequirementCreate,
     ReviewCommentCreate,
     ReviewCommentRead,
+    TraceabilitySuggestResponse,
 )
 from app.services import activity_logs as activity_log_service
 from app.services import ai_rate_limit
 from app.services import ai_review_drafts as ai_review_draft_service
+from app.services import ai_traceability as ai_traceability_service
 from app.services import change_items as change_item_service
 from app.services import project_access as project_access_service
 
@@ -94,7 +98,42 @@ def generate_change_item_ai_review_draft(
     )
     return {"data": ChangeItemAIGenerationResultRead.model_validate(result).model_dump(mode="json")}
 
-from app.schemas.compare import LinkedRequirementCreate
+
+@router.post("/change-items/{change_item_id}/suggest-links")
+def suggest_traceability_links(
+    change_item_id: int,
+    current_user: User = Depends(get_current_user),
+    database: Session = Depends(get_db_session),
+):
+    project_access_service.ensure_change_item_access_or_404(database, change_item_id, current_user.id)
+    ai_rate_limit.enforce_ai_traceability_suggest_rate_limit(database, current_user.id)
+    result = ai_traceability_service.suggest_traceability_links(database, change_item_id)
+    return {"data": TraceabilitySuggestResponse.model_validate(result).model_dump(mode="json")}
+
+
+@router.post("/change-items/{change_item_id}/requirement-links/ai-suggested", status_code=status.HTTP_201_CREATED)
+def accept_ai_suggested_requirement_link(
+    change_item_id: int,
+    payload: AISuggestedRequirementLinkCreate,
+    current_user: User = Depends(get_current_user),
+    database: Session = Depends(get_db_session),
+):
+    project_access_service.ensure_change_item_access_or_404(database, change_item_id, current_user.id)
+    ai_traceability_service.verify_suggestion_token(
+        database,
+        change_item_id=change_item_id,
+        requirement_id=payload.requirement_id,
+        suggestion_token=payload.suggestion_token,
+    )
+    detail = change_item_service.create_requirement_link(
+        database,
+        change_item_id=change_item_id,
+        requirement_id=payload.requirement_id,
+        notes=payload.notes,
+        link_type="ai_suggested",
+    )
+    return {"data": ChangeItemDetailRead.model_validate(detail).model_dump(mode="json")}
+
 
 @router.post("/change-items/{change_item_id}/requirement-links", status_code=status.HTTP_201_CREATED)
 def create_requirement_link(
@@ -109,6 +148,7 @@ def create_requirement_link(
         change_item_id=change_item_id,
         requirement_id=payload.requirement_id,
         notes=payload.notes,
+        link_type="manual",
     )
     return {"data": ChangeItemDetailRead.model_validate(detail).model_dump(mode="json")}
 

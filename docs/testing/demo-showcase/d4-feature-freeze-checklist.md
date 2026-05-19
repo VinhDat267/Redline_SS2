@@ -53,9 +53,9 @@ Before demo freeze can be treated as ready:
 - [x] PostgreSQL + pgvector starts with `docker compose up -d postgres`.
 - [x] Alembic is at head.
 - [x] `python -m app.rag_admin health --strict` returns healthy.
-- [x] 9Router `/v1/models` lists `cx/gpt-5.5`.
-- [x] 9Router `/v1/models` lists `gemini/gemini-embedding-2-preview`.
-- [x] 9Router `/v1/embeddings` returns a 3072-dimensional Gemini embedding.
+- [x] Direct Gemini LLM configuration is supported by backend settings.
+- [x] Direct Gemini embedding configuration uses `gemini-embedding-001`.
+- [x] Gemini embeddings remain 3072-dimensional for pgvector compatibility.
 - [x] Backend serves FastAPI at `http://127.0.0.1:8000`.
 - [x] Frontend serves Vite at `http://127.0.0.1:5173`.
 - [x] Contract chat streaming env is enabled for primary demo path.
@@ -96,7 +96,7 @@ Ignored local evidence artifacts:
 
 Run this before a recorded or live demo:
 
-- [ ] Confirm 9Router is listening on `http://localhost:20128`.
+- [ ] Confirm `REDLINE_AI_GEMINI_API_KEY` is set in `src/backend/.env`.
 - [ ] Run `python -m app.rag_admin health --strict` from `src/backend`.
 - [ ] Start backend on `http://127.0.0.1:8000`.
 - [ ] Start frontend on `http://127.0.0.1:5173`.

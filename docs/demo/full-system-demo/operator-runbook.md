@@ -1,6 +1,6 @@
 # Full Demo Operator Runbook
 
-Use this runbook before a live or recorded demo. It assumes the current Redline local runtime: PostgreSQL + pgvector, backend FastAPI, frontend Vite, and 9Router for OpenAI-compatible chat/embedding.
+Use this runbook before a live or recorded demo. It assumes the current Redline local runtime: PostgreSQL + pgvector, backend FastAPI, frontend Vite, and direct Gemini for AI/RAG.
 
 ## 1. Start Infrastructure
 
@@ -10,16 +10,13 @@ From repository root:
 docker compose up -d postgres
 ```
 
-Confirm 9Router is running:
+Confirm direct Gemini is configured:
 
 ```powershell
-Invoke-RestMethod http://localhost:20128/v1/models
+Select-String -Path src/backend/.env -Pattern "REDLINE_AI_GEMINI_API_KEY="
 ```
 
-The model list should include:
-
-- `cx/gpt-5.5`
-- `gemini/gemini-embedding-2-preview`
+The key must be set to a real Google AI Studio Gemini API key before provider-backed AI/RAG health checks can pass.
 
 ## 2. Start Backend
 
@@ -108,12 +105,11 @@ Use this order:
 
 ## 7. Fallbacks
 
-If 9Router is down:
+If direct Gemini is unavailable:
 
-1. Restart 9Router.
-2. Re-run `/v1/models`.
-3. Re-run RAG health.
-4. If still down, demo deterministic Compare and Parser only. Explain that provider-backed synthesis is unavailable in the local environment.
+1. Confirm `REDLINE_AI_GEMINI_API_KEY` is set in `src/backend/.env`.
+2. Re-run RAG health.
+3. If still down, demo deterministic Compare and Parser only. Explain that provider-backed synthesis is unavailable in the local environment.
 
 If Contract Q&A is slow:
 

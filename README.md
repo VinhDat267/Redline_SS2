@@ -19,7 +19,7 @@ The application is fully functional with production deployments on Heroku (backe
 - **Backend:** FastAPI, SQLAlchemy, Alembic, PostgreSQL + pgvector, Pillow (avatar processing)
 - **Frontend:** React 19, Vite, Tailwind CSS, Recharts
 - **Auth:** HttpOnly cookie sessions, CSRF tokens, Google OAuth, DB-backed rate limiting
-- **AI/RAG:** OpenAI-compatible providers via 9Router, Gemini embeddings (3072-dim), pgvector retrieval
+- **AI/RAG:** Direct Gemini or OpenAI-compatible providers, Gemini embeddings (3072-dim), pgvector retrieval
 
 **Test suite:**
 
@@ -63,7 +63,7 @@ cd src/backend
 python -m venv .venv
 .\.venv\Scripts\python -m pip install -e .[dev]
 Copy-Item .env.example .env
-# Fill REDLINE_AI_OPENAI_API_KEY or REDLINE_AI_GEMINI_API_KEY in .env for AI features.
+# Fill REDLINE_AI_GEMINI_API_KEY in .env for direct Gemini AI/RAG features.
 .\.venv\Scripts\python -m alembic upgrade head
 .\.venv\Scripts\python -m app.seed
 .\.venv\Scripts\python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000

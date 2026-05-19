@@ -6,6 +6,7 @@ import math
 import re
 from collections import Counter
 from collections.abc import Callable, Iterator
+from urllib.parse import urlparse
 
 import httpx
 from sqlalchemy import select
@@ -181,7 +182,16 @@ def _embedding_base_url() -> str:
 
 
 def _embedding_api_key() -> str | None:
-    return settings.rag_embedding_api_key or settings.ai_openai_api_key
+    if settings.rag_embedding_api_key:
+        return settings.rag_embedding_api_key
+    if _embedding_uses_gemini_openai_compat():
+        return settings.ai_gemini_api_key
+    return settings.ai_openai_api_key
+
+
+def _embedding_uses_gemini_openai_compat() -> bool:
+    hostname = urlparse(_embedding_base_url()).hostname or ""
+    return hostname.lower().endswith("generativelanguage.googleapis.com")
 
 
 def _iter_embedding_batches(texts: list[str]) -> Iterator[list[str]]:

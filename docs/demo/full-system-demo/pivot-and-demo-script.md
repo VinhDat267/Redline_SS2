@@ -180,7 +180,7 @@ Pipeline RAG:
 ```text
 Bước 1: User upload DOCX hoặc PDF. Backend parse tài liệu thành các DocumentBlock. Mỗi block có text, vị trí, section title, block key và draft id.
 
-Bước 2: Em gọi embedding model để biến text của mỗi DocumentBlock thành vector. Hiện tại embedding đi qua 9Router theo chuẩn OpenAI-compatible, dùng Gemini embedding.
+Bước 2: Em gọi Gemini embedding trực tiếp qua endpoint OpenAI-compatible của Google để biến text của mỗi DocumentBlock thành vector.
 
 Bước 3: Em lưu vector đó vào PostgreSQL bằng pgvector, kèm metadata như provider, model và dimension.
 

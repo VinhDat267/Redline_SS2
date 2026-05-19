@@ -41,7 +41,7 @@ The `output/` directory is ignored by git.
 
 ## Run Rehearsal
 
-Start PostgreSQL, backend, frontend, and 9Router first. Then run:
+Start PostgreSQL, backend, frontend, and configure direct Gemini first. Then run:
 
 ```powershell
 python docs/testing/demo-showcase/scripts/run_vn_showcase_rehearsal.py --base-url http://127.0.0.1:8000 --timeout 240

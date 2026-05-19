@@ -30,7 +30,7 @@ Required local services:
 | Service | URL / Port | Purpose |
 | --- | --- | --- |
 | PostgreSQL + pgvector | Docker `redline-pgvector` | Main runtime database and vectors |
-| 9Router | `http://localhost:20128/v1` | OpenAI-compatible chat and embedding proxy |
+| Direct Gemini | Google Gemini API | AI review, Contract Q&A synthesis, and Gemini embeddings |
 | Backend | `http://127.0.0.1:8000` | FastAPI app |
 | Frontend | `http://127.0.0.1:5173` | Vite app |
 
@@ -38,11 +38,11 @@ Expected model config:
 
 | Variable | Expected local value |
 | --- | --- |
-| `REDLINE_AI_OPENAI_BASE_URL` | `http://localhost:20128/v1` |
-| `REDLINE_AI_OPENAI_MODEL` | `cx/gpt-5.5` |
+| `REDLINE_AI_PRIMARY_PROVIDER` | `gemini` |
+| `REDLINE_AI_GEMINI_MODEL` | `gemini-2.0-flash` |
 | `REDLINE_RAG_EMBEDDING_PROVIDER` | `openai_compatible` |
-| `REDLINE_RAG_EMBEDDING_BASE_URL` | `http://localhost:20128/v1` |
-| `REDLINE_RAG_EMBEDDING_MODEL` | `gemini/gemini-embedding-2-preview` |
+| `REDLINE_RAG_EMBEDDING_BASE_URL` | `https://generativelanguage.googleapis.com/v1beta/openai` |
+| `REDLINE_RAG_EMBEDDING_MODEL` | `gemini-embedding-001` |
 | `REDLINE_RAG_EMBEDDING_DIMENSIONS` | `3072` |
 
 ## Start Sequence
@@ -53,13 +53,13 @@ From repo root:
 docker compose up -d postgres
 ```
 
-Start or confirm 9Router:
+Confirm direct Gemini key is configured:
 
 ```powershell
-9router --no-browser --skip-update
+Select-String -Path src/backend/.env -Pattern "REDLINE_AI_GEMINI_API_KEY="
 ```
 
-If 9Router opens an interface picker, choose a background/tray or Web UI mode that keeps `http://localhost:20128` listening.
+The key must be set to a real Google AI Studio Gemini API key before provider-backed AI/RAG checks can pass.
 
 Backend:
 
@@ -85,18 +85,7 @@ python docs/testing/demo-showcase/scripts/build_vn_showcase_fixtures.py
 
 ## Pre-Demo Health Checks
 
-Run these before the live walkthrough:
-
-```powershell
-Invoke-RestMethod http://localhost:20128/v1/models
-```
-
-Confirm the response includes:
-
-- `cx/gpt-5.5`
-- `gemini/gemini-embedding-2-preview`
-
-Then from `src/backend`:
+Run this from `src/backend` before the live walkthrough:
 
 ```powershell
 python -m app.rag_admin health --strict
@@ -106,12 +95,12 @@ Required result:
 
 - `healthy=true`
 - `embedding_provider_ok=true`
-- `configured_provider=openai-compatible:gemini/gemini-embedding-2-preview`
+- `configured_provider=openai-compatible:gemini-embedding-001`
 - `embedding_dimensions_ok=true`
 - `pgvector_dimensions_ok=true`
 - `stale_block_count=0`
 
-If provider smoke fails, do not present RAG as provider-backed. Restart 9Router and rerun health.
+If provider smoke fails, do not present RAG as provider-backed. Check the Gemini key/config and rerun health.
 
 ## Primary Demo Path
 
@@ -178,17 +167,16 @@ VN SOW:
 
 ## Fallbacks
 
-If 9Router is down:
+If direct Gemini is unavailable:
 
-1. Restart 9Router.
-2. Rerun `Invoke-RestMethod http://localhost:20128/v1/models`.
-3. Rerun `python -m app.rag_admin health --strict`.
-4. If still down, switch to recorded evidence in `docs/testing/demo-showcase/vn-rehearsal-evidence.md`.
+1. Confirm `REDLINE_AI_GEMINI_API_KEY` is set in `src/backend/.env`.
+2. Rerun `python -m app.rag_admin health --strict`.
+3. If still down, switch to recorded evidence in `docs/testing/demo-showcase/vn-rehearsal-evidence.md`.
 
 If embedding provider falls back to `local-hash`:
 
 1. Do not call the run provider-backed.
-2. Fix 9Router first.
+2. Fix direct Gemini configuration first.
 3. Re-embed stale blocks only after provider health is restored:
 
 ```powershell

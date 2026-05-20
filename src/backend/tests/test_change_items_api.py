@@ -393,6 +393,49 @@ def test_manual_requirement_link_ignores_client_supplied_ai_link_type(
     assert payload["linked_requirements"][0]["link_type"] == "manual"
 
 
+def test_requirement_link_with_requirement_from_inaccessible_project_returns_404(
+    client,
+    auth_headers,
+    register_user,
+):
+    change_item_id = _create_compare_run(client, auth_headers)
+    outsider = register_user(email="traceability-outsider@example.com", display_name="Traceability Outsider")
+
+    project_response = client.post(
+        "/api/v1/projects",
+        json={"name": "Outsider Traceability Project", "description": "Different tenant"},
+        headers=outsider["headers"],
+    )
+    assert project_response.status_code == 201
+    outsider_project_id = project_response.json()["data"]["id"]
+    document_response = client.post(
+        f"/api/v1/projects/{outsider_project_id}/documents",
+        json={"title": "Outsider requirements", "document_type": "SPEC"},
+        headers=outsider["headers"],
+    )
+    assert document_response.status_code == 201
+    outsider_document_id = document_response.json()["data"]["id"]
+    requirement_response = client.post(
+        f"/api/v1/projects/{outsider_project_id}/requirements",
+        json={
+            "document_id": outsider_document_id,
+            "requirement_code": "REQ-OUTSIDER-001",
+            "title": "Outsider-only requirement",
+        },
+        headers=outsider["headers"],
+    )
+    assert requirement_response.status_code == 201
+    outsider_requirement_id = requirement_response.json()["data"]["id"]
+
+    response = client.post(
+        f"/api/v1/change-items/{change_item_id}/requirement-links",
+        json={"requirement_id": outsider_requirement_id},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 404
+
+
 def test_ai_traceability_suggestion_acceptance_requires_server_token(
     client,
     auth_headers,

@@ -126,3 +126,64 @@ def test_requirement_test_case_mapping_routes_require_project_membership(client,
         headers=outsider["headers"],
     )
     assert create_response.status_code == 404
+
+
+def test_requirement_test_case_mapping_with_test_case_from_inaccessible_project_returns_404(
+    client,
+    auth_headers,
+    register_user,
+):
+    project_response = client.post(
+        "/api/v1/projects",
+        json={"name": "Mapping Owner Project", "description": "Mapping owner"},
+        headers=auth_headers,
+    )
+    assert project_response.status_code == 201
+    project_id = project_response.json()["data"]["id"]
+
+    document_response = client.post(
+        f"/api/v1/projects/{project_id}/documents",
+        json={"title": "Owner requirements", "document_type": "SRS"},
+        headers=auth_headers,
+    )
+    assert document_response.status_code == 201
+    document_id = document_response.json()["data"]["id"]
+
+    req_response = client.post(
+        f"/api/v1/projects/{project_id}/requirements",
+        json={
+            "document_id": document_id,
+            "requirement_code": "REQ-MAP-OWNER",
+            "title": "Owner requirement",
+        },
+        headers=auth_headers,
+    )
+    assert req_response.status_code == 201
+    requirement_id = req_response.json()["data"]["id"]
+
+    outsider = register_user(email="mapping-tc-outsider@example.com", display_name="Mapping TC Outsider")
+    outsider_project_response = client.post(
+        "/api/v1/projects",
+        json={"name": "Mapping Outsider Project", "description": "Different tenant"},
+        headers=outsider["headers"],
+    )
+    assert outsider_project_response.status_code == 201
+    outsider_project_id = outsider_project_response.json()["data"]["id"]
+    tc_response = client.post(
+        f"/api/v1/projects/{outsider_project_id}/test-cases",
+        json={
+            "test_case_code": "TC-MAP-OUTSIDER",
+            "title": "Outsider-only test case",
+        },
+        headers=outsider["headers"],
+    )
+    assert tc_response.status_code == 201
+    outsider_test_case_id = tc_response.json()["data"]["id"]
+
+    create_response = client.post(
+        f"/api/v1/requirements/{requirement_id}/test-case-mappings",
+        json={"test_case_id": outsider_test_case_id},
+        headers=auth_headers,
+    )
+
+    assert create_response.status_code == 404

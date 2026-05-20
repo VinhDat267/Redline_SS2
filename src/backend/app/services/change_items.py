@@ -108,7 +108,7 @@ def create_requirement_link(
         .where(Document.id == requirement.document_id)
     )
     if not change_item_project_id or change_item_project_id != requirement_project_id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Requirement belongs to a different project context")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Requirement not found")
 
     existing_link = session.scalar(
         select(ChangeItemRequirementLink)

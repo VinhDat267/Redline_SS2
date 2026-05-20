@@ -494,4 +494,186 @@ describe("TraceabilityImpactPage", () => {
     });
     expect(screen.getAllByText("✨ AI").length).toBeGreaterThan(0);
   });
+
+  test("removes a visible AI suggestion after the same obligation is linked manually", async () => {
+    const manuallyLinkedPayload = buildChangeItemPayload({
+      linked_requirements: [
+        ...buildChangeItemPayload().data.linked_requirements,
+        {
+          requirement_id: 701,
+          requirement_code: "REQ-SEC-002",
+          title: "Admin MFA",
+          link_type: "manual",
+          notes: null,
+          mapped_test_cases: []
+        }
+      ]
+    });
+
+    fetch.mockImplementation((input, init = {}) => {
+      const url = String(input);
+      const method = init.method || "GET";
+
+      if (url.endsWith("/api/v1/compare-runs/55")) {
+        return Promise.resolve(jsonResponse(buildCompareRunPayload()));
+      }
+
+      if (url.endsWith("/api/v1/compare-runs/55/change-items")) {
+        return Promise.resolve(jsonResponse(buildQueuePayload()));
+      }
+
+      if (url.endsWith("/api/v1/change-items/900") && method === "GET") {
+        return Promise.resolve(jsonResponse(buildChangeItemPayload()));
+      }
+
+      if (url.endsWith("/api/v1/projects/1/requirements")) {
+        return Promise.resolve(jsonResponse(buildRequirementsPayload()));
+      }
+
+      if (url.endsWith("/api/v1/projects/1/test-cases")) {
+        return Promise.resolve(jsonResponse(buildTestCasesPayload()));
+      }
+
+      if (url.endsWith("/api/v1/change-items/900/suggest-links") && method === "POST") {
+        return Promise.resolve(jsonResponse({
+          data: {
+            suggestions: [
+              {
+                requirement_id: 701,
+                requirement_code: "REQ-SEC-002",
+                title: "Admin MFA",
+                confidence: 0.78,
+                rationale: "The change touches security obligations.",
+                relevance_type: "related",
+                suggestion_token: "signed-suggestion-token"
+              }
+            ],
+            provider_used: "test-provider",
+            fallback_used: false,
+            error_message: null
+          }
+        }));
+      }
+
+      if (url.endsWith("/api/v1/change-items/900/requirement-links") && method === "POST") {
+        expect(JSON.parse(init.body)).toEqual({
+          requirement_id: "701",
+          notes: ""
+        });
+        return Promise.resolve(jsonResponse(manuallyLinkedPayload, 201));
+      }
+
+      return Promise.reject(new Error(`Unhandled request: ${url} ${method}`));
+    });
+
+    renderImpactPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: /suggest links/i }));
+    expect(await screen.findByRole("button", { name: /link ai suggestion req-sec-002/i })).toBeInTheDocument();
+
+    const [linkObligationSelect] = screen.getAllByRole("combobox");
+    fireEvent.change(linkObligationSelect, { target: { value: "701" } });
+    fireEvent.click(screen.getByRole("button", { name: /^link obligation$/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: /link ai suggestion req-sec-002/i })).not.toBeInTheDocument();
+    });
+  });
+
+  test("clears stale mapping selections after unlinking the selected obligation", async () => {
+    const initialPayload = buildChangeItemPayload({
+      linked_requirements: [
+        ...buildChangeItemPayload().data.linked_requirements,
+        {
+          requirement_id: 701,
+          requirement_code: "REQ-SEC-002",
+          title: "Admin MFA",
+          link_type: "manual",
+          notes: null,
+          mapped_test_cases: []
+        }
+      ]
+    });
+    const afterUnlinkPayload = buildChangeItemPayload();
+
+    fetch.mockImplementation((input, init = {}) => {
+      const url = String(input);
+      const method = init.method || "GET";
+
+      if (url.endsWith("/api/v1/compare-runs/55")) {
+        return Promise.resolve(jsonResponse(buildCompareRunPayload()));
+      }
+
+      if (url.endsWith("/api/v1/compare-runs/55/change-items")) {
+        return Promise.resolve(jsonResponse(buildQueuePayload()));
+      }
+
+      if (url.endsWith("/api/v1/change-items/900") && method === "GET") {
+        return Promise.resolve(jsonResponse(initialPayload));
+      }
+
+      if (url.endsWith("/api/v1/projects/1/requirements")) {
+        return Promise.resolve(jsonResponse(buildRequirementsPayload()));
+      }
+
+      if (url.endsWith("/api/v1/projects/1/test-cases")) {
+        return Promise.resolve(jsonResponse(buildTestCasesPayload()));
+      }
+
+      if (url.endsWith("/api/v1/change-items/900/requirement-links/701") && method === "DELETE") {
+        return Promise.resolve(jsonResponse(afterUnlinkPayload));
+      }
+
+      return Promise.reject(new Error(`Unhandled request: ${url} ${method}`));
+    });
+
+    renderImpactPage();
+
+    await waitFor(() => {
+      expect(screen.getAllByText("REQ-SEC-002").length).toBeGreaterThan(0);
+    });
+    const comboboxes = screen.getAllByRole("combobox");
+    fireEvent.change(comboboxes[1], { target: { value: "701" } });
+    fireEvent.change(comboboxes[2], { target: { value: "801" } });
+    expect(screen.getByRole("button", { name: /create mapping/i })).not.toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: /unlink req-sec-002/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /create mapping/i })).toBeDisabled();
+    });
+  });
+
+  test("exposes accessible names for traceability icon delete buttons", async () => {
+    fetch.mockImplementation((input, init = {}) => {
+      const url = String(input);
+
+      if (url.endsWith("/api/v1/compare-runs/55")) {
+        return Promise.resolve(jsonResponse(buildCompareRunPayload()));
+      }
+
+      if (url.endsWith("/api/v1/compare-runs/55/change-items")) {
+        return Promise.resolve(jsonResponse(buildQueuePayload()));
+      }
+
+      if (url.endsWith("/api/v1/change-items/900")) {
+        return Promise.resolve(jsonResponse(buildChangeItemPayload()));
+      }
+
+      if (url.endsWith("/api/v1/projects/1/requirements")) {
+        return Promise.resolve(jsonResponse(buildRequirementsPayload()));
+      }
+
+      if (url.endsWith("/api/v1/projects/1/test-cases")) {
+        return Promise.resolve(jsonResponse(buildTestCasesPayload()));
+      }
+
+      return Promise.reject(new Error(`Unhandled request: ${url} ${init.method || "GET"}`));
+    });
+
+    renderImpactPage();
+
+    expect(await screen.findByRole("button", { name: /unlink req-login-001/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /delete mapping req-login-001 tc-login-001/i })).toBeInTheDocument();
+  });
 });

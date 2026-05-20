@@ -93,10 +93,13 @@ export function TraceabilityImpactPage() {
 
   const handleLinkRequirement = async () => {
     if (!selectedReqId || !changeItem) return;
+    const linkedReqId = selectedReqId;
     setIsLinking(true); setError("");
     try {
-      const updated = await createRequirementLink(token, changeItem.id, selectedReqId);
-      setChangeItem(updated); setSelectedReqId("");
+      const updated = await createRequirementLink(token, changeItem.id, linkedReqId);
+      setChangeItem(updated);
+      setAiSuggestions(prev => prev.filter(s => String(s.requirement_id) !== String(linkedReqId)));
+      setSelectedReqId("");
     } catch (e) { setError(e instanceof ApiError ? e.message : "Failed to link"); }
     finally { setIsLinking(false); }
   };
@@ -107,6 +110,10 @@ export function TraceabilityImpactPage() {
     try {
       const updated = await deleteRequirementLink(token, changeItem.id, reqId);
       setChangeItem(updated);
+      if (String(selectedMappingReqId) === String(reqId)) {
+        setSelectedMappingReqId("");
+        setSelectedMappingTcId("");
+      }
     } catch (e) { setError(e instanceof ApiError ? e.message : "Failed to unlink"); }
     finally { setUnlinkingId(null); }
   };
@@ -150,7 +157,7 @@ export function TraceabilityImpactPage() {
   };
 
   const handleCreateMapping = async () => {
-    if (!selectedMappingReqId || !selectedMappingTcId) return;
+    if (!selectedMappingReqId || !selectedMappingTcId || !selectedRequirement) return;
     setIsMappingCreating(true); setError("");
     try {
       await createRequirementTestCaseMapping(token, selectedMappingReqId, selectedMappingTcId);
@@ -210,6 +217,7 @@ export function TraceabilityImpactPage() {
         .ti-del-btn { opacity:0; padding:3px; border-radius:4px; border:none; background:transparent; cursor:pointer; color:#848E9C; transition:all 120ms; }
         .ti-req-row:hover .ti-del-btn, .ti-tc-row:hover .ti-del-btn { opacity:1; }
         .ti-del-btn:hover { color:#F6465D; background:rgba(246,70,93,0.1); }
+        .ti-del-btn:focus-visible { opacity:1; outline:2px solid #F0B90B; outline-offset:2px; }
         .ti-chain-arrow { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; color:#C0C6CF; flex-shrink:0; }
         .ti-node { flex:1; display:flex; flex-direction:column; min-height:0; }
         .ti-select { width:100%; padding:6px 10px; border-radius:7px; border:1px solid #E6E8EA; background:#F4F5F7; color:#1E2026; font-size:12px; outline:none; transition:border-color 150ms; }
@@ -490,9 +498,10 @@ export function TraceabilityImpactPage() {
                       )}
                     </div>
                     <button type="button" className="ti-del-btn"
+                      aria-label={`Unlink ${req.requirement_code}`}
                       disabled={unlinkingId === req.requirement_id}
                       onClick={() => handleUnlinkRequirement(req.requirement_id)}
-                      title="Unlink">
+                      title={`Unlink ${req.requirement_code}`}>
                       {unlinkingId === req.requirement_id
                         ? <div style={{ width: "11px", height: "11px", borderRadius: "50%", border: "2px solid #E6E8EA", borderTopColor: "#F6465D", animation: "tiSpin 0.8s linear infinite" }} />
                         : <Trash2 size={12} />}
@@ -558,7 +567,7 @@ export function TraceabilityImpactPage() {
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
               <div>
                 <div className="ti-label" style={{ marginBottom: "4px", display: "flex", alignItems: "center", gap: "4px" }}><Database size={9} /> Obligation</div>
-                <select className="ti-select" value={selectedReqId} onChange={e => setSelectedReqId(e.target.value)}>
+                <select className="ti-select" aria-label="Obligation to link" value={selectedReqId} onChange={e => setSelectedReqId(e.target.value)}>
                   <option value="">{isLoading ? "Loading…" : availableReqs.length ? "Select an Obligation" : "All obligations linked"}</option>
                   {availableReqs.map(req => (
                     <option key={req.id} value={req.id}>{req.requirement_code}: {req.title}</option>
@@ -585,6 +594,7 @@ export function TraceabilityImpactPage() {
               <div>
                 <div className="ti-label" style={{ marginBottom: "4px", display: "flex", alignItems: "center", gap: "4px" }}><Database size={9} /> Linked Obligation</div>
                 <select className="ti-select" value={selectedMappingReqId}
+                  aria-label="Linked obligation for mapping"
                   onChange={e => { setSelectedMappingReqId(e.target.value); setSelectedMappingTcId(""); }}>
                   <option value="">Select Obligation</option>
                   {linkedReqs.map(req => (
@@ -595,6 +605,7 @@ export function TraceabilityImpactPage() {
               <div>
                 <div className="ti-label" style={{ marginBottom: "4px", display: "flex", alignItems: "center", gap: "4px" }}><TestTubeDiagonal size={9} /> Compliance Check</div>
                 <select className="ti-select" value={selectedMappingTcId}
+                  aria-label="Compliance check to map"
                   disabled={!selectedMappingReqId}
                   onChange={e => setSelectedMappingTcId(e.target.value)}>
                   <option value="">{selectedMappingReqId ? "Select a Check" : "Select obligation first"}</option>
@@ -605,7 +616,7 @@ export function TraceabilityImpactPage() {
                 </select>
               </div>
               <button type="button" className="ti-btn-primary" style={{ width: "100%" }}
-                disabled={!selectedMappingReqId || !selectedMappingTcId || isMappingCreating}
+                disabled={!selectedMappingReqId || !selectedMappingTcId || !selectedRequirement || isMappingCreating}
                 onClick={handleCreateMapping}>
                 {isMappingCreating
                   ? <><div style={{ width: "11px", height: "11px", borderRadius: "50%", border: "2px solid rgba(30,32,38,0.2)", borderTopColor: "#1E2026", animation: "tiSpin 0.8s linear infinite" }} /> Mapping…</>
@@ -646,8 +657,10 @@ export function TraceabilityImpactPage() {
                                 <span style={{ fontSize: "10px", color: "#474D57", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tc.title}</span>
                               </div>
                               <button type="button" className="ti-del-btn"
+                                aria-label={`Delete mapping ${req.requirement_code} ${tc.test_case_code}`}
                                 disabled={mappingDeletingKey === key}
-                                onClick={() => handleDeleteMapping(req.requirement_id, tc.test_case_id)}>
+                                onClick={() => handleDeleteMapping(req.requirement_id, tc.test_case_id)}
+                                title={`Delete mapping ${req.requirement_code} ${tc.test_case_code}`}>
                                 {mappingDeletingKey === key
                                   ? <div style={{ width: "10px", height: "10px", borderRadius: "50%", border: "1.5px solid #E6E8EA", borderTopColor: "#F6465D", animation: "tiSpin 0.8s linear infinite" }} />
                                   : <Trash2 size={11} />}

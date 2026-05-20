@@ -32,10 +32,7 @@ def create_mapping(
     from app.models import Document
     req_doc = session.get(Document, requirement.document_id)
     if req_doc is None or req_doc.project_id != test_case.project_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Requirement and Test Case belong to different projects",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Test case not found")
 
     existing = session.scalar(
         select(RequirementTestCaseMapping)

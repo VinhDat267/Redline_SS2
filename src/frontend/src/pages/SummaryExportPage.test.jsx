@@ -139,4 +139,108 @@ describe("SummaryExportPage", () => {
     /* The modified count (1) and label ("Modified") are in separate divs */
     expect(screen.getAllByText("Modified").length).toBeGreaterThan(0);
   });
+
+  test("renders responsive summary metric groups without the fixed seven-column layout", async () => {
+    fetch.mockImplementation((input, init = {}) => {
+      const url = String(input);
+
+      if (url.endsWith("/api/v1/compare-runs/55")) {
+        return Promise.resolve(
+          jsonResponse({
+            data: {
+              id: 55,
+              compare_version: "v1",
+              compare_status: "completed",
+              started_at: "2026-03-26T09:05:00Z",
+              completed_at: "2026-03-26T09:05:05Z",
+              document: {
+                id: 10,
+                project_id: 1,
+                title: "Software Requirements Specification",
+                document_type: "SRS",
+                description: "Production SRS"
+              },
+              source_version: {
+                id: 101,
+                document_id: 10,
+                version_label: "v1.0",
+                parse_status: "parsed",
+                active_parse_run_id: 301,
+                warning_count: 0,
+                parser_version: "v1"
+              },
+              target_version: {
+                id: 102,
+                document_id: 10,
+                version_label: "v1.1",
+                parse_status: "parsed_with_warnings",
+                active_parse_run_id: 302,
+                warning_count: 1,
+                parser_version: "v1"
+              },
+              summary: {
+                total_changes: 4,
+                added: 2,
+                removed: 1,
+                modified: 1
+              },
+              selected_change_item_id: 900
+            }
+          })
+        );
+      }
+
+      if (url.endsWith("/api/v1/compare-runs/55/change-items")) {
+        return Promise.resolve(
+          jsonResponse({
+            data: [
+              {
+                id: 900,
+                compare_run_id: 55,
+                change_type: "modified",
+                review_status: "open",
+                section_title: "Requirements",
+                surface_type: "body",
+                surface_key: "body-main",
+                container_type: "text_flow",
+                container_key: "body-main",
+                table_key: null,
+                row_key: null,
+                old_content: "The system shall support login.",
+                new_content: "The system shall support secure login.",
+                summary: "Modified paragraph in body",
+                sort_key: "0000:000001:00000001"
+              },
+              {
+                id: 901,
+                compare_run_id: 55,
+                change_type: "added",
+                review_status: "in_review",
+                section_title: "Requirements",
+                surface_type: "body",
+                surface_key: "body-main",
+                container_type: "text_flow",
+                container_key: "body-main",
+                table_key: null,
+                row_key: null,
+                old_content: "",
+                new_content: "The system shall support MFA.",
+                summary: "Added paragraph in body",
+                sort_key: "0000:000002:00000001"
+              }
+            ]
+          })
+        );
+      }
+
+      return Promise.reject(new Error(`Unhandled request: ${url} ${init.method || "GET"}`));
+    });
+
+    renderSummaryPage();
+
+    expect(await screen.findByTestId("summary-stats-grid")).toHaveClass("se-stats-grid");
+    expect(screen.getByTestId("summary-change-stats")).toHaveClass("se-change-stat-group");
+    expect(screen.getByTestId("summary-review-stats")).toHaveClass("se-review-stat-group");
+    expect(screen.getByTestId("summary-stats-grid")).not.toHaveStyle({ gridTemplateColumns: "repeat(7,1fr)" });
+  });
 });

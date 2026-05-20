@@ -128,7 +128,11 @@ export function SummaryExportPage() {
         .se-queue-row { display:block; padding:8px 10px; border-radius:7px; border:1px solid #E6E8EA; background:#fff; text-decoration:none; transition:all 120ms; cursor:pointer; }
         .se-queue-row:hover { border-color:#F0B90B88; background:#FFFDF0; }
         .se-queue-row.active { border-color:#F0B90B; background:#FFFBE8; }
-        .se-stat { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; border-radius:8px; border:1px solid #E6E8EA; background:#FAFAFA; }
+        .se-stats-grid { display:flex; flex-wrap:wrap; gap:12px; align-items:stretch; }
+        .se-stat-group { display:grid; grid-template-columns:repeat(auto-fit,minmax(112px,1fr)); gap:8px; min-width:0; }
+        .se-change-stat-group { flex:2 1 500px; }
+        .se-review-stat-group { flex:1 1 330px; }
+        .se-stat { display:flex; align-items:center; justify-content:space-between; min-width:0; padding:10px 14px; border-radius:8px; border:1px solid #E6E8EA; background:#FAFAFA; }
         .se-btn-primary { display:flex; align-items:center; justify-content:center; gap:5px; padding:8px 16px; border-radius:7px; background:#F0B90B; color:#1E2026; border:none; font-size:12px; font-weight:700; cursor:pointer; transition:all 150ms; width:100%; }
         .se-btn-primary:hover:not(:disabled) { background:#FFD000; transform:translateY(-1px); box-shadow:0 4px 12px rgba(240,185,11,0.35); }
         .se-btn-primary:disabled { opacity:.4; cursor:not-allowed; }
@@ -305,9 +309,9 @@ export function SummaryExportPage() {
 
           {/* Stats row */}
           <div className="se-card" style={{ flexShrink: 0, padding: "14px 16px" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: "10px", alignItems: "center" }}>
+            <div className="se-stats-grid" data-testid="summary-stats-grid" aria-label="Summary metrics">
               {/* Change Metrics */}
-              <div style={{ gridColumn: "span 4", display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: "8px" }}>
+              <div className="se-stat-group se-change-stat-group" data-testid="summary-change-stats">
                 {[
                   [compareRun?.summary?.total_changes ?? "–", "Total", "#F4F5F7", "#1E2026", FileDiff],
                   [compareRun?.summary?.added ?? "–", "Added", "#EBF9F4", "#16714E", Activity],
@@ -323,12 +327,8 @@ export function SummaryExportPage() {
                   </div>
                 ))}
               </div>
-              {/* Divider */}
-              <div style={{ gridColumn: "span 1", display: "flex", justifyContent: "center" }}>
-                <div style={{ width: "1px", height: "40px", background: "#E6E8EA" }} />
-              </div>
               {/* Review Progress */}
-              <div style={{ gridColumn: "span 2", display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "8px" }}>
+              <div className="se-stat-group se-review-stat-group" data-testid="summary-review-stats">
                 {[
                   [reviewCounts.resolved, "Resolved", "#EBF9F4", "#16714E", CheckCircle2],
                   [reviewCounts.inReview, "In Review", "#FFF8E6", "#B07D0A", Clock],

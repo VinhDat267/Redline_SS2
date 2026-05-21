@@ -482,7 +482,20 @@ def _build_document_draft(version: DocumentVersion) -> ParsedDocumentDraft:
 
 
 def normalize_content(raw_content: str) -> str:
-    return _WHITESPACE_RE.sub(" ", raw_content).strip()
+    if not raw_content:
+        return ""
+    content = raw_content
+    for lig, rep in {
+        "ﬁ": "fi",
+        "ﬂ": "fl",
+        "ﬀ": "ff",
+        "ﬃ": "ffi",
+        "ﬄ": "ffl",
+        "ﬅ": "ft",
+        "ﬆ": "st",
+    }.items():
+        content = content.replace(lig, rep)
+    return _WHITESPACE_RE.sub(" ", content).strip()
 
 
 def classify_paragraph(

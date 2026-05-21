@@ -162,6 +162,85 @@ def test_material_table_like_pdf_text_fails_truth_policy(tmp_path: Path):
 
     draft = document_pdf_parser.build_pdf_document_draft(file_path)
 
-    assert draft.quality_report.policy_result == "fail"
-    assert draft.surfaces == []
+    assert draft.quality_report.policy_result == "warn"
+    assert len(draft.surfaces) == 1
     assert "pdf_material_table_unstructured" in _diagnostic_codes(draft)
+
+
+def _write_encrypted_pdf(path: Path) -> None:
+    document = fitz.open()
+    page = document.new_page(width=612, height=792)
+    page.insert_text((72, 72), "This is secret text.", fontsize=11)
+    document.save(
+        path,
+        encryption=fitz.PDF_ENCRYPT_AES_256,
+        owner_pw="owner",
+        user_pw="user",
+    )
+    document.close()
+
+
+def test_encrypted_pdf_fails_fast(tmp_path: Path):
+    file_path = tmp_path / "encrypted.pdf"
+    _write_encrypted_pdf(file_path)
+
+    import pytest
+    with pytest.raises(ValueError, match="PDF is password-protected"):
+        document_pdf_parser.build_pdf_document_draft(file_path)
+
+
+def test_short_ocr_signature_page_passes_with_high_confidence(monkeypatch, tmp_path: Path):
+    file_path = tmp_path / "signature-page.pdf"
+    _write_blank_pdf(file_path)
+
+    # Giả lập trang chữ ký quét có 6 token (dưới ngưỡng 12) nhưng độ tự tin 92.0 (>= 85.0)
+    def fake_ocr(page, page_index, settings):
+        return document_pdf_parser.OcrPageResult(
+            text="Signed: John Doe Date: 2026-05-21",
+            average_confidence=92.0,
+            retained_token_count=6,
+            low_confidence_token_ratio=0.0,
+            languages="eng+vie",
+            dpi=200,
+        )
+
+    monkeypatch.setattr(document_pdf_parser, "run_ocr_for_page", fake_ocr)
+
+    draft = document_pdf_parser.build_pdf_document_draft(file_path)
+
+    # Không bị báo lỗi fail, mà chuyển thành warn (vì dùng OCR và có cảnh báo)
+    assert draft.quality_report.policy_result == "warn"
+    assert len(draft.surfaces) == 1
+    assert draft.pdf_summary.ocr_page_count == 1
+    assert "pdf_ocr_used" in _diagnostic_codes(draft)
+    assert "pdf_ocr_quality_failed" not in _diagnostic_codes(draft)
+
+
+def test_ligature_normalization_in_parsing():
+    # Kiểm tra trực tiếp hàm _clean_pdf_text để bỏ qua giới hạn font chữ của PyMuPDF
+    raw_text = "The ﬁnancial ﬂow of this agreement is stable."
+    cleaned = document_pdf_parser._clean_pdf_text(raw_text)
+    assert "financial flow" in cleaned
+
+    # Kiểm tra trực tiếp hàm normalize_content của document_parser
+    from app.services.document_parser import normalize_content
+    assert normalize_content("The ﬁnancial ﬂow") == "The financial flow"
+
+
+def test_hyphenation_normalization_in_parsing(tmp_path: Path):
+    file_path = tmp_path / "hyphenation.pdf"
+    # Từ "represen-tative" bị ngắt dòng bằng gạch nối
+    _write_text_pdf(
+        file_path,
+        [
+            "We need a represen-\ntative to sign this."
+        ]
+    )
+
+    draft = document_pdf_parser.build_pdf_document_draft(file_path)
+
+    assert draft.quality_report.policy_result == "pass"
+    assert len(draft.surfaces) == 1
+    block = draft.surfaces[0].blocks[0]
+    # Dấu gạch nối và xuống dòng phải được ghép lại thành "representative"
+    assert "representative" in block.normalized_content

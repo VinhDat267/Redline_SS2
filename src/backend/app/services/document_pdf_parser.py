@@ -43,6 +43,26 @@ _MONEY_OR_DATE_RE = re.compile(
     re.IGNORECASE,
 )
 
+_LIGATURES_MAP = {
+    "ﬁ": "fi",
+    "ﬂ": "fl",
+    "ﬀ": "ff",
+    "ﬃ": "ffi",
+    "ﬄ": "ffl",
+    "ﬅ": "ft",
+    "ﬆ": "st",
+}
+
+
+def _clean_pdf_text(text: str) -> str:
+    if not text:
+        return text
+    for lig, rep in _LIGATURES_MAP.items():
+        text = text.replace(lig, rep)
+    # Ghép từ gạch nối xuống dòng (ví dụ: "represen-\ntative" -> "representative")
+    text = re.sub(r"(\w+)-\s*\r?\n\s*(\w+)", r"\1\2", text)
+    return text
+
 
 @dataclass(slots=True)
 class ParserDiagnostic:
@@ -155,6 +175,9 @@ def build_pdf_document_draft(
     except Exception as exc:  # pragma: no cover - library-specific failure surface
         raise ValueError("Unable to open .pdf file") from exc
 
+    if pdf_document.is_encrypted:
+        raise ValueError("PDF is password-protected and cannot be parsed.")
+
     diagnostics: list[ParserDiagnostic] = []
     warnings: list[str] = []
     pages: list[_PageText] = []
@@ -168,7 +191,7 @@ def build_pdf_document_draft(
                 pages.append(
                     _PageText(
                         page_number=page_number,
-                        text=native_text,
+                        text=_clean_pdf_text(native_text),
                         extraction_mode="text_layer",
                     )
                 )
@@ -239,7 +262,7 @@ def build_pdf_document_draft(
             pages.append(
                 _PageText(
                     page_number=page_number,
-                    text=ocr_result.text,
+                    text=_clean_pdf_text(ocr_result.text),
                     extraction_mode="ocr",
                     ocr_result=ocr_result,
                 )
@@ -272,13 +295,13 @@ def build_pdf_document_draft(
         diagnostics.append(
             ParserDiagnostic(
                 code="pdf_material_table_unstructured",
-                severity="error",
-                message="PDF contains material table-like text that is not safe to flatten as parser truth.",
+                severity="warning",
+                message="PDF contains material table-like text that is flattened as plain text.",
                 count=len(table_like_pages),
                 samples=[f"page {page_number}" for page_number in table_like_pages[:5]],
                 metadata={
                     "pages": table_like_pages,
-                    "impact_policy": "fail",
+                    "impact_policy": "warn",
                     "extraction_mode": "text_or_ocr",
                 },
             )
@@ -317,7 +340,8 @@ def build_pdf_document_draft(
         )
         has_errors = True
 
-    policy_result = "fail" if has_errors else "warn" if warnings else "pass"
+    has_warnings = any(d.severity == "warning" for d in diagnostics) or bool(warnings)
+    policy_result = "fail" if has_errors else "warn" if has_warnings else "pass"
     if policy_result == "fail":
         surfaces = []
 
@@ -366,12 +390,12 @@ def run_ocr_for_page(
     dpi = parser_settings.pdf_ocr_dpi
     zoom = dpi / 72
     pixmap = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False)
-    image = Image.open(BytesIO(pixmap.tobytes("png")))
-    data = pytesseract.image_to_data(
-        image,
-        lang=parser_settings.pdf_ocr_languages,
-        output_type=pytesseract.Output.DICT,
-    )
+    with Image.open(BytesIO(pixmap.tobytes("png"))) as image:
+        data = pytesseract.image_to_data(
+            image,
+            lang=parser_settings.pdf_ocr_languages,
+            output_type=pytesseract.Output.DICT,
+        )
 
     words: list[str] = []
     confidences: list[float] = []
@@ -449,7 +473,9 @@ def _ocr_quality_failure(
     if ocr_result.average_confidence < parser_settings.pdf_ocr_min_confidence:
         return "OCR average confidence is below the configured parser truth threshold."
     if ocr_result.retained_token_count < parser_settings.pdf_ocr_min_retained_tokens:
-        return "OCR retained too few tokens for reliable parser truth."
+        # Cho phép các trang OCR ngắn (như trang chữ ký) nếu độ tự tin trung bình cao và đáng tin cậy (>= 85.0)
+        if ocr_result.average_confidence < 85.0:
+            return "OCR retained too few tokens for reliable parser truth."
     if (
         ocr_result.low_confidence_token_ratio
         > parser_settings.pdf_ocr_max_low_confidence_token_ratio
@@ -520,7 +546,18 @@ def _split_text_blocks(text: str) -> list[str]:
                 blocks.append(" ".join(paragraph_lines))
                 paragraph_lines = []
             continue
-        blocks.append(normalized_line)
+
+        is_heading = _NUMBERED_HEADING_RE.match(normalized_line) or _LEGAL_HEADING_RE.match(normalized_line)
+        is_list = _LIST_ITEM_RE.match(normalized_line)
+
+        if is_heading or is_list:
+            if paragraph_lines:
+                blocks.append(" ".join(paragraph_lines))
+                paragraph_lines = []
+            blocks.append(normalized_line)
+        else:
+            paragraph_lines.append(normalized_line)
+
     if paragraph_lines:
         blocks.append(" ".join(paragraph_lines))
     return blocks

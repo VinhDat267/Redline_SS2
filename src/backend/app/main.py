@@ -1,14 +1,16 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Response, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.router import api_router
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.services.ai_batch_worker import AIBatchWorker
+from app.services import upload_storage
 
 
 def create_app(*, session_factory=SessionLocal, start_ai_worker: bool | None = None) -> FastAPI:
@@ -45,10 +47,23 @@ def create_app(*, session_factory=SessionLocal, start_ai_worker: bool | None = N
     )
     application.include_router(api_router)
 
-    # Serve uploaded avatars as static files
-    avatars_dir = Path(settings.uploads_dir) / "avatars"
-    avatars_dir.mkdir(parents=True, exist_ok=True)
-    application.mount("/uploads/avatars", StaticFiles(directory=str(avatars_dir)), name="avatars")
+    if upload_storage.uses_object_storage():
+        @application.get("/uploads/avatars/{avatar_path:path}", include_in_schema=False)
+        def read_uploaded_avatar(avatar_path: str):
+            stored_path = f"avatars/{avatar_path}"
+            try:
+                public_url = upload_storage.public_url_for_stored_upload(stored_path)
+                if public_url is not None:
+                    return RedirectResponse(public_url)
+                payload = upload_storage.read_stored_upload_bytes(stored_path)
+            except Exception as exc:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Avatar not found") from exc
+            return Response(content=payload, media_type="image/webp")
+    else:
+        # Serve uploaded avatars as static files
+        avatars_dir = Path(settings.uploads_dir) / "avatars"
+        avatars_dir.mkdir(parents=True, exist_ok=True)
+        application.mount("/uploads/avatars", StaticFiles(directory=str(avatars_dir)), name="avatars")
 
     return application
 

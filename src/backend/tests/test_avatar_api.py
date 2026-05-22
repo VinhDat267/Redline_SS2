@@ -8,6 +8,7 @@ from PIL import Image
 from app.core.config import settings
 from app.models import User
 from app.services import avatar as avatar_service
+from tests.test_upload_storage import _enable_fake_object_storage
 
 
 def _make_test_image(width=200, height=200, fmt="PNG", color=(30, 144, 255)) -> BytesIO:
@@ -216,6 +217,22 @@ class TestAvatarUpload:
         )
         assert response.status_code == 200
         assert response.json()["data"]["avatar_url"].endswith(".webp")
+
+    def test_upload_avatar_uses_object_storage_backend(self, client, auth_headers, monkeypatch):
+        fake_client = _enable_fake_object_storage(monkeypatch)
+        image = _make_test_image()
+
+        response = client.post(
+            "/api/v1/auth/me/avatar",
+            headers=auth_headers,
+            files={"file": ("avatar.png", image, "image/png")},
+        )
+
+        assert response.status_code == 200
+        avatar_url = response.json()["data"]["avatar_url"]
+        assert avatar_url.startswith("/uploads/avatars/user-1/")
+        avatar_key = f"avatars/{avatar_url.removeprefix('/uploads/avatars/')}"
+        assert avatar_key in {key for _bucket, key in fake_client.objects}
 
 
 class TestAvatarDelete:

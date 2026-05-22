@@ -24,7 +24,7 @@ INSECURE_AUTH_SECRETS = {
 }
 REQUIRES_SECURE_AUTH_SECRET_ENVIRONMENTS = {"production", "prod", "staging", "stage", "deploy", "deployed"}
 LOCAL_CORS_HOSTS = {"127.0.0.1", "localhost", "::1"}
-UPLOAD_STORAGE_BACKENDS = {"local", "persistent-local", "ephemeral-demo"}
+UPLOAD_STORAGE_BACKENDS = {"local", "persistent-local", "ephemeral-demo", "object"}
 
 
 class Settings(BaseSettings):
@@ -33,6 +33,12 @@ class Settings(BaseSettings):
     database_url: str = DEFAULT_DATABASE_URL
     uploads_dir: str = DEFAULT_UPLOADS_DIR
     upload_storage_backend: str = "local"
+    object_storage_endpoint: str | None = None
+    object_storage_bucket: str | None = None
+    object_storage_region: str | None = None
+    object_storage_access_key_id: str | None = None
+    object_storage_secret_access_key: str | None = None
+    object_storage_public_base_url: str | None = None
     document_upload_max_bytes: int = 25 * 1024 * 1024
     auth_secret: str = DEFAULT_AUTH_SECRET
     access_token_expire_minutes: int = 720
@@ -139,10 +145,24 @@ class Settings(BaseSettings):
 
         if upload_storage_backend not in UPLOAD_STORAGE_BACKENDS:
             raise ValueError(
-                "REDLINE_UPLOAD_STORAGE_BACKEND must be one of: local, persistent-local, ephemeral-demo"
+                "REDLINE_UPLOAD_STORAGE_BACKEND must be one of: local, persistent-local, ephemeral-demo, object"
             )
         if self.document_upload_max_bytes <= 0:
             raise ValueError("REDLINE_DOCUMENT_UPLOAD_MAX_BYTES must be greater than 0")
+        if upload_storage_backend == "object":
+            self.object_storage_endpoint = _normalize_optional_string(self.object_storage_endpoint)
+            self.object_storage_bucket = _normalize_optional_string(self.object_storage_bucket)
+            self.object_storage_region = _normalize_optional_string(self.object_storage_region)
+            self.object_storage_access_key_id = _normalize_optional_string(self.object_storage_access_key_id)
+            self.object_storage_secret_access_key = _normalize_optional_string(self.object_storage_secret_access_key)
+            self.object_storage_public_base_url = _normalize_optional_url(self.object_storage_public_base_url)
+            if not self.object_storage_bucket:
+                raise ValueError("REDLINE_OBJECT_STORAGE_BUCKET is required when upload storage backend is object")
+            if not self.object_storage_access_key_id or not self.object_storage_secret_access_key:
+                raise ValueError(
+                    "REDLINE_OBJECT_STORAGE_ACCESS_KEY_ID and "
+                    "REDLINE_OBJECT_STORAGE_SECRET_ACCESS_KEY are required when upload storage backend is object"
+                )
 
         if normalized_environment in REQUIRES_SECURE_AUTH_SECRET_ENVIRONMENTS:
             if auth_secret in INSECURE_AUTH_SECRETS or len(auth_secret) < 32:
@@ -211,6 +231,20 @@ def _normalize_cors_origin(origin: str) -> str:
     ):
         raise ValueError("REDLINE_CORS_ORIGINS must contain exact origins without paths or wildcards")
     return normalized_origin
+
+
+def _normalize_optional_string(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def _normalize_optional_url(value: str | None) -> str | None:
+    normalized = _normalize_optional_string(value)
+    if normalized is None:
+        return None
+    return normalized.rstrip("/")
 
 
 settings = Settings()

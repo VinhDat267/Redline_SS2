@@ -2,14 +2,13 @@
 import hashlib
 import time
 from io import BytesIO
-from pathlib import Path
 
 from fastapi import HTTPException, UploadFile, status
 from PIL import Image, ImageOps, UnidentifiedImageError
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
 from app.models import User
+from app.services.upload_storage import delete_stored_upload, store_bytes
 
 
 AVATAR_SIZE = (256, 256)
@@ -93,30 +92,18 @@ def _process_image(raw: bytes) -> bytes:
 
 
 def _save_avatar(user_id: int, webp_bytes: bytes) -> str:
-    """Persist avatar to disk and return relative path from avatars root."""
+    """Persist avatar and return relative path from avatars root."""
     content_hash = hashlib.sha256(webp_bytes).hexdigest()[:12]
     filename = f"{int(time.time())}_{content_hash}.webp"
     relative_path = f"user-{user_id}/{filename}"
-
-    avatar_dir = Path(settings.uploads_dir) / "avatars" / f"user-{user_id}"
-    avatar_dir.mkdir(parents=True, exist_ok=True)
-
-    dest = avatar_dir / filename
-    dest.write_bytes(webp_bytes)
+    store_bytes(f"avatars/{relative_path}", webp_bytes, content_type="image/webp")
     return relative_path
-
-
-def _avatar_file_path(relative_path: str) -> Path:
-    return Path(settings.uploads_dir) / "avatars" / relative_path
 
 
 def _delete_avatar_file(relative_path: str | None) -> None:
     if not relative_path:
         return
-    try:
-        _avatar_file_path(relative_path).unlink(missing_ok=True)
-    except OSError:
-        pass
+    delete_stored_upload(f"avatars/{relative_path}")
 
 
 def upload_avatar(session: Session, user: User, file: UploadFile) -> User:

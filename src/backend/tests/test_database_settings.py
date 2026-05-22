@@ -100,6 +100,35 @@ def test_production_accepts_persistent_local_upload_storage():
     assert settings.upload_storage_backend == "persistent-local"
 
 
+def test_object_upload_storage_requires_bucket_and_credentials():
+    with pytest.raises(ValidationError, match="REDLINE_OBJECT_STORAGE_BUCKET"):
+        Settings(_env_file=None, upload_storage_backend="object")
+
+    with pytest.raises(ValidationError, match="REDLINE_OBJECT_STORAGE_ACCESS_KEY_ID"):
+        Settings(
+            _env_file=None,
+            upload_storage_backend="object",
+            object_storage_bucket="redline-uploads",
+        )
+
+
+def test_production_accepts_object_upload_storage():
+    settings = Settings(
+        _env_file=None,
+        environment="production",
+        auth_secret="prod-secret-32-bytes-minimum-value",
+        cors_origins=("https://redline-production.vercel.app",),
+        upload_storage_backend="object",
+        object_storage_bucket="redline-uploads",
+        object_storage_access_key_id="storage-access-key",
+        object_storage_secret_access_key="storage-secret-key",
+        object_storage_public_base_url="https://cdn.example.test/redline/",
+    )
+
+    assert settings.upload_storage_backend == "object"
+    assert settings.object_storage_public_base_url == "https://cdn.example.test/redline"
+
+
 def test_production_accepts_explicit_ephemeral_demo_upload_storage():
     settings = Settings(
         _env_file=None,

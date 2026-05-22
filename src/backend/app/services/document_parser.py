@@ -34,7 +34,7 @@ from app.models.mixins import utcnow
 from app.services.document_parser_quality import (
     analyze_docx_parser_quality,
 )
-from app.services.upload_storage import resolve_stored_upload_path
+from app.services.upload_storage import open_stored_upload_as_path, resolve_stored_upload_path
 
 
 PARSER_VERSION = "v1"
@@ -185,9 +185,10 @@ def parse_document_version(
 
     try:
         parsed_document = _build_document_draft(version)
-    except DocumentParseError as exc:
+    except (DocumentParseError, FileNotFoundError) as exc:
+        failure_message = "Document file not found" if isinstance(exc, FileNotFoundError) else str(exc)
         parse_run.status = "failed"
-        parse_run.error_message = str(exc)
+        parse_run.error_message = failure_message
         parse_run.completed_at = utcnow()
         parse_run.warning_count = 0
         parse_run.summary_json = json.dumps(_build_parse_summary_payload([]))
@@ -197,15 +198,16 @@ def parse_document_version(
         session.add_all([parse_run, version])
         session.commit()
         session.refresh(version)
-        raise exc
+        raise DocumentParseError(failure_message) from exc
 
     quality_report = getattr(parsed_document, "quality_report", None)
     if quality_report is None:
-        quality_report = analyze_docx_parser_quality(
-            _resolve_file_path(version),
-            canonical_texts=_collect_canonical_texts(parsed_document),
-            canonical_block_count=sum(len(surface.blocks) for surface in parsed_document.surfaces),
-        )
+        with open_stored_upload_as_path(version.file_path, suffix=Path(version.file_path).suffix) as file_path:
+            quality_report = analyze_docx_parser_quality(
+                file_path,
+                canonical_texts=_collect_canonical_texts(parsed_document),
+                canonical_block_count=sum(len(surface.blocks) for surface in parsed_document.surfaces),
+            )
     combined_warnings = _deduplicate_warnings(
         [*parsed_document.warnings, *getattr(quality_report, "warnings", [])]
     )
@@ -398,7 +400,11 @@ def parse_document_version(
 
 
 def _build_document_draft(version: DocumentVersion) -> ParsedDocumentDraft:
-    file_path = _resolve_file_path(version)
+    with open_stored_upload_as_path(version.file_path, suffix=Path(version.file_path).suffix) as file_path:
+        return _build_document_draft_from_path(file_path)
+
+
+def _build_document_draft_from_path(file_path: Path) -> ParsedDocumentDraft:
     if not file_path.exists():
         raise DocumentParseError("Document file not found")
     file_suffix = file_path.suffix.lower()

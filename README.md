@@ -133,7 +133,8 @@ For manual end-to-end rehearsal, see `docs/testing/tutorial-redline-e2e-full-pas
 
 - **Vercel frontend:** deploy from `src/frontend` with `VITE_API_BASE_URL` pointing to the Heroku backend URL.
 - **Heroku backend:** backend deploy files live under `src/backend/`; deploy that directory as the app root, or push it with a subtree workflow.
-- **Uploads:** Heroku dynos use ephemeral disk. Set `REDLINE_UPLOAD_STORAGE_BACKEND=ephemeral-demo` only for demos, or use `persistent-local` with durable mounted storage.
+- **Uploads:** Heroku dynos use ephemeral disk. For real deployments set `REDLINE_UPLOAD_STORAGE_BACKEND=object` and configure `REDLINE_OBJECT_STORAGE_*` for an S3-compatible bucket. Use `ephemeral-demo` only for short demo deployments, because uploaded contracts and avatars can disappear after dyno restart/redeploy.
+- **Object storage vars:** set `REDLINE_OBJECT_STORAGE_BUCKET`, `REDLINE_OBJECT_STORAGE_ACCESS_KEY_ID`, `REDLINE_OBJECT_STORAGE_SECRET_ACCESS_KEY`, and usually `REDLINE_OBJECT_STORAGE_ENDPOINT` + `REDLINE_OBJECT_STORAGE_REGION`. Set `REDLINE_OBJECT_STORAGE_PUBLIC_BASE_URL` when avatar files should be served through a public bucket/CDN URL.
 - **CORS:** set `REDLINE_CORS_ORIGINS` on Heroku to the exact Vercel frontend origin.
 
 ## Main Routes

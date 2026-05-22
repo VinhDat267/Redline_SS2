@@ -15,6 +15,7 @@ Source code for the Redline AI Contract Review application.
 - HttpOnly cookie sessions with CSRF token protection
 - DB-backed request rate limiting on all auth endpoints (login, register, Google, password change, avatar upload)
 - User avatar upload with server-side image processing (validation, center-crop, 256×256 WebP conversion)
+- Local or S3-compatible object storage backend for uploaded contracts and avatars
 - Token version revocation on password change
 
 **Contract Management:**

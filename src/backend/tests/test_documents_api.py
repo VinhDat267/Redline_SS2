@@ -8,6 +8,8 @@ from sqlalchemy import select
 
 from app.models import DocumentBlock, DocumentParseRun, DocumentSurface, DocumentVersion
 from app.services import documents as document_service
+from app.services import upload_storage
+from tests.test_upload_storage import _enable_fake_object_storage
 
 
 def _build_docx_bytes(paragraphs: list[tuple[str, str | None]]) -> bytes:
@@ -266,6 +268,59 @@ def test_document_version_upload_accepts_pdf_file(client, auth_headers):
     assert payload["file_name"] == "contract-v1.pdf"
     assert payload["file_path"].endswith(".pdf")
     assert payload["parse_status"] == "pending"
+
+
+def test_document_version_upload_and_parse_round_trips_object_storage(client, auth_headers, monkeypatch):
+    fake_client = _enable_fake_object_storage(monkeypatch)
+    project_response = client.post(
+        "/api/v1/projects",
+        json={"name": "Object Storage Upload", "description": "Durable storage"},
+        headers=auth_headers,
+    )
+    project_id = project_response.json()["data"]["id"]
+    document_response = client.post(
+        f"/api/v1/projects/{project_id}/documents",
+        json={
+            "title": "Object Storage Contract",
+            "document_type": "CONTRACT",
+            "description": "Object storage parse target",
+        },
+        headers=auth_headers,
+    )
+    document_id = document_response.json()["data"]["id"]
+
+    create_response = client.post(
+        f"/api/v1/documents/{document_id}/versions",
+        files={
+            "file": (
+                "object-storage-v1.docx",
+                _build_docx_bytes(
+                    [
+                        ("Confidentiality", "Heading 1"),
+                        ("The receiving party must protect information.", None),
+                    ]
+                ),
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
+        data={"version_label": "v1.0"},
+        headers=auth_headers,
+    )
+
+    assert create_response.status_code == 201
+    payload = create_response.json()["data"]
+    stored_key = payload["file_path"]
+    assert stored_key.startswith(f"document-{document_id}/")
+    assert ("redline-test", stored_key) in fake_client.objects
+    assert not upload_storage.resolve_stored_upload_path(stored_key).exists()
+
+    parse_response = client.post(
+        f"/api/v1/document-versions/{payload['id']}/parse",
+        headers=auth_headers,
+    )
+
+    assert parse_response.status_code == 200
+    assert parse_response.json()["data"]["parse_status"] in {"parsed", "parsed_with_warnings"}
 
 
 def test_document_version_upload_supports_external_uploads_dir(

@@ -5,12 +5,15 @@ from types import SimpleNamespace
 import pytest
 from docx import Document as DocxDocument
 from fastapi import HTTPException
+from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.models import ChatAttempt, ChatMessage, ChatSession, Document, DocumentVersion
 from app.services import contract_chat
 from app.services import contract_chat_attempts
+from app.services import documents as document_service
+from app.services.document_parser import DocumentParseError
 
 
 def _build_contract_docx(paragraphs: list[tuple[str, str | None]]) -> bytes:
@@ -407,6 +410,57 @@ def test_contract_chat_prefers_relevant_substantive_clause_for_ownership_questio
     citation_text = " ".join(citation["content"] for citation in assistant_message["citations"])
     assert "Vendor retains ownership" in citation_text
     assert "internal-use license" in citation_text
+
+
+def test_contract_draft_parse_returns_422_when_parser_rejects_draft(client, auth_headers, monkeypatch):
+    project_response = client.post(
+        "/api/v1/projects",
+        json={"name": "Parser Failure Project", "description": "PDF parse failure handling"},
+        headers=auth_headers,
+    )
+    assert project_response.status_code == 201
+    project_id = project_response.json()["data"]["id"]
+
+    contract_response = client.post(
+        f"/api/v1/projects/{project_id}/contracts",
+        json={
+            "title": "Encrypted Addendum",
+            "contract_type": "MSA",
+            "description": "Draft should fail parser quality policy",
+        },
+        headers=auth_headers,
+    )
+    assert contract_response.status_code == 201
+    contract_id = contract_response.json()["data"]["id"]
+
+    draft_response = client.post(
+        f"/api/v1/contracts/{contract_id}/drafts",
+        files={
+            "file": (
+                "encrypted-addendum.docx",
+                _build_contract_docx([("Confidentiality", "Heading 1")]),
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
+        data={"draft_label": "encrypted-addendum"},
+        headers=auth_headers,
+    )
+    assert draft_response.status_code == 201
+    draft_id = draft_response.json()["data"]["id"]
+
+    def reject_parse(database, draft):
+        raise DocumentParseError("PDF parser quality policy failed")
+
+    monkeypatch.setattr(document_service, "parse_document_version", reject_parse)
+    no_raise_client = TestClient(client.app, raise_server_exceptions=False)
+
+    parse_response = no_raise_client.post(
+        f"/api/v1/contract-drafts/{draft_id}/parse",
+        headers=auth_headers,
+    )
+
+    assert parse_response.status_code == 422
+    assert parse_response.json()["detail"] == "PDF parser quality policy failed"
 
 
 def test_contract_chat_answer_excludes_unrelated_clause_text(client, auth_headers):

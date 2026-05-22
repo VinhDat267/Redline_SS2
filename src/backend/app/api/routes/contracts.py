@@ -33,6 +33,7 @@ from app.services import contract_chat_stream as contract_chat_stream_service
 from app.services import contract_chat as contract_chat_service
 from app.services import contracts as contract_service
 from app.services import documents as document_service
+from app.services.document_parser import DocumentParseError
 from app.services import project_access as project_access_service
 
 
@@ -234,7 +235,10 @@ def parse_contract_draft(
 ):
     draft = project_access_service.ensure_document_version_access_or_404(database, draft_id, current_user.id)
     contract = project_access_service.ensure_document_access_or_404(database, draft.document_id, current_user.id)
-    draft = document_service.parse_document_version(database, draft)
+    try:
+        draft = document_service.parse_document_version(database, draft)
+    except DocumentParseError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     activity_log_service.record(
         database,
         project_id=contract.project_id,

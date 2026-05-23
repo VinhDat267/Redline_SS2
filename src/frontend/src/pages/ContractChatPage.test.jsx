@@ -423,6 +423,52 @@ describe("ContractChatPage", () => {
     });
   });
 
+  test("disambiguates duplicate compare run options for the same draft pair", async () => {
+    fetch.mockImplementation((input, init = {}) => {
+      const url = String(input);
+      const method = init.method || "GET";
+
+      if (url.endsWith("/api/v1/contracts/10") && method === "GET") {
+        return Promise.resolve(jsonResponse(buildContractPayload()));
+      }
+
+      if (url.endsWith("/api/v1/contracts/10/drafts") && method === "GET") {
+        return Promise.resolve(
+          jsonResponse({
+            data: [
+              buildContractDraft({ id: 501, draft_label: "vendor-v1" }),
+              buildContractDraft({ id: 502, draft_label: "vendor-v2" })
+            ]
+          })
+        );
+      }
+
+      if (url.endsWith("/api/v1/contracts/10/compare-runs") && method === "GET") {
+        return Promise.resolve(
+          jsonResponse({
+            data: [
+              buildContractCompareRun({ id: 77 }),
+              buildContractCompareRun({ id: 78 })
+            ]
+          })
+        );
+      }
+
+      if (url.endsWith("/api/v1/contracts/10/chat/sessions") && method === "GET") {
+        return Promise.resolve(jsonResponse({ data: [] }));
+      }
+
+      return Promise.reject(new Error(`Unhandled request: ${url} ${method}`));
+    });
+
+    renderContractChat();
+
+    fireEvent.click(await screen.findByRole("button", { name: /compared drafts/i }));
+
+    expect(screen.getByRole("option", { name: "vendor-v1 -> vendor-v2 - run #77" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "vendor-v1 -> vendor-v2 - run #78" })).toBeInTheDocument();
+  });
+
   test("stops an active stream and retries in the same answer bubble", async () => {
     let attemptCreateCount = 0;
 

@@ -38,6 +38,25 @@ function writePartial(cId, m) { if (m?.session_id && m.content?.trim() && (m.sto
 function clearPartial(cId, sId) { if (sId) localStorage.removeItem(partialKey(cId, sId)); }
 function draftLabel(d) { return d?.draft_label || d?.version_label || (d?.id ? `Draft ${d.id}` : "Draft"); }
 function compareRunLabel(r) { return `${draftLabel(r?.source_version ?? r?.source_draft)} -> ${draftLabel(r?.target_version ?? r?.target_draft)}`; }
+function compareRunPairKey(r) {
+  const source = r?.source_version ?? r?.source_draft;
+  const target = r?.target_version ?? r?.target_draft;
+  return `${source?.id ?? draftLabel(source)}:${target?.id ?? draftLabel(target)}`;
+}
+function buildCompareRunLabelMap(runs) {
+  const pairCounts = new Map();
+  for (const run of runs) {
+    const key = compareRunPairKey(run);
+    pairCounts.set(key, (pairCounts.get(key) ?? 0) + 1);
+  }
+  const labels = new Map();
+  for (const run of runs) {
+    const base = compareRunLabel(run);
+    const suffix = pairCounts.get(compareRunPairKey(run)) > 1 && run?.id ? ` - run #${run.id}` : "";
+    labels.set(String(run.id), `${base}${suffix}`);
+  }
+  return labels;
+}
 function citationScopeLabel(c) { return c.source_label === "source" ? "Source" : c.source_label === "target" ? "Target" : ""; }
 function citationTitle(c) {
   const base = c.section_title || c.block_key || `Block ${c.block_id}`;
@@ -142,10 +161,12 @@ export function ContractChatPage() {
     () => compareRuns.filter(r => ["completed", "completed_with_warnings"].includes(r.compare_status)),
     [compareRuns]
   );
+  const compareRunLabels = useMemo(() => buildCompareRunLabelMap(selectableCompareRuns), [selectableCompareRuns]);
   const selectedCompareRun = selectableCompareRuns.find(r => String(r.id) === selectedCompareRunId) ?? null;
   const selectedCompareTargetDraft = selectedCompareRun?.target_version ?? selectedCompareRun?.target_draft ?? null;
+  const selectedCompareRunLabel = selectedCompareRun ? compareRunLabels.get(String(selectedCompareRun.id)) ?? compareRunLabel(selectedCompareRun) : "";
   const activeDraftId = selectedScope === "compare" ? String(selectedCompareTargetDraft?.id ?? "") : selectedDraftId;
-  const activeScopeLabel = selectedScope === "compare" && selectedCompareRun ? compareRunLabel(selectedCompareRun) : draftLabel(selectedDraft);
+  const activeScopeLabel = selectedScope === "compare" && selectedCompareRun ? selectedCompareRunLabel : draftLabel(selectedDraft);
   const promptExamples = selectedScope === "compare" ? COMPARE_PROMPT_EXAMPLES : PROMPT_EXAMPLES;
 
   function resetConversationSelection() {
@@ -176,7 +197,7 @@ export function ContractChatPage() {
     const payload = {
       draft_id: Number(activeDraftId),
       title: selectedScope === "compare" && selectedCompareRun
-        ? `${compareRunLabel(selectedCompareRun)} Q&A`
+        ? `${selectedCompareRunLabel} Q&A`
         : `${contract?.title ?? "Contract"} Q&A`
     };
     if (selectedScope === "compare" && selectedCompareRun) {
@@ -395,7 +416,7 @@ export function ContractChatPage() {
                 onChange={e => { setSelectedCompareRunId(e.target.value); resetConversationSelection(); }}
                 style={{ width: "100%", padding: "5px 22px 5px 8px", borderRadius: "7px", border: "1px solid #E6E8EA", background: "#F4F5F7", color: "#1E2026", fontSize: "12px", fontWeight: 600, outline: "none", appearance: "none", cursor: "pointer" }}>
                 <option value="">Choose compare run</option>
-                {selectableCompareRuns.map(r => <option key={r.id} value={String(r.id)}>{compareRunLabel(r)}</option>)}
+                {selectableCompareRuns.map(r => <option key={r.id} value={String(r.id)}>{compareRunLabels.get(String(r.id)) ?? compareRunLabel(r)}</option>)}
               </select>
             ) : (
               <select
@@ -712,7 +733,7 @@ export function ContractChatPage() {
           </div>
           <div style={{ fontSize: "10px", color: "#848E9C", marginBottom: "8px" }}>
             {selectedScope === "compare" && selectedCompareRun
-              ? `${compareRunLabel(selectedCompareRun)} / compare truth`
+              ? `${selectedCompareRunLabel} / compare truth`
               : selectedDraft ? `${selectedDraft.version_label} / ${formatDateTime(selectedDraft.uploaded_at)}` : "Choose a parsed draft to begin."}
           </div>
           <Link to={`/contracts/${contractId}`}

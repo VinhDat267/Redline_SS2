@@ -272,7 +272,7 @@ npm run build
 npm audit
 ```
 
-Expected baseline: `112 passed`, build succeeds, `0 vulnerabilities`.
+Expected baseline: `113 passed`, build succeeds, `0 vulnerabilities`.
 
 ## Backend Test File Map
 

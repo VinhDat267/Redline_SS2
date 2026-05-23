@@ -117,6 +117,7 @@ class ClauseChangeRead(BaseModel):
 
 class ChatSessionCreate(BaseModel):
     draft_id: int
+    compare_run_id: int | None = None
     title: str | None = Field(default=None, max_length=255)
 
 
@@ -124,6 +125,8 @@ class ChatSessionRead(ReadModel):
     id: int
     contract_id: int
     draft_id: int
+    compare_run_id: int | None = None
+    scope_type: str = "draft"
     title: str | None = None
     created_by_user_id: int
     created_at: datetime
@@ -137,6 +140,9 @@ class ChatCitationRead(BaseModel):
     surface_type: str
     surface_key: str
     content: str
+    source_label: str | None = None
+    compare_run_id: int | None = None
+    change_item_id: int | None = None
 
 
 class ContractChatMessageCreate(BaseModel):

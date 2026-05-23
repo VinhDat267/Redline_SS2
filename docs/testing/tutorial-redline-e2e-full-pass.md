@@ -196,16 +196,22 @@ Expected result:
 ## Phase 9 - Contract Q&A
 
 1. Open `/contracts/:contractId/chat`.
-2. Ask: `What changed in the liability cap between the two MSA drafts?`
-3. Ask: `Does the new draft still exclude confidentiality breaches from the liability cap?`
-4. Open the Source Evidence panel.
-5. Test Stop and Retry on a longer question.
+2. Keep `Current Draft` selected and ask a draft-specific question, such as:
+   `What is the liability cap in this draft?`
+3. Switch to `Compared Drafts`, select the completed `v1.0 -> v2.0`
+   compare run, and ask:
+   `What changed in the liability cap between the two MSA drafts?`
+4. Ask:
+   `Does the new draft still exclude confidentiality breaches from the liability cap?`
+5. Open the Source Evidence panel.
+6. Test Stop and Retry on a longer question.
 
 Expected result:
 
 - answer streams or falls back to JSON depending on config;
-- contract-specific claims include citations;
-- citations point to parsed source blocks;
+- draft-specific claims include citations to parsed source blocks;
+- compare-specific claims are grounded in deterministic compare changes and
+  show source/target evidence;
 - unsupported questions do not become unsupported legal advice;
 - Stop/Retry does not leave the session stuck.
 
@@ -245,7 +251,7 @@ A full pass is acceptable when:
 - compare run produces real change items;
 - human review and comments persist;
 - traceability mappings and impacted tests are correct;
-- Contract Q&A produces grounded answers when AI is configured;
+- Contract Q&A produces grounded draft and compare-run answers when AI is configured;
 - summary/export works;
 - analytics/activity reflect the workflow.
 

@@ -306,6 +306,12 @@ Use this as the canonical feature checklist. Each case includes:
   - Expected: JSON path tra answer/citations, UI khong phu thuoc SSE
   - Automated: `src/frontend/src/pages/ContractChatPage.test.jsx::uses JSON chat fallback when streaming is disabled by env`
 
+- [ ] `CHAT-04` Compare-scoped Q&A
+  - Preconditions: contract co hai parsed drafts va mot completed compare run
+  - Steps: chon `Compared Drafts`, chon compare run, hoi cau hoi ve khac biet giua hai drafts
+  - Expected: session co `compare_run_id`; answer dua tren deterministic change items va hien source/target evidence
+  - Automated: `src/backend/tests/test_contracts_api.py::test_contract_compare_chat_answers_from_deterministic_change_items`; `src/frontend/src/pages/ContractChatPage.test.jsx::creates compare-scoped chat sessions for questions across two drafts`
+
 ## Summary / export / analytics
 
 - [ ] `SUM-01` Generate AI summary

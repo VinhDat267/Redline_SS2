@@ -94,6 +94,25 @@ function buildContractDraft(overrides = {}) {
   };
 }
 
+function buildContractCompareRun(overrides = {}) {
+  return {
+    id: 77,
+    compare_version: "v1",
+    compare_status: "completed",
+    started_at: "2026-03-26T09:00:00Z",
+    completed_at: "2026-03-26T09:00:01Z",
+    warning_count: 0,
+    warnings: [],
+    contract: buildContractPayload().data,
+    source_draft: buildContractDraft({ id: 501, draft_label: "vendor-v1" }),
+    target_draft: buildContractDraft({ id: 502, draft_label: "vendor-v2" }),
+    summary: { total: 1, added: 0, removed: 0, modified: 1 },
+    selected_clause_change_id: 990,
+    has_ai_clause_risk_analyses: false,
+    ...overrides
+  };
+}
+
 function renderContractChat(path = "/contracts/10/chat") {
   return render(
     <AuthProvider initialSession={session}>
@@ -131,6 +150,10 @@ describe("ContractChatPage", () => {
 
       if (url.endsWith("/api/v1/contracts/10/drafts") && method === "GET") {
         return Promise.resolve(jsonResponse({ data: [buildContractDraft()] }));
+      }
+
+      if (url.endsWith("/api/v1/contracts/10/compare-runs") && method === "GET") {
+        return Promise.resolve(jsonResponse({ data: [] }));
       }
 
       if (url.endsWith("/api/v1/contracts/10/chat/sessions") && method === "GET") {
@@ -263,6 +286,143 @@ describe("ContractChatPage", () => {
     expect(streamCall).toBeTruthy();
   });
 
+  test("creates compare-scoped chat sessions for questions across two drafts", async () => {
+    fetch.mockImplementation((input, init = {}) => {
+      const url = String(input);
+      const method = init.method || "GET";
+
+      if (url.endsWith("/api/v1/contracts/10") && method === "GET") {
+        return Promise.resolve(jsonResponse(buildContractPayload()));
+      }
+
+      if (url.endsWith("/api/v1/contracts/10/drafts") && method === "GET") {
+        return Promise.resolve(
+          jsonResponse({
+            data: [
+              buildContractDraft({ id: 501, draft_label: "vendor-v1" }),
+              buildContractDraft({ id: 502, draft_label: "vendor-v2" })
+            ]
+          })
+        );
+      }
+
+      if (url.endsWith("/api/v1/contracts/10/compare-runs") && method === "GET") {
+        return Promise.resolve(jsonResponse({ data: [buildContractCompareRun()] }));
+      }
+
+      if (url.endsWith("/api/v1/contracts/10/chat/sessions") && method === "GET") {
+        return Promise.resolve(jsonResponse({ data: [] }));
+      }
+
+      if (url.endsWith("/api/v1/contracts/10/chat/sessions") && method === "POST") {
+        return Promise.resolve(
+          jsonResponse(
+            {
+              data: {
+                id: 771,
+                contract_id: 10,
+                draft_id: 502,
+                compare_run_id: 77,
+                scope_type: "compare_run",
+                title: "vendor-v1 -> vendor-v2 Q&A",
+                created_by_user_id: 1,
+                created_at: "2026-03-26T09:00:00Z",
+                updated_at: "2026-03-26T09:00:00Z"
+              }
+            },
+            201
+          )
+        );
+      }
+
+      if (url.endsWith("/api/v1/contracts/10/chat/sessions/771/attempts") && method === "POST") {
+        return Promise.resolve(
+          jsonResponse(
+            {
+              data: {
+                session_id: 771,
+                user_message: {
+                  id: 881,
+                  role: "user",
+                  content: "What changed in the liability cap?",
+                  citations: [],
+                  provider_used: null,
+                  created_at: "2026-03-26T09:00:05Z",
+                  updated_at: "2026-03-26T09:00:05Z"
+                },
+                attempt: {
+                  id: 981,
+                  session_id: 771,
+                  draft_id: 502,
+                  user_message_id: 881,
+                  supersedes_attempt_id: null,
+                  status: "starting",
+                  provider_used: null,
+                  client_request_id: "req-compare",
+                  error_code: null,
+                  error_detail: null,
+                  created_at: "2026-03-26T09:00:05Z",
+                  updated_at: "2026-03-26T09:00:05Z"
+                },
+                stream_endpoint: "/api/v1/contracts/10/chat/sessions/771/attempts/981/stream",
+                cancel_endpoint: "/api/v1/contracts/10/chat/sessions/771/attempts/981/cancel"
+              }
+            },
+            201
+          )
+        );
+      }
+
+      if (url.endsWith("/api/v1/contracts/10/chat/sessions/771/attempts/981/stream") && method === "POST") {
+        return Promise.resolve(
+          streamResponse([
+            "event: metadata\ndata: {\"attempt_id\":981,\"session_id\":771,\"sequence\":1}\n\n",
+            "event: delta\ndata: {\"attempt_id\":981,\"session_id\":771,\"sequence\":2,\"content\":\"The liability cap changed from $100,000 to $250,000.\"}\n\n",
+            "event: citations\ndata: {\"attempt_id\":981,\"session_id\":771,\"sequence\":3,\"citations\":[{\"block_id\":9901,\"block_key\":\"src-1\",\"section_title\":\"Liability\",\"surface_type\":\"body\",\"surface_key\":\"body-main\",\"content\":\"The liability cap is $100,000.\",\"source_label\":\"source\",\"compare_run_id\":77,\"change_item_id\":990},{\"block_id\":9902,\"block_key\":\"tgt-1\",\"section_title\":\"Liability\",\"surface_type\":\"body\",\"surface_key\":\"body-main\",\"content\":\"The liability cap is $250,000.\",\"source_label\":\"target\",\"compare_run_id\":77,\"change_item_id\":990}]}\n\n",
+            "event: done\ndata: {\"attempt_id\":981,\"session_id\":771,\"sequence\":4,\"assistant_message\":{\"id\":882,\"role\":\"assistant\",\"content\":\"The liability cap changed from $100,000 to $250,000.\",\"citations\":[{\"block_id\":9901,\"block_key\":\"src-1\",\"section_title\":\"Liability\",\"surface_type\":\"body\",\"surface_key\":\"body-main\",\"content\":\"The liability cap is $100,000.\",\"source_label\":\"source\",\"compare_run_id\":77,\"change_item_id\":990},{\"block_id\":9902,\"block_key\":\"tgt-1\",\"section_title\":\"Liability\",\"surface_type\":\"body\",\"surface_key\":\"body-main\",\"content\":\"The liability cap is $250,000.\",\"source_label\":\"target\",\"compare_run_id\":77,\"change_item_id\":990}],\"provider_used\":\"local-compare\",\"created_at\":\"2026-03-26T09:00:06Z\",\"updated_at\":\"2026-03-26T09:00:06Z\"}}\n\n"
+          ])
+        );
+      }
+
+      return Promise.reject(new Error(`Unhandled request: ${url} ${method}`));
+    });
+
+    renderContractChat();
+
+    fireEvent.click(await screen.findByRole("button", { name: /compared drafts/i }));
+    expect(screen.getByRole("combobox", { name: /compare run/i })).toHaveValue("77");
+
+    fireEvent.change(screen.getByLabelText(/ask about this contract/i), {
+      target: { value: "What changed in the liability cap?" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: /send message/i }));
+
+    expect(await screen.findByText(/changed from \$100,000 to \$250,000/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/source/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/target/i).length).toBeGreaterThan(0);
+
+    const sessionCall = fetch.mock.calls.find(
+      ([requestUrl, requestInit = {}]) =>
+        String(requestUrl).endsWith("/api/v1/contracts/10/chat/sessions") &&
+        (requestInit.method || "GET") === "POST"
+    );
+    expect(JSON.parse(sessionCall[1].body)).toEqual({
+      draft_id: 502,
+      compare_run_id: 77,
+      title: "vendor-v1 -> vendor-v2 Q&A"
+    });
+
+    const attemptCall = fetch.mock.calls.find(
+      ([requestUrl, requestInit = {}]) =>
+        String(requestUrl).endsWith("/api/v1/contracts/10/chat/sessions/771/attempts") &&
+        (requestInit.method || "GET") === "POST"
+    );
+    expect(JSON.parse(attemptCall[1].body)).toMatchObject({
+      query: "What changed in the liability cap?",
+      draft_id: 502
+    });
+  });
+
   test("stops an active stream and retries in the same answer bubble", async () => {
     let attemptCreateCount = 0;
 
@@ -276,6 +436,10 @@ describe("ContractChatPage", () => {
 
       if (url.endsWith("/api/v1/contracts/10/drafts") && method === "GET") {
         return Promise.resolve(jsonResponse({ data: [buildContractDraft()] }));
+      }
+
+      if (url.endsWith("/api/v1/contracts/10/compare-runs") && method === "GET") {
+        return Promise.resolve(jsonResponse({ data: [] }));
       }
 
       if (url.endsWith("/api/v1/contracts/10/chat/sessions") && method === "GET") {
@@ -449,6 +613,10 @@ describe("ContractChatPage", () => {
         return Promise.resolve(jsonResponse({ data: [buildContractDraft()] }));
       }
 
+      if (url.endsWith("/api/v1/contracts/10/compare-runs") && method === "GET") {
+        return Promise.resolve(jsonResponse({ data: [] }));
+      }
+
       if (url.endsWith("/api/v1/contracts/10/chat/sessions") && method === "GET") {
         return Promise.resolve(
           jsonResponse({
@@ -615,6 +783,10 @@ describe("ContractChatPage", () => {
         return Promise.resolve(jsonResponse({ data: [buildContractDraft()] }));
       }
 
+      if (url.endsWith("/api/v1/contracts/10/compare-runs") && method === "GET") {
+        return Promise.resolve(jsonResponse({ data: [] }));
+      }
+
       if (url.endsWith("/api/v1/contracts/10/chat/sessions") && method === "GET") {
         return Promise.resolve(jsonResponse({ data: [] }));
       }
@@ -730,6 +902,10 @@ describe("ContractChatPage", () => {
 
       if (url.endsWith("/api/v1/contracts/10/drafts") && method === "GET") {
         return Promise.resolve(jsonResponse({ data: [buildContractDraft()] }));
+      }
+
+      if (url.endsWith("/api/v1/contracts/10/compare-runs") && method === "GET") {
+        return Promise.resolve(jsonResponse({ data: [] }));
       }
 
       if (url.endsWith("/api/v1/contracts/10/chat/sessions") && method === "GET") {

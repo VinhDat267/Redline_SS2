@@ -11,7 +11,7 @@ import { Sidebar } from "../components/ScreenFrame";
 import {
   ApiError, cancelContractChatAttempt, createContractChatAttempt,
   createContractChatSession, getContract, listContractChatMessages,
-  listContractChatSessions, listContractDrafts, sendContractChatMessage
+  listContractChatSessions, listContractCompareRuns, listContractDrafts, sendContractChatMessage
 } from "../lib/api";
 import { streamChatAttempt } from "../lib/contractChatStream";
 import { formatDateTime } from "../lib/formatters";
@@ -36,8 +36,18 @@ function serializePartial(m) { return { ...m, streaming: false, stopped: Boolean
 function readPartial(cId, sId) { try { const v = JSON.parse(window.localStorage.getItem(partialKey(cId, sId)) || "null"); return v?.role === "assistant" && v.content ? { ...v, streaming: false } : null; } catch { return null; } }
 function writePartial(cId, m) { if (m?.session_id && m.content?.trim() && (m.stopped || m.failed)) localStorage.setItem(partialKey(cId, m.session_id), JSON.stringify(serializePartial(m))); }
 function clearPartial(cId, sId) { if (sId) localStorage.removeItem(partialKey(cId, sId)); }
-function citationTitle(c) { return c.section_title || c.block_key || `Block ${c.block_id}`; }
-function citationSurface(c) { return c.surface_key || c.surface_type || "contract text"; }
+function draftLabel(d) { return d?.draft_label || d?.version_label || (d?.id ? `Draft ${d.id}` : "Draft"); }
+function compareRunLabel(r) { return `${draftLabel(r?.source_version ?? r?.source_draft)} -> ${draftLabel(r?.target_version ?? r?.target_draft)}`; }
+function citationScopeLabel(c) { return c.source_label === "source" ? "Source" : c.source_label === "target" ? "Target" : ""; }
+function citationTitle(c) {
+  const base = c.section_title || c.block_key || `Block ${c.block_id}`;
+  const scope = citationScopeLabel(c);
+  return scope ? `${scope}: ${base}` : base;
+}
+function citationSurface(c) {
+  const surface = c.surface_key || c.surface_type || "contract text";
+  return c.compare_run_id && c.change_item_id ? `Change #${c.change_item_id} / ${surface}` : surface;
+}
 function citationContent(c) { return c.content || c.snippet || ""; }
 
 const PROMPT_EXAMPLES = [
@@ -45,6 +55,13 @@ const PROMPT_EXAMPLES = [
   { icon: "🔚", text: "Which clauses mention termination?" },
   { icon: "💰", text: "What are the payment terms?" },
   { icon: "🛡️", text: "Summarize indemnification obligations" },
+];
+
+const COMPARE_PROMPT_EXAMPLES = [
+  { icon: "?", text: "What changed in the liability cap?" },
+  { icon: "+/-", text: "Which obligations were added or removed?" },
+  { icon: "AI", text: "Summarize the key negotiation changes" },
+  { icon: "!", text: "Which changes should legal review first?" },
 ];
 
 export function ContractChatPage() {
@@ -57,8 +74,11 @@ export function ContractChatPage() {
 
   const [contract, setContract] = useState(null);
   const [drafts, setDrafts] = useState([]);
+  const [compareRuns, setCompareRuns] = useState([]);
+  const [selectedScope, setSelectedScope] = useState("draft");
   const [sessions, setSessions] = useState([]);
   const [selectedDraftId, setSelectedDraftId] = useState("");
+  const [selectedCompareRunId, setSelectedCompareRunId] = useState("");
   const [selectedSessionId, setSelectedSessionId] = useState("");
   const [messages, setMessages] = useState([]);
   const [streamingAnswer, setStreamingAnswer] = useState(null);
@@ -77,19 +97,32 @@ export function ContractChatPage() {
     async function load() {
       setIsLoading(true); setError("");
       try {
-        const [cr, dr, sr] = await Promise.all([getContract(token, contractId), listContractDrafts(token, contractId), listContractChatSessions(token, contractId)]);
+        const [cr, dr, rr, sr] = await Promise.all([
+          getContract(token, contractId),
+          listContractDrafts(token, contractId),
+          listContractCompareRuns(token, contractId),
+          listContractChatSessions(token, contractId)
+        ]);
         if (!ok) return;
-        setContract(cr); setDrafts(dr); setSessions(sr);
+        setContract(cr); setDrafts(dr); setCompareRuns(rr); setSessions(sr);
         const parsed = dr.filter(hasParsedStatus);
         if (parsed.length) setSelectedDraftId(c => c || String(parsed[0].id));
+        const completedRuns = rr.filter(r => ["completed", "completed_with_warnings"].includes(r.compare_status));
+        if (completedRuns.length) setSelectedCompareRunId(c => c || String(completedRuns[completedRuns.length - 1].id));
         if (sr.length) {
           const latest = sr[sr.length - 1];
           setSelectedSessionId(String(latest.id));
+          if (latest.compare_run_id) {
+            setSelectedScope("compare");
+            setSelectedCompareRunId(String(latest.compare_run_id));
+          } else {
+            setSelectedScope("draft");
+          }
           const msgs = await listContractChatMessages(token, contractId, latest.id);
           if (!ok) return;
           setMessages(msgs);
           setStreamingAnswer(readPartial(contractId, latest.id));
-          if (!selectedDraftId) setSelectedDraftId(String(latest.draft_id));
+          setSelectedDraftId(c => c || String(latest.draft_id));
         }
       } catch (e) {
         if (e instanceof ApiError && e.status === 401) { logout(); return; }
@@ -105,13 +138,51 @@ export function ContractChatPage() {
 
   const parsedDrafts = useMemo(() => drafts.filter(hasParsedStatus), [drafts]);
   const selectedDraft = parsedDrafts.find(d => String(d.id) === selectedDraftId) ?? null;
+  const selectableCompareRuns = useMemo(
+    () => compareRuns.filter(r => ["completed", "completed_with_warnings"].includes(r.compare_status)),
+    [compareRuns]
+  );
+  const selectedCompareRun = selectableCompareRuns.find(r => String(r.id) === selectedCompareRunId) ?? null;
+  const selectedCompareTargetDraft = selectedCompareRun?.target_version ?? selectedCompareRun?.target_draft ?? null;
+  const activeDraftId = selectedScope === "compare" ? String(selectedCompareTargetDraft?.id ?? "") : selectedDraftId;
+  const activeScopeLabel = selectedScope === "compare" && selectedCompareRun ? compareRunLabel(selectedCompareRun) : draftLabel(selectedDraft);
+  const promptExamples = selectedScope === "compare" ? COMPARE_PROMPT_EXAMPLES : PROMPT_EXAMPLES;
+
+  function resetConversationSelection() {
+    setSelectedSessionId("");
+    setMessages([]);
+    setStreamingAnswer(null);
+    setSelectedCitationKey("");
+    setError("");
+  }
+
+  function handleScopeChange(nextScope) {
+    setSelectedScope(nextScope);
+    if (nextScope === "compare" && !selectedCompareRunId && selectableCompareRuns[0]) {
+      setSelectedCompareRunId(String(selectableCompareRuns[0].id));
+    }
+    resetConversationSelection();
+  }
 
   async function ensureSession() {
     if (selectedSessionId) {
       const ex = sessions.find(s => String(s.id) === selectedSessionId);
-      if (ex && String(ex.draft_id) === selectedDraftId) return ex;
+      if (selectedScope === "compare") {
+        if (ex && String(ex.draft_id) === activeDraftId && String(ex.compare_run_id) === selectedCompareRunId) return ex;
+      } else if (ex && String(ex.draft_id) === selectedDraftId && !ex.compare_run_id) {
+        return ex;
+      }
     }
-    const s = await createContractChatSession(token, contractId, { draft_id: Number(selectedDraftId), title: `${contract?.title ?? "Contract"} Q&A` });
+    const payload = {
+      draft_id: Number(activeDraftId),
+      title: selectedScope === "compare" && selectedCompareRun
+        ? `${compareRunLabel(selectedCompareRun)} Q&A`
+        : `${contract?.title ?? "Contract"} Q&A`
+    };
+    if (selectedScope === "compare" && selectedCompareRun) {
+      payload.compare_run_id = Number(selectedCompareRun.id);
+    }
+    const s = await createContractChatSession(token, contractId, payload);
     setSessions(c => [...c, s]); setSelectedSessionId(String(s.id)); setMessages([]); setStreamingAnswer(null);
     return s;
   }
@@ -175,7 +246,8 @@ export function ContractChatPage() {
     e.preventDefault();
     const q = query.trim();
     if (!q) { setError("Please enter a contract question."); return; }
-    if (!selectedDraftId) { setError("Choose a parsed contract draft first."); return; }
+    if (selectedScope === "compare" && !selectedCompareRun) { setError("Choose a completed compare run first."); return; }
+    if (!activeDraftId) { setError("Choose a parsed contract draft first."); return; }
     setIsSending(true); setIsStopping(false); setError(""); setStreamingAnswer(null);
     try {
       const session = await ensureSession();
@@ -185,7 +257,7 @@ export function ContractChatPage() {
         setMessages(c => [...c, ex.user_message, ex.assistant_message]);
         setQuery(""); return;
       }
-      await runAttempt({ session, normalizedQuery: q, draftId: selectedDraftId });
+      await runAttempt({ session, normalizedQuery: q, draftId: activeDraftId });
       setQuery("");
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) { logout(); return; }
@@ -215,21 +287,29 @@ export function ContractChatPage() {
   async function handleSelectSession(sid) {
     setSelectedSessionId(String(sid)); setShowSessions(false);
     const s = sessions.find(s => s.id === sid);
-    if (s) setSelectedDraftId(String(s.draft_id));
+    if (s) {
+      setSelectedDraftId(String(s.draft_id));
+      if (s.compare_run_id) {
+        setSelectedScope("compare");
+        setSelectedCompareRunId(String(s.compare_run_id));
+      } else {
+        setSelectedScope("draft");
+      }
+    }
     try {
       const msgs = await listContractChatMessages(token, contractId, sid);
       setMessages(msgs); setStreamingAnswer(readPartial(contractId, sid)); setError("");
     } catch (e) { if (e instanceof ApiError && e.status === 401) { logout(); return; } setError(e.message); }
   }
 
-  function handleNewSession() { setSelectedSessionId(""); setMessages([]); setStreamingAnswer(null); setSelectedCitationKey(""); setError(""); setShowSessions(false); }
+  function handleNewSession() { resetConversationSelection(); setShowSessions(false); }
 
   const displayed = streamingAnswer ? [...messages, streamingAnswer] : messages;
   const hasStream = Boolean(streamingAnswer?.streaming);
   const assistantMsgs = displayed.filter(m => m.role === "assistant");
   const retryable = [...assistantMsgs].reverse().find(m => m.stopped || m.failed);
   const activeSession = sessions.find(s => String(s.id) === selectedSessionId) ?? null;
-  const citationEvidence = useMemo(() => displayed.flatMap(m => m.role === "assistant" && Array.isArray(m.citations) ? m.citations.map(c => ({ ...c, key: `${m.id}-${c.block_id}-${c.block_key ?? ""}`, answer_id: m.id })) : []), [displayed]);
+  const citationEvidence = useMemo(() => displayed.flatMap(m => m.role === "assistant" && Array.isArray(m.citations) ? m.citations.map(c => ({ ...c, key: `${m.id}-${c.compare_run_id ?? ""}-${c.change_item_id ?? ""}-${c.source_label ?? ""}-${c.block_id}-${c.block_key ?? ""}`, answer_id: m.id })) : []), [displayed]);
   const selectedCitation = citationEvidence.find(c => c.key === selectedCitationKey) ?? citationEvidence[0] ?? null;
 
   const streamStatusColor = { starting: "#848E9C", grounding: "#0EA5E9", answering: "#F0B90B", sources_pending: "#8B5CF6", cancelled: "#848E9C", error: "#F6465D" };
@@ -283,27 +363,51 @@ export function ContractChatPage() {
             <span style={{ fontSize: "11px", fontWeight: 700, color: "#1E2026" }}>Sessions</span>
             <span style={{ fontSize: "10px", fontWeight: 700, padding: "1px 6px", borderRadius: "20px", background: "#F4F5F7", color: "#848E9C" }}>{sessions.length}</span>
           </div>
-          <button type="button" aria-label="New session" disabled={isSending || !selectedDraftId} onClick={handleNewSession}
+          <button type="button" aria-label="New session" disabled={isSending || !activeDraftId} onClick={handleNewSession}
             style={{ width: "26px", height: "26px", borderRadius: "6px", border: "1px solid #E6E8EA", background: "#F4F5F7", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "all 120ms" }}>
             <Plus size={13} style={{ color: "#474D57" }} />
           </button>
         </div>
 
-        {/* Draft selector */}
+        {/* Scope selector */}
         <div style={{ flexShrink: 0, padding: "10px 12px", borderBottom: "1px solid #E6E8EA" }}>
           <div style={{ fontSize: "9px", fontWeight: 700, color: "#848E9C", textTransform: "uppercase", letterSpacing: ".07em", marginBottom: "5px", display: "flex", alignItems: "center", gap: "4px" }}>
-            <BookOpen size={9} /> Parsed Draft
+            <BookOpen size={9} /> Question Scope
+          </div>
+          <div role="group" aria-label="Question scope" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px", marginBottom: "8px" }}>
+            <button type="button" aria-pressed={selectedScope === "draft"} disabled={isSending || hasStream}
+              onClick={() => handleScopeChange("draft")}
+              style={{ padding: "5px 6px", borderRadius: "7px", border: selectedScope === "draft" ? "1px solid #F0B90B" : "1px solid #E6E8EA", background: selectedScope === "draft" ? "#FFF8E6" : "#F4F5F7", color: "#1E2026", fontSize: "11px", fontWeight: 700, cursor: "pointer" }}>
+              Current Draft
+            </button>
+            <button type="button" aria-pressed={selectedScope === "compare"} disabled={isSending || hasStream || selectableCompareRuns.length === 0}
+              onClick={() => handleScopeChange("compare")}
+              style={{ padding: "5px 6px", borderRadius: "7px", border: selectedScope === "compare" ? "1px solid #F0B90B" : "1px solid #E6E8EA", background: selectedScope === "compare" ? "#FFF8E6" : "#F4F5F7", color: selectableCompareRuns.length ? "#1E2026" : "#848E9C", fontSize: "11px", fontWeight: 700, cursor: selectableCompareRuns.length ? "pointer" : "not-allowed" }}>
+              Compared Drafts
+            </button>
           </div>
           <div style={{ position: "relative" }}>
-            <select
-              aria-label="Parsed draft"
-              disabled={isSending || hasStream}
-              value={selectedDraftId}
-              onChange={e => { setSelectedDraftId(e.target.value); setSelectedSessionId(""); setMessages([]); setStreamingAnswer(null); }}
-              style={{ width: "100%", padding: "5px 22px 5px 8px", borderRadius: "7px", border: "1px solid #E6E8EA", background: "#F4F5F7", color: "#1E2026", fontSize: "12px", fontWeight: 600, outline: "none", appearance: "none", cursor: "pointer" }}>
-              <option value="">Choose draft</option>
-              {parsedDrafts.map(d => <option key={d.id} value={String(d.id)}>{d.draft_label || d.version_label}</option>)}
-            </select>
+            {selectedScope === "compare" ? (
+              <select
+                aria-label="Compare run"
+                disabled={isSending || hasStream || selectableCompareRuns.length === 0}
+                value={selectedCompareRunId}
+                onChange={e => { setSelectedCompareRunId(e.target.value); resetConversationSelection(); }}
+                style={{ width: "100%", padding: "5px 22px 5px 8px", borderRadius: "7px", border: "1px solid #E6E8EA", background: "#F4F5F7", color: "#1E2026", fontSize: "12px", fontWeight: 600, outline: "none", appearance: "none", cursor: "pointer" }}>
+                <option value="">Choose compare run</option>
+                {selectableCompareRuns.map(r => <option key={r.id} value={String(r.id)}>{compareRunLabel(r)}</option>)}
+              </select>
+            ) : (
+              <select
+                aria-label="Parsed draft"
+                disabled={isSending || hasStream}
+                value={selectedDraftId}
+                onChange={e => { setSelectedDraftId(e.target.value); resetConversationSelection(); }}
+                style={{ width: "100%", padding: "5px 22px 5px 8px", borderRadius: "7px", border: "1px solid #E6E8EA", background: "#F4F5F7", color: "#1E2026", fontSize: "12px", fontWeight: 600, outline: "none", appearance: "none", cursor: "pointer" }}>
+                <option value="">Choose draft</option>
+                {parsedDrafts.map(d => <option key={d.id} value={String(d.id)}>{d.draft_label || d.version_label}</option>)}
+              </select>
+            )}
             <ChevronDown size={11} style={{ position: "absolute", right: "7px", top: "50%", transform: "translateY(-50%)", color: "#848E9C", pointerEvents: "none" }} />
           </div>
         </div>
@@ -372,9 +476,9 @@ export function ContractChatPage() {
             <h1 aria-label="Contract Chat" style={{ fontSize: "14px", fontWeight: 700, color: "#1E2026", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {contract?.title ?? "Contract Q&A"}
             </h1>
-            {selectedDraft && (
-              <span style={{ fontSize: "9px", fontWeight: 700, padding: "2px 7px", borderRadius: "4px", background: "#EFF6FF", color: "#0369A1", border: "1px solid #0EA5E944", flexShrink: 0 }}>
-                {selectedDraft.version_label}
+            {activeDraftId && (
+              <span style={{ fontSize: "9px", fontWeight: 700, padding: "2px 7px", borderRadius: "4px", background: "#EFF6FF", color: "#0369A1", border: "1px solid #0EA5E944", flexShrink: 1, maxWidth: "260px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {selectedScope === "compare" ? `Compare: ${activeScopeLabel}` : activeScopeLabel}
               </span>
             )}
           </div>
@@ -409,13 +513,17 @@ export function ContractChatPage() {
               </div>
               <div>
                 <p style={{ fontSize: "11px", fontWeight: 700, color: "#848E9C", textTransform: "uppercase", letterSpacing: ".1em", marginBottom: "8px" }}>Ready for grounded Q&A</p>
-                <h2 style={{ fontSize: "26px", fontWeight: 800, color: "#1E2026", margin: "0 0 10px", letterSpacing: "-.02em" }}>Ask about this contract</h2>
+                <h2 style={{ fontSize: "26px", fontWeight: 800, color: "#1E2026", margin: "0 0 10px", letterSpacing: "-.02em" }}>
+                  {selectedScope === "compare" ? "Ask about the comparison" : "Ask about this contract"}
+                </h2>
                 <p style={{ fontSize: "13px", color: "#848E9C", maxWidth: "400px", lineHeight: 1.7 }}>
-                  Get citation-backed answers using RAG retrieval from parsed contract blocks.
+                  {selectedScope === "compare"
+                    ? "Get answers grounded in deterministic compare changes across the selected draft pair."
+                    : "Get citation-backed answers using RAG retrieval from parsed contract blocks."}
                 </p>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "8px", maxWidth: "600px" }}>
-                {PROMPT_EXAMPLES.map(ex => (
+                {promptExamples.map(ex => (
                   <button key={ex.text} type="button" className="cc-prompt-pill" onClick={() => setQuery(ex.text)}>
                     <span>{ex.icon}</span> {ex.text}
                   </button>
@@ -467,7 +575,7 @@ export function ContractChatPage() {
                       <div style={{ marginTop: "10px", borderTop: "1px solid #F4F5F7", paddingTop: "10px", display: "flex", flexWrap: "wrap", gap: "4px" }}>
                         <span style={{ fontSize: "9px", fontWeight: 700, color: "#C0C6CF", textTransform: "uppercase", letterSpacing: ".06em", marginRight: "4px", alignSelf: "center" }}>Sources</span>
                         {msg.citations.map((c, ci) => {
-                          const k = `${msg.id}-${c.block_id}-${c.block_key ?? ""}`;
+                          const k = `${msg.id}-${c.compare_run_id ?? ""}-${c.change_item_id ?? ""}-${c.source_label ?? ""}-${c.block_id}-${c.block_key ?? ""}`;
                           return (
                             <button key={k} type="button" className={`cc-citation-chip${selectedCitationKey === k ? " active" : ""}`}
                               onClick={() => setSelectedCitationKey(k)}>
@@ -519,7 +627,7 @@ export function ContractChatPage() {
                 <button type="submit"
                   className="cc-send-btn"
                   aria-label={hasStream ? "Stop" : "Send message"}
-                  disabled={(!hasStream && (isSending || !selectedDraftId)) || (hasStream && isStopping)}
+                  disabled={(!hasStream && (isSending || !activeDraftId)) || (hasStream && isStopping)}
                   title={hasStream ? "Stop generating" : "Send"}
                   onClick={hasStream ? (e) => { e.preventDefault(); void handleStop(); } : undefined}
                   style={{ background: hasStream ? "#E8A900" : undefined }}>
@@ -603,7 +711,9 @@ export function ContractChatPage() {
             {contract?.title ?? "Loading…"}
           </div>
           <div style={{ fontSize: "10px", color: "#848E9C", marginBottom: "8px" }}>
-            {selectedDraft ? `${selectedDraft.version_label} · ${formatDateTime(selectedDraft.uploaded_at)}` : "Choose a parsed draft to begin."}
+            {selectedScope === "compare" && selectedCompareRun
+              ? `${compareRunLabel(selectedCompareRun)} / compare truth`
+              : selectedDraft ? `${selectedDraft.version_label} / ${formatDateTime(selectedDraft.uploaded_at)}` : "Choose a parsed draft to begin."}
           </div>
           <Link to={`/contracts/${contractId}`}
             style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 700, color: "#0369A1", textDecoration: "none" }}>

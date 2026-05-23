@@ -278,6 +278,22 @@ def create_contract_compare_run(
     return {"data": ContractCompareRunRead.model_validate(contract_service.serialize_contract_compare_run(compare_run)).model_dump(mode="json")}
 
 
+@router.get("/contracts/{contract_id}/compare-runs")
+def list_contract_compare_runs(
+    contract_id: int,
+    current_user: User = Depends(get_current_user),
+    database: Session = Depends(get_db_session),
+):
+    project_access_service.ensure_document_access_or_404(database, contract_id, current_user.id)
+    compare_runs = compare_service.list_document_compare_run_details(database, contract_id)
+    return {
+        "data": [
+            ContractCompareRunRead.model_validate(contract_service.serialize_contract_compare_run(compare_run)).model_dump(mode="json")
+            for compare_run in compare_runs
+        ]
+    }
+
+
 @router.get("/contract-compare-runs/{compare_run_id}")
 def get_contract_compare_run(
     compare_run_id: int,
@@ -310,10 +326,18 @@ def create_chat_session(
     contract = project_access_service.ensure_document_access_or_404(database, contract_id, current_user.id)
     draft = project_access_service.ensure_document_version_access_or_404(database, payload.draft_id, current_user.id)
     contract_service.ensure_contract_draft_belongs_to_contract(contract, draft)
+    compare_run = None
+    if payload.compare_run_id is not None:
+        compare_run = project_access_service.ensure_compare_run_access_or_404(
+            database,
+            payload.compare_run_id,
+            current_user.id,
+        )
     chat_session = contract_chat_service.create_chat_session(
         database,
         contract=contract,
         draft=draft,
+        compare_run=compare_run,
         created_by_user_id=current_user.id,
         title=payload.title,
     )

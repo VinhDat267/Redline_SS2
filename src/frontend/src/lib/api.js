@@ -522,6 +522,11 @@ export async function createContractCompareRun(token, contractId, payload) {
   return normalizeContractCompareRun(compareRun);
 }
 
+export async function listContractCompareRuns(token, contractId) {
+  const compareRuns = await apiRequest(`/api/v1/contracts/${contractId}/compare-runs`, { token });
+  return (Array.isArray(compareRuns) ? compareRuns : []).map(normalizeContractCompareRun);
+}
+
 export function getCompareRun(token, compareRunId) {
   return apiRequest(`/api/v1/compare-runs/${compareRunId}`, { token });
 }

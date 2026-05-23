@@ -84,6 +84,81 @@ def _create_contract_chat_session(client, auth_headers) -> dict[str, int]:
     }
 
 
+def _create_contract_compare_chat_setup(client, auth_headers) -> dict[str, int]:
+    project_response = client.post(
+        "/api/v1/projects",
+        json={"name": "Compare Chat", "description": "Compare-aware Q&A"},
+        headers=auth_headers,
+    )
+    project_id = project_response.json()["data"]["id"]
+
+    contract_response = client.post(
+        f"/api/v1/projects/{project_id}/contracts",
+        json={
+            "title": "Service Agreement",
+            "contract_type": "MSA",
+            "description": "Agreement with revised liability terms",
+        },
+        headers=auth_headers,
+    )
+    contract_id = contract_response.json()["data"]["id"]
+
+    source_draft_response = client.post(
+        f"/api/v1/contracts/{contract_id}/drafts",
+        files={
+            "file": (
+                "msa-v1.docx",
+                _build_contract_docx(
+                    [
+                        ("Limitation of Liability", "Heading 1"),
+                        ("The liability cap is $100,000 and excludes confidentiality breaches.", None),
+                    ]
+                ),
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
+        data={"draft_label": "customer-v1"},
+        headers=auth_headers,
+    )
+    target_draft_response = client.post(
+        f"/api/v1/contracts/{contract_id}/drafts",
+        files={
+            "file": (
+                "msa-v2.docx",
+                _build_contract_docx(
+                    [
+                        ("Limitation of Liability", "Heading 1"),
+                        ("The liability cap is $250,000 and includes confidentiality breaches.", None),
+                    ]
+                ),
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
+        data={"draft_label": "vendor-v2"},
+        headers=auth_headers,
+    )
+    source_draft_id = source_draft_response.json()["data"]["id"]
+    target_draft_id = target_draft_response.json()["data"]["id"]
+
+    assert client.post(f"/api/v1/contract-drafts/{source_draft_id}/parse", headers=auth_headers).status_code == 200
+    assert client.post(f"/api/v1/contract-drafts/{target_draft_id}/parse", headers=auth_headers).status_code == 200
+
+    compare_response = client.post(
+        f"/api/v1/contracts/{contract_id}/compare-runs",
+        json={"source_draft_id": source_draft_id, "target_draft_id": target_draft_id},
+        headers=auth_headers,
+    )
+    assert compare_response.status_code == 201
+    compare_run_id = compare_response.json()["data"]["id"]
+
+    return {
+        "contract_id": contract_id,
+        "source_draft_id": source_draft_id,
+        "target_draft_id": target_draft_id,
+        "compare_run_id": compare_run_id,
+    }
+
+
 def test_contract_alias_routes_wrap_document_and_draft_flows(client, auth_headers):
     project_response = client.post(
         "/api/v1/projects",
@@ -243,6 +318,79 @@ def test_contract_chat_creates_session_and_answers_with_citations(client, auth_h
     assert "1,000,000" in message_payload["assistant_message"]["content"]
     assert message_payload["assistant_message"]["citations"]
     assert message_payload["assistant_message"]["citations"][0]["block_id"] is not None
+
+
+def test_contract_chat_session_can_be_scoped_to_compare_run(client, auth_headers):
+    setup = _create_contract_compare_chat_setup(client, auth_headers)
+    contract_id = setup["contract_id"]
+    target_draft_id = setup["target_draft_id"]
+    compare_run_id = setup["compare_run_id"]
+
+    session_response = client.post(
+        f"/api/v1/contracts/{contract_id}/chat/sessions",
+        json={
+            "draft_id": target_draft_id,
+            "compare_run_id": compare_run_id,
+            "title": "Compare v1 to v2 Q&A",
+        },
+        headers=auth_headers,
+    )
+
+    assert session_response.status_code == 201
+    session_payload = session_response.json()["data"]
+    assert session_payload["draft_id"] == target_draft_id
+    assert session_payload["compare_run_id"] == compare_run_id
+    assert session_payload["scope_type"] == "compare_run"
+
+
+def test_contract_compare_runs_can_be_listed_for_compare_q_and_a(client, auth_headers):
+    setup = _create_contract_compare_chat_setup(client, auth_headers)
+    contract_id = setup["contract_id"]
+    compare_run_id = setup["compare_run_id"]
+
+    response = client.get(f"/api/v1/contracts/{contract_id}/compare-runs", headers=auth_headers)
+
+    assert response.status_code == 200
+    compare_runs = response.json()["data"]
+    assert [compare_run["id"] for compare_run in compare_runs] == [compare_run_id]
+    assert compare_runs[0]["source_draft"]["draft_label"] == "customer-v1"
+    assert compare_runs[0]["target_draft"]["draft_label"] == "vendor-v2"
+
+
+def test_contract_compare_chat_answers_from_deterministic_change_items(client, auth_headers):
+    setup = _create_contract_compare_chat_setup(client, auth_headers)
+    contract_id = setup["contract_id"]
+    target_draft_id = setup["target_draft_id"]
+    compare_run_id = setup["compare_run_id"]
+
+    session_response = client.post(
+        f"/api/v1/contracts/{contract_id}/chat/sessions",
+        json={
+            "draft_id": target_draft_id,
+            "compare_run_id": compare_run_id,
+            "title": "Compare v1 to v2 Q&A",
+        },
+        headers=auth_headers,
+    )
+    session_id = session_response.json()["data"]["id"]
+
+    message_response = client.post(
+        f"/api/v1/contracts/{contract_id}/chat/sessions/{session_id}/messages",
+        json={"query": "What changed in the liability cap between the two drafts?"},
+        headers=auth_headers,
+    )
+
+    assert message_response.status_code == 201
+    assistant_message = message_response.json()["data"]["assistant_message"]
+    assert "$100,000" in assistant_message["content"]
+    assert "$250,000" in assistant_message["content"]
+    assert assistant_message["provider_used"] == "local-compare"
+    assert len(assistant_message["citations"]) >= 2
+    citation_scopes = {citation["source_label"] for citation in assistant_message["citations"]}
+    assert {"source", "target"} <= citation_scopes
+    assert {citation["change_item_id"] for citation in assistant_message["citations"]} == {
+        assistant_message["citations"][0]["change_item_id"]
+    }
 
 
 def test_contract_chat_remembers_session_context_without_document_citations(client, auth_headers):

@@ -156,6 +156,8 @@ def serialize_chat_session(chat_session: ChatSession) -> dict[str, object]:
         "id": chat_session.id,
         "contract_id": chat_session.contract_id,
         "draft_id": chat_session.draft_id,
+        "compare_run_id": chat_session.compare_run_id,
+        "scope_type": "compare_run" if chat_session.compare_run_id is not None else "draft",
         "title": chat_session.title,
         "created_by_user_id": chat_session.created_by_user_id,
         "created_at": chat_session.created_at,

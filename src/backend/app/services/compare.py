@@ -133,6 +133,18 @@ def get_compare_run_detail(session: Session, compare_run_id: int) -> dict[str, o
     }
 
 
+def list_document_compare_run_details(session: Session, document_id: int) -> list[dict[str, object]]:
+    compare_runs = list(
+        session.scalars(
+            select(CompareRun)
+            .join(DocumentVersion, CompareRun.source_version_id == DocumentVersion.id)
+            .where(DocumentVersion.document_id == document_id)
+            .order_by(CompareRun.id)
+        )
+    )
+    return [get_compare_run_detail(session, compare_run.id) for compare_run in compare_runs]
+
+
 def list_compare_run_change_items(session: Session, compare_run_id: int) -> list[dict[str, object]]:
     compare_run = _get_compare_run_or_404(session, compare_run_id)
     active_job_item_statuses = _load_active_job_item_statuses(session, compare_run.id)

@@ -57,7 +57,8 @@ Latest verified baseline:
 5. Compare parsed drafts to detect added, removed, and modified clauses.
 6. Generate RAG-enhanced AI review suggestions for clause changes.
 7. Confirm human review status and comments.
-8. Ask contract questions through grounded Contract Q&A with citations.
+8. Ask contract questions against one parsed draft or a selected compare run,
+   with grounded citations.
 9. Export summary reports and inspect analytics.
 
 ## Key Features
@@ -70,7 +71,7 @@ Latest verified baseline:
 | Parser | DOCX body/header/footer/footnote/endnote/table parsing; PDF text-layer parsing; OCR fallback with Tesseract |
 | Compare | Deterministic clause-level diff between parsed drafts |
 | AI Review | Per-item and batched AI review draft generation with RAG context |
-| Contract Q&A | Attempt-driven streaming chat, grounded citations, source evidence panel, cancel/retry |
+| Contract Q&A | Attempt-driven streaming chat, single-draft and compare-run scopes, grounded citations, source evidence panel, cancel/retry |
 | Traceability | Requirement links, test-case mappings, impacted test calculation, AI link suggestions |
 | Summary / Export | AI summary, Markdown export, DOCX report export |
 | Analytics | Project-level metrics and review status charts |
@@ -83,7 +84,8 @@ Redline deliberately separates deterministic truth from AI assistance:
 - Compare truth: deterministic added, removed, and modified clause changes.
 - AI Review truth: draft suggestions only.
 - Human review truth: reviewer-confirmed status and comments.
-- Contract Q&A truth: answer text plus citations to parsed source blocks.
+- Contract Q&A truth: answer text plus citations to parsed source blocks or
+  deterministic compare changes.
 
 AI never overwrites parser truth, compare truth, or human-confirmed review
 truth.

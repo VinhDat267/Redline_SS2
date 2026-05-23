@@ -63,3 +63,8 @@ class CompareRun(Base):
         back_populates="compare_run",
         cascade="all, delete-orphan",
     )
+    chat_sessions = relationship(
+        "ChatSession",
+        back_populates="compare_run",
+        cascade="all, delete-orphan",
+    )

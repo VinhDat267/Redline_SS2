@@ -96,6 +96,7 @@ def test_parser_and_compare_core_tables_expose_new_columns(session_factory):
     assert {
         "contract_id",
         "draft_id",
+        "compare_run_id",
         "created_by_user_id",
         "title",
         "created_at",

@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.config import settings
-from app.models import ChatMessage, ChatSession, Document, DocumentVersion
+from app.models import ChangeItem, ChatMessage, ChatSession, CompareRun, Document, DocumentBlock, DocumentVersion
 from app.services import rag_service
 from app.services.llm_adapter import LLMAdapter, ProviderRequestCancelled
 
@@ -118,6 +118,7 @@ def create_chat_session(
     *,
     contract: Document,
     draft: DocumentVersion,
+    compare_run: CompareRun | None = None,
     created_by_user_id: int,
     title: str | None,
 ) -> ChatSession:
@@ -126,10 +127,18 @@ def create_chat_session(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Contract draft must be parsed before starting chat",
         )
+    if compare_run is not None:
+        _ensure_compare_run_belongs_to_contract(contract, compare_run)
+        if compare_run.target_version_id != draft.id:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Compare Q&A must use the compare run target draft as the session draft",
+            )
 
     chat_session = ChatSession(
         contract_id=contract.id,
         draft_id=draft.id,
+        compare_run_id=compare_run.id if compare_run is not None else None,
         created_by_user_id=created_by_user_id,
         title=title,
     )
@@ -206,6 +215,17 @@ def generate_chat_answer(
     if metadata_answer is not None:
         _raise_if_cancelled(should_cancel)
         return metadata_answer
+
+    if chat_session.compare_run_id is not None:
+        compare_answer = _build_compare_run_answer(
+            session,
+            contract=contract,
+            chat_session=chat_session,
+            query=query,
+        )
+        if compare_answer is not None:
+            _raise_if_cancelled(should_cancel)
+            return compare_answer
 
     _raise_if_cancelled(should_cancel)
     try:
@@ -317,6 +337,15 @@ def _ensure_chat_session_belongs_to_contract(contract: Document, chat_session: C
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat session not found")
 
 
+def _ensure_compare_run_belongs_to_contract(contract: Document, compare_run: CompareRun) -> None:
+    source_version = compare_run.source_version
+    target_version = compare_run.target_version
+    if source_version is None or target_version is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Compare run not found")
+    if source_version.document_id != contract.id or target_version.document_id != contract.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Compare run not found")
+
+
 def _build_session_memory_answer(
     session: Session,
     *,
@@ -361,6 +390,106 @@ def _build_session_memory_answer(
         )
 
     return None
+
+
+def _build_compare_run_answer(
+    session: Session,
+    *,
+    contract: Document,
+    chat_session: ChatSession,
+    query: str,
+) -> ContractChatAnswer | None:
+    compare_run = session.scalar(
+        select(CompareRun)
+        .where(CompareRun.id == chat_session.compare_run_id)
+        .options(
+            joinedload(CompareRun.source_version),
+            joinedload(CompareRun.target_version),
+        )
+    )
+    if compare_run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Compare run not found")
+    _ensure_compare_run_belongs_to_contract(contract, compare_run)
+
+    change_items = list(
+        session.scalars(
+            select(ChangeItem)
+            .where(ChangeItem.compare_run_id == compare_run.id)
+            .options(
+                joinedload(ChangeItem.source_block).joinedload(DocumentBlock.surface),
+                joinedload(ChangeItem.target_block).joinedload(DocumentBlock.surface),
+            )
+        )
+    )
+    if not change_items:
+        return ContractChatAnswer(
+            content=(
+                "This compare run has no detected clause changes. "
+                "I cannot describe differences that are not present in compare truth."
+            ),
+            citations=[],
+            provider_used="local-compare",
+        )
+
+    selected = _select_compare_change_items(query, change_items, limit=_CHAT_CONTEXT_LIMIT)
+    if not selected:
+        selected = change_items[:_CHAT_CONTEXT_LIMIT]
+
+    source_label = compare_run.source_version.version_label
+    target_label = compare_run.target_version.version_label
+    lines = [
+        f"Compare Q&A is using deterministic compare truth for {source_label} -> {target_label}.",
+    ]
+    for index, change_item in enumerate(selected, start=1):
+        title = change_item.section_title or f"Change item {change_item.id}"
+        lines.append(f"{index}. {title} ({change_item.change_type}):")
+        if change_item.old_content:
+            lines.append(f"   Source {source_label}: {change_item.old_content}")
+        if change_item.new_content:
+            lines.append(f"   Target {target_label}: {change_item.new_content}")
+        if change_item.review_status:
+            lines.append(f"   Review status: {change_item.review_status}.")
+
+    return ContractChatAnswer(
+        content="\n".join(lines),
+        citations=_serialize_compare_citations(selected, compare_run_id=compare_run.id),
+        provider_used="local-compare",
+    )
+
+
+def _select_compare_change_items(
+    query: str,
+    change_items: list[ChangeItem],
+    *,
+    limit: int,
+) -> list[ChangeItem]:
+    query_tokens = set(_tokenize(_expand_query(query)))
+    scored: list[tuple[float, int, ChangeItem]] = []
+    for index, change_item in enumerate(change_items):
+        haystack = " ".join(
+            value
+            for value in (
+                change_item.section_title,
+                change_item.change_type,
+                change_item.old_content,
+                change_item.new_content,
+                change_item.summary,
+            )
+            if value
+        ).lower()
+        score = 0.0
+        for token in query_tokens:
+            if token in haystack:
+                score += 1.0
+        if change_item.section_title and any(token in change_item.section_title.lower() for token in query_tokens):
+            score += 1.0
+        if score > 0:
+            scored.append((score, index, change_item))
+
+    if not scored:
+        return []
+    scored.sort(key=lambda item: (-item[0], item[1]))
+    return [item for _score, _index, item in scored[:limit]]
 
 
 def _find_latest_declared_name(session: Session, chat_session_id: int, *, current_query: str) -> str | None:
@@ -762,6 +891,32 @@ def _serialize_citations(retrieved_blocks: list[dict[str, object]]) -> list[dict
         }
         for item in retrieved_blocks
     ]
+
+
+def _serialize_compare_citations(
+    change_items: list[ChangeItem],
+    *,
+    compare_run_id: int,
+) -> list[dict[str, object]]:
+    citations: list[dict[str, object]] = []
+    for change_item in change_items:
+        for label, block in (("source", change_item.source_block), ("target", change_item.target_block)):
+            if block is None:
+                continue
+            citations.append(
+                {
+                    "block_id": block.id,
+                    "block_key": block.block_key,
+                    "section_title": block.section_title or change_item.section_title,
+                    "surface_type": block.surface.surface_type if block.surface is not None else change_item.surface_type,
+                    "surface_key": block.surface.surface_key if block.surface is not None else change_item.surface_key,
+                    "content": block.normalized_content or block.raw_content,
+                    "source_label": label,
+                    "compare_run_id": compare_run_id,
+                    "change_item_id": change_item.id,
+                }
+            )
+    return citations
 
 
 def _raise_if_cancelled(should_cancel: Callable[[], bool] | None) -> None:

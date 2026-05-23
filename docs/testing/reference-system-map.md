@@ -110,10 +110,16 @@ These are the preferred product-facing routes.
 - `DELETE /api/v1/contract-drafts/{draft_id}`
 - `POST /api/v1/contract-drafts/{draft_id}/parse`
 - `POST /api/v1/contracts/{contract_id}/compare-runs`
+- `GET /api/v1/contracts/{contract_id}/compare-runs`
 - `GET /api/v1/contract-compare-runs/{compare_run_id}`
 - `GET /api/v1/contract-compare-runs/{compare_run_id}/clause-changes`
 
 ### Contract Q&A
+
+Chat sessions are scoped to one parsed draft by default. A session can also
+include `compare_run_id`; in that mode the target draft remains the active
+attempt draft, while answers are grounded in deterministic `ChangeItem` data
+from the selected compare run.
 
 - `POST /api/v1/contracts/{contract_id}/chat/sessions`
 - `GET /api/v1/contracts/{contract_id}/chat/sessions`
@@ -209,6 +215,7 @@ These routes remain supported because the internal model names are still
 - Human review truth lives in `ChangeItem.review_status`, `assignee_user_id`, `summary`, and `ReviewComment`.
 - Requirement/test traceability truth is created by user-confirmed links and mappings.
 - AI Review, AI requirement extraction, AI traceability suggestions, and Contract Q&A are support layers.
+- Compare-scoped Contract Q&A may explain compare truth, but it must not create or overwrite compare truth.
 - Summary/export is derived output, not an independent truth source.
 
 ## Environment Variables
@@ -254,7 +261,7 @@ cd src/backend
 .\.venv\Scripts\python -m pytest tests -q
 ```
 
-Expected baseline: `265 passed`.
+Expected baseline: `268 passed`.
 
 ### Frontend
 
@@ -265,7 +272,7 @@ npm run build
 npm audit
 ```
 
-Expected baseline: `111 passed`, build succeeds, `0 vulnerabilities`.
+Expected baseline: `112 passed`, build succeeds, `0 vulnerabilities`.
 
 ## Backend Test File Map
 

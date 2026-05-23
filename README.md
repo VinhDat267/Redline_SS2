@@ -1,69 +1,189 @@
 # Redline
 
-Redline is an AI-powered Contract Review application for `62FIT3SS2 - Special Subject 2`, focused on deterministic compare, RAG-enhanced AI review, and grounded contract Q&A.
+Redline is an AI-powered contract review application built for the
+`62FIT3SS2 - Special Subject 2` project. It helps reviewers upload contract
+drafts, parse them into structured blocks, compare revisions, generate
+RAG-assisted review suggestions, and ask grounded contract questions with
+source citations.
 
 ```text
-Project → Contract → DOCX/PDF Draft Upload → Parse → Compare
-→ RAG-Enhanced AI Review → Human Review → Contract Q&A
-→ Summary / Export → Analytics
+Project -> Contract -> Draft Upload -> Parse -> Compare
+        -> AI Review -> Human Review -> Contract Q&A
+        -> Summary / Export -> Analytics
 ```
 
-## Current Status
+## Table of Contents
+
+- [Project Status](#project-status)
+- [Core Workflow](#core-workflow)
+- [Key Features](#key-features)
+- [Architecture](#architecture)
+- [Technology Stack](#technology-stack)
+- [Repository Layout](#repository-layout)
+- [Quickstart with Docker](#quickstart-with-docker)
+- [Local Development](#local-development)
+- [Environment Variables](#environment-variables)
+- [Verification](#verification)
+- [Demo Data](#demo-data)
+- [Deployment Notes](#deployment-notes)
+- [Troubleshooting](#troubleshooting)
+- [Documentation Map](#documentation-map)
+
+## Project Status
 
 Updated: 2026-05-23
 
-The application is fully functional with production deployments on Heroku (backend) and Vercel (frontend).
+The system is feature-complete for the final course submission and has been
+verified on the Docker path expected for local review.
 
-**Stack:**
+Latest verified baseline:
 
-- **Backend:** FastAPI, SQLAlchemy, Alembic, PostgreSQL + pgvector, Pillow (avatar processing)
-- **Frontend:** React 19, Vite, Tailwind CSS, Recharts
-- **Auth:** HttpOnly cookie sessions, CSRF tokens, Google OAuth, DB-backed rate limiting
-- **AI/RAG:** Direct Gemini or OpenAI-compatible providers, Gemini embeddings (3072-dim), pgvector retrieval
+| Area | Result |
+| --- | --- |
+| Backend test suite | `265 passed` |
+| Frontend test suite | `111 passed` across 19 files |
+| Frontend production build | Passes, with Vite chunk-size warning only |
+| Alembic schema check | No new upgrade operations detected |
+| Docker full stack | Backend, frontend, and PostgreSQL start successfully |
+| PDF OCR health | Healthy with `eng+vie` Tesseract languages |
+| RAG health | Healthy with PostgreSQL + pgvector, 3072 dimensions |
+| NPM audit | `0 vulnerabilities` |
 
-**Test suite:**
+## Core Workflow
 
-- Backend: **265 passed** (Pytest, SQLite fixtures)
-- Frontend: **111 passed** (Vitest, 19 test files)
-- Frontend build: passes (Vite chunk-size warning only)
+1. Create a project for a review engagement.
+2. Create a contract workspace inside the project.
+3. Upload two DOCX or PDF drafts.
+4. Parse drafts into deterministic document blocks and surfaces.
+5. Compare parsed drafts to detect added, removed, and modified clauses.
+6. Generate RAG-enhanced AI review suggestions for clause changes.
+7. Confirm human review status and comments.
+8. Ask contract questions through grounded Contract Q&A with citations.
+9. Export summary reports and inspect analytics.
 
-**Core truth boundaries:**
+## Key Features
 
-- Parser and compare truth are **deterministic** — AI never overrides them.
-- AI Review and Contract Q&A are **suggestion/support layers** only.
-- Human-confirmed review status and requirement/test-case mappings are the **final workflow truth**.
+| Area | Capabilities |
+| --- | --- |
+| Authentication | Local email/password, Google OAuth, HttpOnly cookie sessions, CSRF protection, DB-backed rate limiting |
+| Account Management | Profile update, password change, avatar upload/remove with 256x256 WebP processing |
+| Contract Management | Project, contract, draft, member, invitation, requirement, and test case workflows |
+| Parser | DOCX body/header/footer/footnote/endnote/table parsing; PDF text-layer parsing; OCR fallback with Tesseract |
+| Compare | Deterministic clause-level diff between parsed drafts |
+| AI Review | Per-item and batched AI review draft generation with RAG context |
+| Contract Q&A | Attempt-driven streaming chat, grounded citations, source evidence panel, cancel/retry |
+| Traceability | Requirement links, test-case mappings, impacted test calculation, AI link suggestions |
+| Summary / Export | AI summary, Markdown export, DOCX report export |
+| Analytics | Project-level metrics and review status charts |
 
-## Project Structure
+## Truth Boundaries
+
+Redline deliberately separates deterministic truth from AI assistance:
+
+- Parser truth: structured blocks produced from uploaded drafts.
+- Compare truth: deterministic added, removed, and modified clause changes.
+- AI Review truth: draft suggestions only.
+- Human review truth: reviewer-confirmed status and comments.
+- Contract Q&A truth: answer text plus citations to parsed source blocks.
+
+AI never overwrites parser truth, compare truth, or human-confirmed review
+truth.
+
+## Architecture
+
+```text
+Browser / React Vite
+        |
+        | Cookie auth + CSRF + JSON/SSE
+        v
+FastAPI backend
+        |
+        +-- PostgreSQL + pgvector
+        |     - users, projects, contracts, drafts
+        |     - parse runs, blocks, compare runs
+        |     - review drafts, chat sessions, embeddings
+        |
+        +-- Upload storage
+        |     - local / persistent-local for development
+        |     - object storage for deploys
+        |
+        +-- Parser services
+        |     - python-docx for DOCX
+        |     - PyMuPDF + Tesseract for PDF/OCR
+        |
+        +-- AI/RAG services
+              - Gemini or OpenAI-compatible LLM provider
+              - Gemini embeddings or local hash fallback
+              - pgvector retrieval
+```
+
+## Technology Stack
+
+| Layer | Tools |
+| --- | --- |
+| Backend | Python 3.11+, FastAPI, SQLAlchemy, Alembic, Gunicorn/Uvicorn |
+| Database | PostgreSQL 17, pgvector |
+| Parser | python-docx, PyMuPDF, pytesseract, Tesseract OCR |
+| Storage | Local disk, persistent Docker volume, S3-compatible object storage |
+| Frontend | React 19, Vite 7, Tailwind CSS 4, Recharts, lucide-react |
+| Testing | Pytest, Vitest, Docker Compose smoke checks |
+| AI/RAG | Direct Gemini, OpenAI-compatible provider support, Gemini embeddings |
+
+## Repository Layout
 
 ```text
 RedlineSS2/
-├── docs/               # Project documentation, testing pack, demo kits
-│   ├── demo/           # Full system demo kit (MedNova/Aster Cloud)
-│   ├── design/         # Stitch design system description
-│   └── testing/        # Testing pack, eval harness, VN showcase
-├── src/
-│   ├── backend/        # FastAPI + SQLAlchemy + Alembic
-│   └── frontend/       # React + Vite + Tailwind
-└── README.md           # This file
+|-- README.md
+|-- compose.yml
+|-- docs/
+|   |-- demo/full-system-demo/
+|   |-- design/
+|   `-- testing/
+`-- src/
+    |-- backend/
+    |   |-- app/
+    |   |-- alembic/
+    |   |-- tests/
+    |   |-- Dockerfile
+    |   |-- pyproject.toml
+    |   `-- .env.example
+    `-- frontend/
+        |-- src/
+        |-- public/
+        |-- Dockerfile
+        |-- package.json
+        |-- package-lock.json
+        `-- .env.example
 ```
 
-## Quickstart
+## Quickstart with Docker
+
+This is the recommended path for graders and reviewers. It starts PostgreSQL,
+backend, and frontend from one command.
 
 ### Prerequisites
 
-- Docker (for the full local stack or PostgreSQL + pgvector only)
-- Python 3.12 recommended; backend package supports Python 3.11+
-- Node.js 18+ with npm
+- Docker Desktop
+- Git
+- Optional: a Gemini API key for real provider-backed AI features
+- Optional: a Google OAuth Web Client ID for Google login
 
-### Full Docker Stack
+### 1. Create local env files
 
-Use this path when you want PostgreSQL, backend, and frontend to run from Docker:
+From the repository root:
 
 ```powershell
 Copy-Item src/backend/.env.example src/backend/.env
 Copy-Item src/frontend/.env.example src/frontend/.env
-# Optional: fill REDLINE_AI_GEMINI_API_KEY for real AI Review / Contract Q&A synthesis.
-# Optional: fill REDLINE_GOOGLE_CLIENT_ID and VITE_GOOGLE_CLIENT_ID for Google login.
+```
+
+The app can run locally without Google OAuth. Provider-backed AI features need
+`REDLINE_AI_GEMINI_API_KEY`; deterministic parser/compare/profile workflows do
+not.
+
+### 2. Start the full stack
+
+```powershell
 docker compose up --build
 ```
 
@@ -71,16 +191,32 @@ Open:
 
 - Frontend: `http://localhost:5173`
 - Backend Swagger UI: `http://localhost:8000/docs`
+- Backend health: `http://localhost:8000/health`
 
-The Docker stack reads `src/backend/.env` and `src/frontend/.env`, then overrides container-specific values such as `REDLINE_DATABASE_URL`, upload paths, CORS, and Tesseract paths. To seed demo data:
+### 3. Seed demo users
+
+In a second terminal:
 
 ```powershell
 docker compose exec backend python -m app.seed
 ```
 
-If you use Google login locally, the Google OAuth Web Client must allow `http://localhost:5173` as an authorized JavaScript origin.
+Demo login:
 
-### Local Backend
+| Email | Password |
+| --- | --- |
+| `vinh@example.com` | `redline123` |
+| `my@example.com` | `redline123` |
+| `ly@example.com` | `redline123` |
+
+You can also create a new account from the UI.
+
+## Local Development
+
+Use this path when developing without running backend/frontend inside Docker.
+PostgreSQL still runs from Docker.
+
+### Backend
 
 ```powershell
 docker compose up -d postgres
@@ -88,17 +224,12 @@ cd src/backend
 python -m venv .venv
 .\.venv\Scripts\python -m pip install -e .[dev]
 Copy-Item .env.example .env
-# Optional: fill REDLINE_AI_GEMINI_API_KEY in .env for real Gemini AI/RAG features.
 .\.venv\Scripts\python -m alembic upgrade head
 .\.venv\Scripts\python -m app.seed
 .\.venv\Scripts\python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Swagger UI: `http://127.0.0.1:8000/docs`
-
-The backend always loads `src/backend/.env` by absolute path, so settings stay consistent regardless of working directory. RAG runtime uses PostgreSQL + pgvector via `compose.yml`; run Alembic after starting Docker so the `vector` extension exists.
-
-### Local Frontend
+### Frontend
 
 ```powershell
 cd src/frontend
@@ -106,75 +237,193 @@ npm install
 npm run dev
 ```
 
-Dev server: `http://localhost:5173`
+Frontend URL: `http://localhost:5173`
+
+## Environment Variables
+
+### Backend
+
+Backend configuration lives in `src/backend/.env`. Use
+`src/backend/.env.example` as the template.
+
+| Variable | Required for local run | Notes |
+| --- | --- | --- |
+| `REDLINE_DATABASE_URL` | Yes | PostgreSQL URL. Docker Compose overrides this for containers. |
+| `REDLINE_AUTH_SECRET` | Recommended | Use a unique random value outside local demos. |
+| `REDLINE_CORS_ORIGINS` | Yes | Browser origins allowed to call the API with cookies. |
+| `REDLINE_UPLOAD_STORAGE_BACKEND` | Yes | `local`, `persistent-local`, `ephemeral-demo`, or `object`. |
+| `REDLINE_AI_GEMINI_API_KEY` | Optional | Enables provider-backed AI Review, AI Summary, AI suggestions, and LLM synthesis. |
+| `REDLINE_AI_GEMINI_MODEL` | Optional | Defaults to `gemini-3.1-flash-lite`. |
+| `REDLINE_RAG_EMBEDDING_MODEL` | Optional | Defaults to `gemini-embedding-2`. |
+| `REDLINE_GOOGLE_CLIENT_ID` | Optional | Required only for Google login. |
+| `REDLINE_OBJECT_STORAGE_*` | Deploy only | Required when `REDLINE_UPLOAD_STORAGE_BACKEND=object`. |
+
+Generate an auth secret:
+
+```powershell
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+### Frontend
+
+Frontend configuration lives in `src/frontend/.env`. Use
+`src/frontend/.env.example` as the template.
+
+| Variable | Required | Notes |
+| --- | --- | --- |
+| `VITE_API_BASE_URL` | Yes | Backend API base URL. Local default: `http://127.0.0.1:8000`. |
+| `VITE_GOOGLE_CLIENT_ID` | Optional | Must match `REDLINE_GOOGLE_CLIENT_ID` for Google login. |
+| `VITE_CONTRACT_CHAT_STREAMING_ENABLED` | Optional | Set `false` to use JSON fallback for Contract Q&A. |
 
 ## Verification
 
+Run these commands before submitting or demoing.
+
+### Backend tests
+
 ```powershell
-# Backend tests (SQLite fixtures)
 cd src/backend
 .\.venv\Scripts\python -m pytest tests -q
-
-# Frontend tests
-cd src/frontend
-npm run test -- --run
-
-# Frontend production build
-npm run build
-
-# RAG embedding health (requires running PostgreSQL)
-cd src/backend
-.\.venv\Scripts\python -m app.rag_admin health --strict
 ```
 
-For manual end-to-end rehearsal, see `docs/testing/tutorial-redline-e2e-full-pass.md`.
+Expected baseline: `265 passed`.
 
-## Deploy Notes
+### Frontend tests
 
-- **Vercel frontend:** deploy from `src/frontend` with `VITE_API_BASE_URL` pointing to the Heroku backend URL.
-- **Heroku backend:** backend deploy files live under `src/backend/`; deploy that directory as the app root, or push it with a subtree workflow.
-- **Uploads:** Heroku dynos use ephemeral disk. For real deployments set `REDLINE_UPLOAD_STORAGE_BACKEND=object` and configure `REDLINE_OBJECT_STORAGE_*` for an S3-compatible bucket. Use `ephemeral-demo` only for short demo deployments, because uploaded contracts and avatars can disappear after dyno restart/redeploy.
-- **Object storage vars:** set `REDLINE_OBJECT_STORAGE_BUCKET`, `REDLINE_OBJECT_STORAGE_ACCESS_KEY_ID`, `REDLINE_OBJECT_STORAGE_SECRET_ACCESS_KEY`, and usually `REDLINE_OBJECT_STORAGE_ENDPOINT` + `REDLINE_OBJECT_STORAGE_REGION`. Set `REDLINE_OBJECT_STORAGE_PUBLIC_BASE_URL` when avatar files should be served through a public bucket/CDN URL.
-- **CORS:** set `REDLINE_CORS_ORIGINS` on Heroku to the exact Vercel frontend origin.
+```powershell
+cd src/frontend
+npm run test -- --run
+```
 
-## Main Routes
+Expected baseline: `111 passed`.
 
-| Route | Purpose |
-|-------|---------|
-| `/` | Project inventory, starter seed, pending invitations |
-| `/account` | User profile, avatar upload, password management |
-| `/projects/:projectId` | Contract, requirement, test case, team, activity workspace |
-| `/projects/:projectId/analytics` | Project analytics dashboard |
-| `/contracts/:contractId` | Contract draft inventory, DOCX/PDF upload, compare setup |
-| `/contracts/:contractId/chat` | Grounded contract Q&A workspace |
-| `/documents/:documentId` | Document version inventory and metadata |
-| `/documents/:documentId/parser` | Parser workspace and AI requirement extraction |
-| `/compare-runs/:compareRunId` | Compare workspace and AI review batch generation |
-| `/compare-runs/:compareRunId/review` | Human review workspace |
-| `/compare-runs/:compareRunId/impact` | Traceability and affected test impact |
-| `/compare-runs/:compareRunId/summary` | AI summary, Markdown export, DOCX report export |
+### Frontend production build
 
-## Key Features
+```powershell
+cd src/frontend
+npm run build
+```
 
-- **Auth:** Local email/password + Google OAuth, HttpOnly cookie sessions, CSRF protection, DB-backed rate limiting on all auth endpoints, avatar upload with server-side image processing (256×256 WebP)
-- **Parser:** DOCX body/header/footer/footnote/endnote/table surfaces, PDF text-layer + OCR fallback (Tesseract), legal numbering classification
-- **Compare:** Deterministic clause-level diff between two parsed drafts
-- **AI Review:** RAG-enhanced per-item and batch generation, with/without-RAG controlled baseline
-- **Contract Q&A:** Attempt-driven streaming chat with grounded citations, session memory, metadata-intent routing, cooperative cancel/retry
-- **Traceability:** Requirement ↔ test case mapping, impacted test calculation from clause changes
-- **Summary/Export:** AI-generated summary, Markdown export, DOCX report
-- **Analytics:** Project-level statistics, document breakdown, review status charts
+The build passes. A Vite chunk-size warning is expected and does not block the
+demo.
 
-## Repository Guide
+### Dependency audit
+
+```powershell
+cd src/frontend
+npm audit
+```
+
+Expected baseline: `0 vulnerabilities`.
+
+### Database migration check
+
+```powershell
+cd src/backend
+.\.venv\Scripts\python -m alembic check
+```
+
+Expected baseline: `No new upgrade operations detected.`
+
+### Docker smoke checks
+
+```powershell
+docker compose up --build -d
+Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8000/health
+Invoke-WebRequest -UseBasicParsing http://127.0.0.1:5173
+docker compose exec backend python -m app.parser_admin pdf-ocr-health --strict
+docker compose exec backend python -m app.rag_admin health --strict
+```
+
+## Demo Data
+
+Seed simple demo users:
+
+```powershell
+docker compose exec backend python -m app.seed
+```
+
+Build realistic contract fixtures:
+
+```powershell
+.\src\backend\.venv\Scripts\python docs/demo/full-system-demo/scripts/build_full_demo_fixtures.py
+```
+
+Generated files are written to `output/full-system-demo/fixtures/` and are
+ignored by git.
+
+Recommended demo documents:
+
+- MSA v1 and MSA v2 for legal clause compare.
+- SOW v1 and SOW v2 for delivery/commercial impact.
+- Security Addendum PDF for PDF text-layer and OCR parser checks.
+
+See `docs/demo/full-system-demo/README.md` for the full runbook.
+
+## Deployment Notes
+
+### Frontend on Vercel
+
+- Deploy from `src/frontend`.
+- Set `VITE_API_BASE_URL` to the public backend URL.
+- Set `VITE_GOOGLE_CLIENT_ID` only if Google login is enabled.
+
+### Backend on Heroku
+
+- Deploy `src/backend` as the app root, or push it through a backend subtree
+  workflow.
+- Set `REDLINE_ENVIRONMENT=production`.
+- Set `REDLINE_AUTH_SECRET` to a unique secure value.
+- Set `REDLINE_CORS_ORIGINS` to the exact HTTPS frontend origin.
+- Do not use wildcard CORS with cookie authentication.
+
+### Upload Storage in Deployments
+
+Local Docker uses persistent Docker volume storage. Heroku dynos use ephemeral
+filesystem, so production deployments should use object storage:
+
+```text
+REDLINE_UPLOAD_STORAGE_BACKEND=object
+REDLINE_OBJECT_STORAGE_BUCKET=...
+REDLINE_OBJECT_STORAGE_ENDPOINT=...
+REDLINE_OBJECT_STORAGE_REGION=...
+REDLINE_OBJECT_STORAGE_ACCESS_KEY_ID=...
+REDLINE_OBJECT_STORAGE_SECRET_ACCESS_KEY=...
+```
+
+Cloudflare R2, Supabase Storage, or any S3-compatible bucket can be used.
+
+## Troubleshooting
+
+| Symptom | Likely cause | Fix |
+| --- | --- | --- |
+| `Failed to fetch` in the frontend | Backend not running, wrong `VITE_API_BASE_URL`, or CORS mismatch | Check backend health and frontend `.env`. |
+| Google login button says unavailable | Missing frontend or backend Google client ID | Set both `VITE_GOOGLE_CLIENT_ID` and `REDLINE_GOOGLE_CLIENT_ID`. |
+| Google token rejected | OAuth origin mismatch | Add `http://localhost:5173` or your deployed frontend origin in Google Cloud Console. |
+| AI review fails or returns provider error | Missing/invalid Gemini API key or quota limit | Set `REDLINE_AI_GEMINI_API_KEY` and check provider quota. |
+| PDF OCR fails | Tesseract or language packs missing | Use Docker path, or install `eng` and `vie` language packs locally. |
+| Uploaded files disappear after deploy restart | Ephemeral filesystem | Use `REDLINE_UPLOAD_STORAGE_BACKEND=object`. |
+| Alembic migration fails locally | PostgreSQL/pgvector is not running | Start `docker compose up -d postgres`, then rerun Alembic. |
+| Frontend build warns about chunk size | Large app bundle | Warning only; build still succeeds. |
+
+## Documentation Map
 
 | Document | Purpose |
-|----------|---------|
+| --- | --- |
 | `docs/demo/full-system-demo/README.md` | Realistic end-to-end demo kit |
 | `docs/testing/README.md` | Testing pack and regression procedures |
+| `docs/testing/tutorial-redline-e2e-full-pass.md` | Manual full-pass tutorial |
+| `docs/testing/reference-system-map.md` | Ports, commands, routes, and fixture map |
 | `docs/design/` | Current visual/product design reference |
 
 ## Team
 
-- **Dat Vinh** — Technical lead and main developer
-- **My** — Business analysis, UX, and testing support
-- **Ly** — Documentation, tracking, and QA support
+| Member | Role |
+| --- | --- |
+| Dat Vinh | Technical lead and main developer |
+| My | Business analysis, UX, and testing support |
+| Ly | Documentation, tracking, and QA support |
+
+## License
+
+This repository is a course project for `62FIT3SS2 - Special Subject 2`.

@@ -136,7 +136,6 @@ redline/
 |-- compose.yml
 |-- docs/
 |   |-- demo/full-system-demo/
-|   |-- design/
 |   `-- testing/
 `-- src/
     |-- backend/
@@ -413,7 +412,8 @@ Cloudflare R2, Supabase Storage, or any S3-compatible bucket can be used.
 | `docs/testing/README.md` | Testing pack and regression procedures |
 | `docs/testing/tutorial-redline-e2e-full-pass.md` | Manual full-pass tutorial |
 | `docs/testing/reference-system-map.md` | Ports, commands, routes, and fixture map |
-| `docs/design/` | Current visual/product design reference |
+| `docs/testing/how-to-run-full-regression.md` | Comprehensive automated and manual regression suite guide |
+| `docs/testing/explanation-testing-model-and-truth-boundaries.md` | Deep dive into data integrity and AI integration limits |
 
 ## Team
 

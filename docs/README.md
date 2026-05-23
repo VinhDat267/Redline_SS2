@@ -1,6 +1,6 @@
 # Redline Documentation
 
-This directory contains the operational, testing, demo, and design references
+This directory contains the operational, testing, and demo references
 for Redline as a production-oriented contract review platform.
 
 ## Directory Structure
@@ -8,7 +8,6 @@ for Redline as a production-oriented contract review platform.
 | Path | Purpose |
 | --- | --- |
 | `demo/full-system-demo/` | End-to-end demo kit with realistic MSA/SOW contracts, PDF fixtures, operator runbook, and presenter notes |
-| `design/` | Current product and visual design reference |
 | `testing/` | Regression, smoke, eval, and truth-boundary testing pack |
 | `testing/eval-pack/` | English AI Review and Contract Q&A evaluation harness |
 | `testing/demo-showcase/` | Vietnamese showcase fixtures and historical rehearsal evidence |

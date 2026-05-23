@@ -22,6 +22,13 @@ Project -> Contract Workspace -> Upload Drafts -> Parse -> Compare
 Build the demo files from the repository root:
 
 ```powershell
+docker compose run --rm --no-deps -v "${PWD}:/workspace" -w /workspace backend python docs/demo/full-system-demo/scripts/build_full_demo_fixtures.py
+```
+
+If you are developing with a local backend virtual environment, this command is
+also valid:
+
+```powershell
 .\src\backend\.venv\Scripts\python docs/demo/full-system-demo/scripts/build_full_demo_fixtures.py
 ```
 
@@ -124,7 +131,7 @@ The system truth boundaries are:
 | `source-contracts.md` | Source text used to generate realistic DOCX/PDF demo fixtures |
 | `operator-runbook.md` | Service setup, health checks, fixture build, and fallback instructions |
 | `presenter-script.md` | 12-15 minute speaking script and step-by-step UI flow |
-| `pivot-and-demo-script.md` | Vietnamese-ready narrative for explaining why and how the project pivoted to contract review |
+| `pivot-and-demo-script.md` | Product narrative for explaining the contract-review direction and live demo flow |
 | `qa-prompts-and-expected-results.md` | High-value questions, expected answer direction, and evidence to verify |
 | `manual-test-checklist.md` | Full manual checklist for pre-demo verification |
 | `scripts/build_full_demo_fixtures.py` | Fixture generator for DOCX, text PDF, and scanned PDF |

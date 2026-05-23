@@ -1,10 +1,10 @@
 # Reference: Feature Test Matrix
 
-Dung tai lieu nay nhu checklist chay test. Moi case co:
-- precondition
-- thao tac can test
-- expected result
-- automated coverage lien quan
+Use this as the canonical feature checklist. Each case includes:
+- precondition;
+- action to test;
+- expected result;
+- related automated coverage.
 
 ## Result legend
 - `pass`: ket qua dung nhu expected
@@ -76,12 +76,12 @@ Dung tai lieu nay nhu checklist chay test. Moi case co:
   - Expected: invitation bi xoa khoi list pending
   - Automated: `src/frontend/src/pages/ProjectDetailPage.test.jsx::surfaces active members separately from pending invitations and supports invite revoke`
 
-## Document, version, requirement, test case inventory
+## Contract, draft, requirement, test case inventory
 
-- [ ] `DOC-01` Create document
+- [ ] `DOC-01` Create contract/document
   - Preconditions: da vao `Project Detail`
-  - Steps: tao document moi
-  - Expected: document xuat hien trong `Document Inventory`
+  - Steps: tao contract moi
+  - Expected: contract xuat hien trong inventory va mo duoc Contract Workspace
   - Automated: `src/backend/tests/test_documents_api.py::test_document_crud_flow`; `src/frontend/src/pages/ProjectDetailPage.test.jsx::creates a document from the project workspace and refreshes the inventory`
 
 - [ ] `DOC-02` Update document metadata
@@ -116,17 +116,17 @@ Dung tai lieu nay nhu checklist chay test. Moi case co:
 
 ## Version va parser workspace
 
-- [ ] `VER-01` Upload DOCX version
-  - Preconditions: da o `Document Detail`
-  - Steps: upload file `.docx` hop le
-  - Expected: version moi xuat hien trong `Version Inventory`
+- [ ] `VER-01` Upload DOCX/PDF draft
+  - Preconditions: da o Contract Workspace hoac Document Detail
+  - Steps: upload file `.docx` hoac `.pdf` hop le
+  - Expected: draft/version moi xuat hien trong contract workspace
   - Automated: `src/backend/tests/test_documents_api.py::test_document_version_crud_flow`; `src/frontend/src/pages/DocumentDetailPage.test.jsx::uploads a DOCX version and refreshes the live version inventory`
 
-- [ ] `VER-02` Block non-DOCX upload
+- [ ] `VER-02` Block unsupported upload
   - Preconditions: da o form upload version
-  - Steps: chon file khong phai `.docx`
+  - Steps: chon file khong phai `.docx` hoac `.pdf`
   - Expected: frontend chan request
-  - Automated: `src/frontend/src/pages/DocumentDetailPage.test.jsx::blocks non-DOCX uploads before calling the upload endpoint`
+  - Automated: `src/frontend/src/pages/DocumentDetailPage.test.jsx::blocks unsupported uploads before calling the upload endpoint`
 
 - [ ] `VER-03` Version metadata CRUD
   - Preconditions: da co version
@@ -163,6 +163,12 @@ Dung tai lieu nay nhu checklist chay test. Moi case co:
   - Steps: mo parser workspace tu version row hoac query `version_id`
   - Expected: workspace ton trong version duoc chon
   - Automated: `src/frontend/src/pages/DocumentDetailPage.test.jsx::opens parser workspace directly from a version row instead of relying on the page header`; `src/frontend/src/pages/ParserWorkspacePage.test.jsx::honors the version query parameter when opening parser workspace from a version-specific entry point`
+
+- [ ] `PAR-06` Contract parser facade route
+  - Preconditions: contract co draft
+  - Steps: mo parser tu `/contracts/:contractId/parser`
+  - Expected: back/compare links giu contract context, khong nhay ve legacy document route
+  - Automated: `src/frontend/src/pages/ParserWorkspacePage.test.jsx::keeps contract facade links when opened from a contract parser route`
 
 ## AI requirement extraction
 
@@ -274,6 +280,32 @@ Dung tai lieu nay nhu checklist chay test. Moi case co:
   - Expected: impacted tests hien tu manual mappings, khong do AI tu suy
   - Automated: `src/backend/tests/test_change_items_api.py::test_change_item_detail_returns_requirement_specific_test_mappings`; `src/frontend/src/pages/TraceabilityImpactPage.test.jsx::renders linked requirements and impacted tests from live change item detail`
 
+- [ ] `TRACE-04` AI suggested requirement links
+  - Preconditions: compare run co change item va project co requirements
+  - Steps: generate AI suggestions, accept mot suggestion, dismiss/ignore suggestion khac
+  - Expected: AI suggestion khong tao truth cho den khi user accept; accepted link dung token server-issued
+  - Automated: `src/frontend/src/pages/TraceabilityImpactPage.test.jsx::accepts AI suggested links through the dedicated tokenized endpoint`; `src/backend/tests/test_change_items_api.py`
+
+## Contract Q&A
+
+- [ ] `CHAT-01` Streaming grounded answer
+  - Preconditions: contract co parsed active draft va RAG health OK
+  - Steps: hoi cau hoi contract-specific trong `/contracts/:contractId/chat`
+  - Expected: answer co citation va Source Evidence support answer
+  - Automated: `src/frontend/src/pages/ContractChatPage.test.jsx::creates a contract chat session and renders grounded answer citations`
+
+- [ ] `CHAT-02` Stop / retry
+  - Preconditions: stream dang active
+  - Steps: stop stream, retry cung bubble
+  - Expected: attempt cu terminal, retry tao attempt moi, session khong bi ket
+  - Automated: `src/frontend/src/pages/ContractChatPage.test.jsx::stops an active stream and retries in the same answer bubble`
+
+- [ ] `CHAT-03` JSON fallback
+  - Preconditions: streaming disabled bang env frontend/backend
+  - Steps: gui message chat
+  - Expected: JSON path tra answer/citations, UI khong phu thuoc SSE
+  - Automated: `src/frontend/src/pages/ContractChatPage.test.jsx::uses JSON chat fallback when streaming is disabled by env`
+
 ## Summary / export / analytics
 
 - [ ] `SUM-01` Generate AI summary
@@ -313,6 +345,18 @@ Dung tai lieu nay nhu checklist chay test. Moi case co:
   - Steps: user ngoai project goi project/document/compare routes
   - Expected: bi tu choi truy cap
   - Automated: `src/backend/tests/test_projects_api.py::test_projects_are_scoped_to_membership_and_creator_is_added_as_owner`; `src/backend/tests/test_documents_api.py::test_document_routes_require_project_membership`; `src/backend/tests/test_compare_api.py::test_compare_routes_require_project_membership`; `src/backend/tests/test_requirements_api.py::test_requirement_routes_require_project_membership`; `src/backend/tests/test_requirement_test_case_mappings_api.py::test_requirement_test_case_mapping_routes_require_project_membership`
+
+- [ ] `SEC-02` Auth rate limiting
+  - Preconditions: auth DB available
+  - Steps: repeat password login/google/register/password-change/avatar upload beyond limits
+  - Expected: returns rate-limit response without leaking plaintext email in bucket keys
+  - Automated: `src/backend/tests/test_auth_api.py`
+
+- [ ] `SEC-03` Upload storage abstraction
+  - Preconditions: local or object storage configured
+  - Steps: upload contract draft/avatar, parse/read/delete where applicable
+  - Expected: no path traversal, object/local cleanup works, parser can read object-backed uploads
+  - Automated: `src/backend/tests/test_upload_storage.py`, `src/backend/tests/test_avatar_api.py`
 
 ## Completion rule
 Mot full regression pass duoc xem la xong khi:

@@ -1,23 +1,28 @@
 # Explanation: Testing Model and Truth Boundaries
 
-Tai lieu nay giai thich cach nghi ve Redline khi test. Neu bo qua phan nay, rat de danh nham warning thanh bug, hoac doi hoi AI lam nhung viec ma he thong co chu y khong cho phep.
+This document explains how to reason about Redline during testing. The main
+risk in regression is confusing deterministic truth with AI support output.
 
-## 1. Redline khong phai mot semantic diff tool
-Gia tri trung tam cua Redline la:
-- parser truth production-like cho DOCX phan mem thong thuong
-- compare truth deterministic
-- AI o lop review intelligence
-- human-confirmed review truth
+## 1. Redline is not an autonomous legal decision system
+
+Redline's core value is:
+
+- parser truth for DOCX/PDF contract drafts;
+- deterministic compare truth;
+- AI at the review-intelligence layer;
+- human-confirmed review truth.
 
 Vi vay, khi test compare:
 - uu tien tinh on dinh, explainable, va partition dung
-- khong doi hoi AI "hieu nghia" de sua compare result
-- khong coi viec AI goi y khac reviewer la bug neu payload hop le
+- do not expect AI to repair deterministic compare results;
+- do not treat different AI wording as a bug if the schema and truth boundary are valid.
 
 ## 2. Thu tu truth trong he thong
 
-### Document version truth
-File upload tao `DocumentVersion`. Day moi chi la source file, chua du dieu kien compare.
+### Contract draft / document version truth
+
+File upload creates a `DocumentVersion` behind the contract facade. This is
+only source material until parsing succeeds.
 
 ### Parser truth
 Sau khi parse, he thong persist `DocumentParseRun`, `DocumentSurface`, `DocumentBlock`, `DocumentTable*`.
@@ -42,11 +47,14 @@ Review truth that chi nam o:
 AI draft co the de xuat, nhung khong duoc xem la final decision.
 
 ### Traceability truth
-Traceability dung khi:
-- user link `ChangeItem` -> `Requirement`
-- user map `Requirement` -> `TestCase`
 
-AI khong duoc tu dong viet mapping nay.
+Traceability truth exists when:
+
+- user links `ChangeItem` -> `Requirement`;
+- user maps `Requirement` -> `TestCase`;
+- user explicitly accepts an AI suggested requirement link.
+
+AI may suggest links, but it must not silently create final mapping truth.
 
 ### Summary / export truth
 Summary la derived output.
@@ -74,9 +82,13 @@ Vi vay, regression order trong pack nay khong phai thu tuc hanh chinh; no phan a
 ## 4. Warning nao la expected, warning nao la bug
 
 ### Expected warning
-Voi parser fixture `v2` hoac parser demo full, 2 warning sau la expected:
-- merged cell normalization
-- header auto field normalization (`PAGE`)
+
+Warnings can be expected for complex contract fixtures, especially:
+
+- merged cell normalization;
+- header auto field normalization (`PAGE`);
+- OCR quality diagnostics;
+- unsupported DOCX elements that are detected but not persisted as parser truth.
 
 Day khong phai regression neu:
 - parser van xong
@@ -89,7 +101,7 @@ Can mo bug neu:
 - compare unlock du version khong co parser truth active
 - change item body bi map sang header/footer sai
 - requirement mapping cua requirement A lai hien duoi requirement B
-- AI write de requirement truth ma user chua confirm
+- AI writes final requirement/traceability/review truth without user confirmation
 - user ngoai project truy cap duoc route cua project
 
 ## 5. Cac loai ket qua "khac du kien" nhung chua chac la bug
@@ -120,15 +132,20 @@ AI khong duoc overwrite compare truth, review truth, hoac traceability truth.
 ### Gate 3 - Requirement-specific impacted tests
 Impacted tests phai gan voi requirement dang linked va mapped, khong phai mot union mo ho.
 
-### Gate 4 - End-to-end continuity
+### Gate 4 - Grounded Contract Q&A
+Contract Q&A answers must cite parsed blocks for contract-specific claims and
+avoid unsupported legal advice when evidence is missing.
+
+### Gate 5 - End-to-end continuity
 Nguoi dung phai di duoc tu:
 - project
-- document
-- version
+- contract
+- draft
 - parser
 - compare
 - review
 - traceability
+- Contract Q&A
 - summary/export
 
 Neu luong nay dut o giua, day la regression nghiem trong cho final demo cho du unit test co van xanh.

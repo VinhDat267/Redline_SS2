@@ -1,8 +1,11 @@
-# Redline VN Demo Showcase
+# Redline Vietnamese Demo Showcase
 
-Status: lightweight Vietnamese demo pack for D4 rehearsal.
+Status: lightweight Vietnamese showcase pack. The full-system demo under
+`docs/demo/full-system-demo/` is the primary production demo path.
 
-For the fuller live-demo package with realistic MSA/SOW contracts, PDF parser fixtures, presenter script, runbook, and manual checklist, use `docs/demo/full-system-demo/README.md`.
+For the fuller live-demo package with realistic MSA/SOW contracts, PDF parser
+fixtures, presenter script, runbook, and manual checklist, use
+`docs/demo/full-system-demo/README.md`.
 
 This folder is not an eval harness. The EN eval pack remains the source of measured readiness. The VN showcase exists to make the product demo feel closer to local contract-review usage while keeping the truth boundaries simple:
 
@@ -17,17 +20,17 @@ This folder is not an eval harness. The EN eval pack remains the source of measu
 | `vn-sample-contract-notes.md` | Source text for VN NDA and VN SOW v1/v2 fixtures |
 | `scripts/build_vn_showcase_fixtures.py` | Generates local DOCX files under `output/demo-showcase/fixtures/` |
 | `scripts/run_vn_showcase_rehearsal.py` | Runs the VN showcase through API upload, parse, compare, RAG AI Review, and streaming Contract Q&A |
-| `d4-demo-script.md` | Step-by-step D4 demo narrative and speaking notes |
-| `d4-demo-handoff.md` | Operator handoff for local services, demo order, and fallbacks |
-| `d4-feature-freeze-checklist.md` | D4 freeze gate and no-go checklist |
-| `vn-rehearsal-evidence.md` | Latest captured local rehearsal evidence and screenshot artifact paths |
+| `demo-script.md` | Step-by-step demo narrative and speaking notes |
+| `operator-handoff.md` | Local services, demo order, health checks, and fallbacks |
+| `release-freeze-checklist.md` | Freeze gate, no-go checklist, and scope boundaries |
+| `vn-rehearsal-evidence.md` | Historical local rehearsal evidence and screenshot artifact paths |
 
 ## Build Fixtures
 
 From the repository root:
 
 ```powershell
-python docs/testing/demo-showcase/scripts/build_vn_showcase_fixtures.py
+docker compose run --rm --no-deps -v "${PWD}:/workspace" -w /workspace backend python docs/testing/demo-showcase/scripts/build_vn_showcase_fixtures.py
 ```
 
 Expected generated files:
@@ -41,22 +44,27 @@ The `output/` directory is ignored by git.
 
 ## Run Rehearsal
 
-Start PostgreSQL, backend, frontend, and configure direct Gemini first. Then run:
+Start PostgreSQL, backend, frontend, and configure direct Gemini first. The API
+rehearsal runner talks to the host backend, so run it from the local backend
+virtual environment:
 
 ```powershell
-python docs/testing/demo-showcase/scripts/run_vn_showcase_rehearsal.py --base-url http://127.0.0.1:8000 --timeout 240
+.\src\backend\.venv\Scripts\python docs/testing/demo-showcase/scripts/run_vn_showcase_rehearsal.py --base-url http://127.0.0.1:8000 --timeout 240
 ```
 
 The runner writes ignored JSON evidence under `output/demo-showcase/`. Use `vn-rehearsal-evidence.md` for the latest captured result that is safe to commit.
 
 ## Demo Handoff
 
-Use these files when preparing a live or recorded demo:
+For current production-style demos, prefer `docs/demo/full-system-demo/`.
+Use this folder when a Vietnamese-language showcase is useful.
 
-1. `d4-feature-freeze-checklist.md` - confirms what is frozen, what is out of scope, and which no-go conditions stop the demo.
-2. `d4-demo-handoff.md` - exact local start sequence, health checks, route order, suggested questions, and fallback handling.
-3. `d4-demo-script.md` - presenter talking points.
-4. `vn-rehearsal-evidence.md` - captured evidence from the latest local rehearsal.
+Useful files:
+
+1. `operator-handoff.md` - local start sequence, health checks, route order, suggested questions, and fallback handling.
+2. `demo-script.md` - presenter talking points.
+3. `release-freeze-checklist.md` - scope boundary and no-go checklist.
+4. `vn-rehearsal-evidence.md` - historical evidence from a prior local rehearsal.
 
 ## Demo Contracts
 
@@ -95,4 +103,4 @@ SOW:
 
 - Keep this as a showcase, not a benchmark.
 - If Vietnamese answers are awkward, use the citation panel to show the source block and explain that EN eval is the measured readiness path.
-- Do not let support routes like analytics or legacy document pages take over the demo. The D4 story is Compare + RAG AI Review + Contract Q&A.
+- Do not let support routes like analytics or legacy document pages take over the demo. The main story is Compare + RAG AI Review + Contract Q&A.

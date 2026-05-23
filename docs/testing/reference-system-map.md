@@ -1,41 +1,68 @@
 # Reference: System Map
 
-Tai lieu nay tong hop cac thong tin "dictionary" de nguoi test mo dung route, dung fixture, va hieu cac status trong Redline.
+This reference maps the Redline runtime, routes, API surface, environment
+variables, and test coverage. Use it when validating a deployment, debugging a
+workflow, or updating tests after a product change.
 
-## Runtime map
+## Runtime Map
 
-### Frontend
-- default URL: `http://127.0.0.1:5173`
-- API base mac dinh: `http://127.0.0.1:8000`
-- file tham chieu: `src/frontend/src/lib/api.js`
+### Default Local Services
 
-### Backend
-- default URL: `http://127.0.0.1:8000`
-- Swagger UI: `http://127.0.0.1:8000/docs`
-- config: `src/backend/app/core/config.py`
-- app entry: `src/backend/app/main.py`
-
-### Database
-- default SQLite path: `src/backend/data/redline.db`
-- env override: `REDLINE_DATABASE_URL`
-
-## Frontend route map
-| Route | Page | Muc dich |
+| Service | Default URL | Notes |
 | --- | --- | --- |
-| `/login` | AuthPage | register / login |
-| `/` | ProjectListPage | project inventory, seed demo, pending invitations |
-| `/projects/:projectId` | ProjectDetailPage | document inventory, team, requirements, test cases, activity |
-| `/projects/:projectId/analytics` | ProjectAnalyticsPage | charts va aggregate analytics |
-| `/documents/:documentId` | DocumentDetailPage | version inventory, upload, compare setup |
-| `/documents/:documentId/parser` | ParserWorkspacePage | parser truth va AI requirement extraction |
-| `/compare-runs/:compareRunId` | CompareScreenPage | compare queue, selected change, AI batch |
-| `/compare-runs/:compareRunId/review` | ReviewPanelPage | review decision, AI signals, comments |
-| `/compare-runs/:compareRunId/impact` | TraceabilityImpactPage | requirement link, impacted tests, mappings |
-| `/compare-runs/:compareRunId/summary` | SummaryExportPage | AI summary, export markdown/docx |
+| Frontend | `http://localhost:5173` | Vite dev server, Docker frontend service, or local `npm run dev` |
+| Backend | `http://127.0.0.1:8000` | FastAPI API and Swagger UI |
+| Swagger UI | `http://127.0.0.1:8000/docs` | Interactive API documentation |
+| PostgreSQL | `127.0.0.1:5432` | Docker Compose `postgres` service with pgvector |
 
-## Backend API map
+### Runtime Files
 
-### Auth
+| Area | Path |
+| --- | --- |
+| Backend settings | `src/backend/app/core/config.py` |
+| Backend entrypoint | `src/backend/app/main.py` |
+| Frontend routes | `src/frontend/src/App.jsx` |
+| Frontend API client | `src/frontend/src/lib/api.js` |
+| Backend env template | `src/backend/.env.example` |
+| Frontend env template | `src/frontend/.env.example` |
+| Docker stack | `compose.yml` |
+
+## Frontend Route Map
+
+| Route | Page | Purpose |
+| --- | --- | --- |
+| `/login` | `AuthPage` | Local auth, registration, Google login |
+| `/` | `LandingOrDashboard` | Landing page or authenticated project list |
+| `/dashboard` | `ProjectListPage` | Project inventory, demo seed, pending invitations |
+| `/account` | `AccountPage` | Profile, avatar, password management |
+| `/contracts` | `WorkspaceGatewayPage` | Contract workspace gateway |
+| `/parser` | `WorkspaceGatewayPage` | Parser workspace gateway |
+| `/compare` | `WorkspaceGatewayPage` | Compare workspace gateway |
+| `/review` | `WorkspaceGatewayPage` | Review workspace gateway |
+| `/contract-q-a` | `WorkspaceGatewayPage` | Contract Q&A gateway |
+| `/analytics` | `WorkspaceGatewayPage` | Analytics gateway |
+| `/projects/:projectId` | `ProjectDetailPage` | Contracts, requirements, test cases, team, activity |
+| `/projects/:projectId/analytics` | `ProjectAnalyticsPage` | Project metrics and charts |
+| `/contracts/:contractId` | `ContractDetailPage` | Contract drafts, upload, parse, compare setup |
+| `/contracts/:contractId/parser` | `ParserWorkspacePage` | Contract-facing parser workspace |
+| `/contracts/:contractId/chat` | `ContractChatPage` | Grounded Contract Q&A |
+| `/documents/:documentId` | `DocumentDetailPage` | Legacy/internal document workspace |
+| `/documents/:documentId/parser` | `ParserWorkspacePage` | Legacy/internal parser workspace |
+| `/compare-runs/:compareRunId` | `CompareScreenPage` | Compare queue and AI review batch generation |
+| `/compare-runs/:compareRunId/review` | `ReviewPanelPage` | Human review workflow |
+| `/compare-runs/:compareRunId/impact` | `TraceabilityImpactPage` | Requirement links, AI suggestions, impacted tests |
+| `/compare-runs/:compareRunId/summary` | `SummaryExportPage` | Summary and export |
+
+## Backend API Map
+
+All product APIs except health are prefixed with `/api/v1`.
+
+### Health
+
+- `GET /health`
+
+### Auth and Account
+
 - `POST /api/v1/auth/register`
 - `POST /api/v1/auth/login`
 - `POST /api/v1/auth/google`
@@ -43,12 +70,16 @@ Tai lieu nay tong hop cac thong tin "dictionary" de nguoi test mo dung route, du
 - `GET /api/v1/auth/me`
 - `PATCH /api/v1/auth/me`
 - `POST /api/v1/auth/me/password`
+- `POST /api/v1/auth/me/avatar`
+- `DELETE /api/v1/auth/me/avatar`
 - `POST /api/v1/auth/project-invitations/{invitation_id}/accept`
 
 ### Demo
+
 - `POST /api/v1/demo/seed`
 
-### Projects / team / analytics / activity
+### Projects, Team, Analytics, Activity
+
 - `GET /api/v1/projects`
 - `POST /api/v1/projects`
 - `GET /api/v1/projects/{project_id}`
@@ -63,7 +94,42 @@ Tai lieu nay tong hop cac thong tin "dictionary" de nguoi test mo dung route, du
 - `GET /api/v1/projects/{project_id}/analytics`
 - `GET /api/v1/projects/{project_id}/activity-logs`
 
-### Documents / versions / parser
+### Contract Facade
+
+These are the preferred product-facing routes.
+
+- `GET /api/v1/projects/{project_id}/contracts`
+- `POST /api/v1/projects/{project_id}/contracts`
+- `GET /api/v1/contracts/{contract_id}`
+- `PATCH /api/v1/contracts/{contract_id}`
+- `DELETE /api/v1/contracts/{contract_id}`
+- `GET /api/v1/contracts/{contract_id}/drafts`
+- `POST /api/v1/contracts/{contract_id}/drafts`
+- `GET /api/v1/contract-drafts/{draft_id}`
+- `PATCH /api/v1/contract-drafts/{draft_id}`
+- `DELETE /api/v1/contract-drafts/{draft_id}`
+- `POST /api/v1/contract-drafts/{draft_id}/parse`
+- `POST /api/v1/contracts/{contract_id}/compare-runs`
+- `GET /api/v1/contract-compare-runs/{compare_run_id}`
+- `GET /api/v1/contract-compare-runs/{compare_run_id}/clause-changes`
+
+### Contract Q&A
+
+- `POST /api/v1/contracts/{contract_id}/chat/sessions`
+- `GET /api/v1/contracts/{contract_id}/chat/sessions`
+- `GET /api/v1/contracts/{contract_id}/chat/sessions/{chat_session_id}/messages`
+- `POST /api/v1/contracts/{contract_id}/chat/sessions/{chat_session_id}/messages`
+- `POST /api/v1/contracts/{contract_id}/chat/sessions/{chat_session_id}/messages/stream`
+- `POST /api/v1/contracts/{contract_id}/chat/sessions/{chat_session_id}/attempts`
+- `GET /api/v1/contracts/{contract_id}/chat/sessions/{chat_session_id}/attempts/{attempt_id}`
+- `POST /api/v1/contracts/{contract_id}/chat/sessions/{chat_session_id}/attempts/{attempt_id}/cancel`
+- `POST /api/v1/contracts/{contract_id}/chat/sessions/{chat_session_id}/attempts/{attempt_id}/stream`
+
+### Internal/Legacy Document Routes
+
+These routes remain supported because the internal model names are still
+`Document` and `DocumentVersion`.
+
 - `GET /api/v1/projects/{project_id}/documents`
 - `POST /api/v1/projects/{project_id}/documents`
 - `GET /api/v1/documents/{document_id}`
@@ -71,20 +137,22 @@ Tai lieu nay tong hop cac thong tin "dictionary" de nguoi test mo dung route, du
 - `DELETE /api/v1/documents/{document_id}`
 - `GET /api/v1/documents/{document_id}/versions`
 - `POST /api/v1/documents/{document_id}/versions`
+- `GET /api/v1/documents/{document_id}/parser-workspace`
 - `GET /api/v1/document-versions/{version_id}`
 - `PATCH /api/v1/document-versions/{version_id}`
 - `DELETE /api/v1/document-versions/{version_id}`
 - `POST /api/v1/document-versions/{version_id}/parse`
-- `GET /api/v1/documents/{document_id}/parser-workspace`
 - `GET /api/v1/document-versions/{version_id}/parser-surfaces/{surface_id}`
 
-### AI requirement extraction
+### AI Requirement Extraction
+
 - `GET /api/v1/document-versions/{version_id}/requirement-candidates`
 - `POST /api/v1/document-versions/{version_id}/requirement-candidates/generate`
 - `POST /api/v1/requirement-candidates/{candidate_id}/accept`
 - `POST /api/v1/requirement-candidates/{candidate_id}/reject`
 
-### Compare / AI batch / summary / export
+### Compare, AI Review, Summary, Export
+
 - `POST /api/v1/documents/{document_id}/compare-runs`
 - `GET /api/v1/compare-runs/{compare_run_id}`
 - `GET /api/v1/compare-runs/{compare_run_id}/change-items`
@@ -94,15 +162,19 @@ Tai lieu nay tong hop cac thong tin "dictionary" de nguoi test mo dung route, du
 - `POST /api/v1/compare-runs/{compare_run_id}/ai-summary-drafts/generate`
 - `GET /api/v1/compare-runs/{compare_run_id}/export/docx`
 
-### Change items / review / traceability
+### Change Items, Review, Traceability
+
 - `GET /api/v1/change-items/{change_item_id}`
 - `PATCH /api/v1/change-items/{change_item_id}`
 - `POST /api/v1/change-items/{change_item_id}/comments`
 - `POST /api/v1/change-items/{change_item_id}/ai-review-draft/generate`
+- `POST /api/v1/change-items/{change_item_id}/suggest-links`
 - `POST /api/v1/change-items/{change_item_id}/requirement-links`
+- `POST /api/v1/change-items/{change_item_id}/requirement-links/ai-suggested`
 - `DELETE /api/v1/change-items/{change_item_id}/requirement-links/{requirement_id}`
 
-### Requirements / test cases / mappings
+### Requirements, Test Cases, Mappings
+
 - `GET /api/v1/projects/{project_id}/requirements`
 - `POST /api/v1/projects/{project_id}/requirements`
 - `GET /api/v1/requirements/{requirement_id}`
@@ -117,108 +189,100 @@ Tai lieu nay tong hop cac thong tin "dictionary" de nguoi test mo dung route, du
 - `POST /api/v1/requirements/{requirement_id}/test-case-mappings`
 - `DELETE /api/v1/requirements/{requirement_id}/test-case-mappings/{test_case_id}`
 
-## Status va enum map
+## Status and Enum Map
 
-### Document version parse status
-- `pending`
-- `parsed`
-- `parsed_with_warnings`
-- `failed`
+| Entity | Values |
+| --- | --- |
+| Draft parse status | `pending`, `parsed`, `parsed_with_warnings`, `failed` |
+| Compare run status | `pending`, `running`, `completed`, `completed_with_warnings`, `failed` |
+| Change type | `added`, `removed`, `modified` |
+| Review status | `open`, `in_review`, `resolved` |
+| Surface type | `body`, `header`, `footer`, `footnote`, `endnote`, `page` |
+| AI review draft | `pending`, `generated`, `failed` |
+| Requirement candidate | `pending`, `accepted`, `rejected` |
+| Invitation | `pending`, `accepted`, `revoked` |
 
-### Compare run status
-- `pending`
-- `running`
-- `completed`
-- `completed_with_warnings`
-- `failed`
+## Truth Boundaries
 
-### Change item
-- `change_type`: `added`, `removed`, `modified`
-- `review_status`: `open`, `in_review`, `resolved`
-- `surface_type`: `body`, `header`, `footer`, `footnote`, `endnote`
+- Parser truth lives in `DocumentVersion.active_parse_run_id` and related parse tables.
+- Compare truth lives in `CompareRun` and `ChangeItem`.
+- Human review truth lives in `ChangeItem.review_status`, `assignee_user_id`, `summary`, and `ReviewComment`.
+- Requirement/test traceability truth is created by user-confirmed links and mappings.
+- AI Review, AI requirement extraction, AI traceability suggestions, and Contract Q&A are support layers.
+- Summary/export is derived output, not an independent truth source.
 
-### AI review draft
-- `generation_status`: `pending`, `generated`, `failed`
-- `recommended_review_status`: chi hop le voi `open`, `in_review`
+## Environment Variables
 
-### Requirement candidate
-- `pending`
-- `accepted`
-- `rejected`
-
-### Invitation
-- `pending`
-- `accepted`
-- `revoked`
-
-## Truth boundaries can nho khi test
-- parser truth active nam o `DocumentVersion.active_parse_run_id`
-- compare truth nam o `CompareRun` + `ChangeItem`
-- review truth da confirm nam o `ChangeItem.review_status`, `assignee_user_id`, `summary`, va `ReviewComment`
-- AI chi duoc ghi vao `AIReviewDraft` va `AIRequirementCandidate`
-- summary/export la derived output, khong phai entity truth doc lap
-
-## Env variables can biet
-| Variable | Mac dinh | Vai tro |
+| Variable | Default | Role |
 | --- | --- | --- |
-| `REDLINE_DATABASE_URL` | SQLite local | doi DB khi test |
-| `REDLINE_UPLOADS_DIR` | `src/backend/uploads` | noi luu file upload |
-| `REDLINE_AUTH_SECRET` | local dev secret | ky auth session |
-| `REDLINE_AUTH_COOKIE_SAMESITE` | `lax` | SameSite policy cho auth cookie |
-| `REDLINE_AI_GEMINI_API_KEY` | none | AI primary |
-| `REDLINE_AI_GEMINI_MODEL` | `gemini-3.1-flash-lite` | model primary |
-| `REDLINE_AI_OPENAI_API_KEY` | none | AI fallback |
-| `REDLINE_AI_OPENAI_MODEL` | `gpt-4.1-mini` | model fallback |
-| `REDLINE_AI_OPENAI_BASE_URL` | none | OpenAI-compatible endpoint |
-| `REDLINE_AI_BATCH_WORKER_ENABLED` | `true` | bat / tat batch worker |
-| `VITE_API_BASE_URL` | `http://127.0.0.1:8000` | frontend API target |
+| `REDLINE_DATABASE_URL` | PostgreSQL local URL | Runtime database |
+| `REDLINE_UPLOADS_DIR` | `src/backend/uploads` | Local upload directory |
+| `REDLINE_UPLOAD_STORAGE_BACKEND` | `local` | `local`, `persistent-local`, `ephemeral-demo`, or `object` |
+| `REDLINE_OBJECT_STORAGE_*` | empty | S3-compatible storage settings for deployments |
+| `REDLINE_AUTH_SECRET` | local dev secret | Signs auth sessions; replace outside local dev |
+| `REDLINE_AUTH_COOKIE_SAMESITE` | `lax` | Auth cookie SameSite policy |
+| `REDLINE_CORS_ORIGINS` | localhost origins | Cookie-authenticated browser origins |
+| `REDLINE_GOOGLE_CLIENT_ID` | empty | Google OAuth Web Client ID |
+| `REDLINE_AI_PRIMARY_PROVIDER` | `gemini` | Primary LLM provider |
+| `REDLINE_AI_GEMINI_API_KEY` | empty | Gemini API key |
+| `REDLINE_AI_GEMINI_MODEL` | `gemini-3.1-flash-lite` | Primary Gemini model |
+| `REDLINE_RAG_EMBEDDING_PROVIDER` | `local-hash` unless env overrides | Embedding provider |
+| `REDLINE_RAG_EMBEDDING_MODEL` | `gemini-embedding-2` | Gemini embedding model |
+| `REDLINE_RAG_EMBEDDING_DIMENSIONS` | `3072` | pgvector embedding dimension |
+| `REDLINE_CONTRACT_CHAT_STREAMING_ENABLED` | `true` | Backend streaming kill switch |
+| `VITE_API_BASE_URL` | `http://127.0.0.1:8000` | Frontend API target |
+| `VITE_GOOGLE_CLIENT_ID` | empty | Google login client ID |
+| `VITE_CONTRACT_CHAT_STREAMING_ENABLED` | `true` | Frontend streaming kill switch |
 
-## Canonical fixture set
+## Canonical Fixture Sets
 
-### Current legal demo fixtures
-- `docs/demo/full-system-demo/source-contracts.md`
-- `docs/demo/full-system-demo/scripts/build_full_demo_fixtures.py`
-- `docs/testing/eval-pack/sample-contract-notes.md`
-- `docs/testing/demo-showcase/vn-sample-contract-notes.md`
+| Fixture set | Source |
+| --- | --- |
+| Full system demo | `docs/demo/full-system-demo/source-contracts.md` |
+| Full system fixture builder | `docs/demo/full-system-demo/scripts/build_full_demo_fixtures.py` |
+| English eval pack | `docs/testing/eval-pack/sample-contract-notes.md` |
+| Vietnamese showcase | `docs/testing/demo-showcase/vn-sample-contract-notes.md` |
 
-Legacy SRS parser fixtures were removed from the source tree after the product pivot to AI Contract Review.
+Generated files belong under `output/` and are ignored by git.
 
-## Automated suites
+## Automated Suites
 
 ### Backend
+
 ```powershell
 cd src/backend
 .\.venv\Scripts\python -m pytest tests -q
 ```
 
+Expected baseline: `265 passed`.
+
 ### Frontend
+
 ```powershell
 cd src/frontend
 npm run test -- --run
 npm run build
+npm audit
 ```
 
-## Backend test file map
-- auth / seed: `src/backend/tests/test_auth_api.py`
-- projects / team: `src/backend/tests/test_projects_api.py`
-- project activity log: `src/backend/tests/test_activity_logs_api.py`
-- documents / versions: `src/backend/tests/test_documents_api.py`
-- parser engine: `src/backend/tests/test_document_parser*.py`
-- parser workspace: `src/backend/tests/test_parser_workspace_api.py`
-- compare: `src/backend/tests/test_compare_api.py`
-- change items / review: `src/backend/tests/test_change_items_api.py`
-- AI review / batch jobs: `src/backend/tests/test_ai_review_drafts_api.py`, `test_ai_batch_jobs_api.py`, `test_ai_batch_worker.py`, `test_llm_adapter.py`
-- AI summary / export / analytics: `test_ai_summary_api.py`, `test_export_docx_api.py`, `test_analytics_api.py`
-- requirements / test cases / mappings: `test_requirements_api.py`, `test_test_cases_api.py`, `test_requirement_test_case_mappings_api.py`, `test_requirement_candidates_api.py`
+Expected baseline: `111 passed`, build succeeds, `0 vulnerabilities`.
 
-## Frontend test file map
-- auth: `src/frontend/src/pages/AuthPage.test.jsx`
-- project list: `src/frontend/src/pages/ProjectListPage.test.jsx`
-- project detail: `src/frontend/src/pages/ProjectDetailPage.test.jsx`
-- document detail: `src/frontend/src/pages/DocumentDetailPage.test.jsx`
-- parser workspace: `src/frontend/src/pages/ParserWorkspacePage.test.jsx`
-- compare workspace: `src/frontend/src/pages/CompareScreenPage.test.jsx`
-- review workspace: `src/frontend/src/pages/ReviewPanelPage.test.jsx`
-- traceability: `src/frontend/src/pages/TraceabilityImpactPage.test.jsx`
-- summary/export: `src/frontend/src/pages/SummaryExportPage.test.jsx`
-- analytics: `src/frontend/src/pages/ProjectAnalyticsPage.test.jsx`
+## Backend Test File Map
+
+- auth/account: `src/backend/tests/test_auth_api.py`, `test_avatar_api.py`
+- projects/team/activity: `test_projects_api.py`, `test_activity_logs_api.py`
+- contracts/documents/uploads: `test_contracts_api.py`, `test_documents_api.py`, `test_upload_storage.py`
+- parser: `test_document_parser*.py`, `test_document_pdf_parser.py`, `test_parser_workspace_api.py`
+- compare/change items: `test_compare_api.py`, `test_change_items_api.py`
+- AI review/batch/summary: `test_ai_review_drafts_api.py`, `test_ai_batch_jobs_api.py`, `test_ai_batch_worker.py`, `test_ai_summary_api.py`, `test_llm_adapter.py`
+- Contract Q&A/RAG: `test_contracts_api.py`, `test_rag_service.py`, `test_rag_maintenance.py`
+- requirements/test cases/mappings: `test_requirements_api.py`, `test_test_cases_api.py`, `test_requirement_test_case_mappings_api.py`, `test_requirement_candidates_api.py`
+- export/analytics/schema/deploy config: `test_export_docx_api.py`, `test_analytics_api.py`, `test_schema_baseline.py`, `test_database_settings.py`, `test_deployment_config.py`
+
+## Frontend Test File Map
+
+- auth/session/account: `src/frontend/src/pages/AuthPage.test.jsx`, `src/frontend/src/auth/AuthContext.test.jsx`, `src/frontend/src/pages/AccountPage.test.jsx`
+- shell/routes: `src/frontend/src/app-routes.test.jsx`, `src/frontend/src/components/ScreenFrame.test.jsx`
+- project/contract/document: `ProjectListPage.test.jsx`, `ProjectDetailPage.test.jsx`, `ContractDetailPage.test.jsx`, `DocumentDetailPage.test.jsx`
+- parser/compare/review: `ParserWorkspacePage.test.jsx`, `CompareScreenPage.test.jsx`, `ReviewPanelPage.test.jsx`
+- traceability/summary/analytics/chat: `TraceabilityImpactPage.test.jsx`, `SummaryExportPage.test.jsx`, `ProjectAnalyticsPage.test.jsx`, `ContractChatPage.test.jsx`

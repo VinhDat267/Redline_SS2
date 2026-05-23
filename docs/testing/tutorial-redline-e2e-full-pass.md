@@ -1,274 +1,259 @@
-# Tutorial: Redline E2E Full Pass
+# Tutorial: Redline End-to-End Full Pass
 
-Tai lieu nay huong dan mot buoi rehearsal tu dau den cuoi de test toan bo luong he thong Redline bang UI that.
+This tutorial walks through a complete Redline workflow in the browser. It is
+intended for QA, release validation, and live-demo rehearsal.
 
-## Muc tieu
-Ket thuc tutorial, ban phai co du bang chung cho cac nhom tinh nang sau:
-- auth va invitation
-- project / document / version workflow
-- parser truth
-- AI requirement extraction
-- deterministic compare
-- AI review draft batch
-- human review decision + comments
-- traceability requirement -> test case
-- AI summary + export
-- analytics + activity log
+## Goal
 
-## Audience
-Nguoi moi vao project, QA support, hoac presenter can chay mot full walkthrough.
+By the end of the run, you should have validated:
 
-## Truoc khi bat dau
+- local or Google authentication;
+- project and contract workspace creation;
+- DOCX/PDF draft upload;
+- parser truth and parser diagnostics;
+- deterministic compare;
+- AI Review batch generation;
+- human review decisions and comments;
+- traceability links and impacted tests;
+- Contract Q&A with citations;
+- summary/export;
+- analytics and activity logging.
 
-### 1. Khoi dong backend
+## Recommended Runtime
+
+Use Docker for the most reproducible path:
+
 ```powershell
-cd src/backend
-python -m venv .venv
-.\.venv\Scripts\python -m pip install -e .[dev]
-.\.venv\Scripts\python -m alembic upgrade head
-.\.venv\Scripts\python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+Copy-Item src/backend/.env.example src/backend/.env
+Copy-Item src/frontend/.env.example src/frontend/.env
+docker compose up --build -d
+docker compose exec backend python -m app.seed
 ```
 
-### 2. Khoi dong frontend
+Open:
+
+- frontend: `http://localhost:5173`
+- backend docs: `http://localhost:8000/docs`
+
+Provider-backed AI features require `REDLINE_AI_GEMINI_API_KEY` in
+`src/backend/.env`. Without it, run the non-AI parts and mark AI cases as
+`blocked by env`.
+
+## Test Accounts
+
+After seeding demo data, these accounts exist:
+
+| Email | Password |
+| --- | --- |
+| `vinh@example.com` | `redline123` |
+| `my@example.com` | `redline123` |
+| `ly@example.com` | `redline123` |
+
+You can also register fresh accounts from `/login`.
+
+## Fixtures
+
+For the main product demo, build realistic contract fixtures:
+
 ```powershell
-cd src/frontend
-npm install
-npm run dev
+docker compose run --rm --no-deps -v "${PWD}:/workspace" -w /workspace backend python docs/demo/full-system-demo/scripts/build_full_demo_fixtures.py
 ```
 
-### 3. Cau hinh de test AI day du
-Them vao `src/backend/.env` neu ban muon chay het AI flow:
-```env
-REDLINE_AI_GEMINI_API_KEY=...
-REDLINE_AI_OPENAI_API_KEY=...
-REDLINE_AI_OPENAI_BASE_URL=... # chi neu dung OpenAI-compatible provider khac
-```
+Generated fixtures are written to `output/full-system-demo/fixtures/`.
 
-### 4. Fixture dung trong tutorial
-- current demo/eval sources:
-  - `docs/demo/full-system-demo/source-contracts.md`
-  - `docs/demo/full-system-demo/scripts/build_full_demo_fixtures.py`
-  - `docs/testing/eval-pack/sample-contract-notes.md`
+Use:
 
-## Scenario va vai tro
-- `Owner`: tao project, setup documents, upload, parse, compare
-- `Reviewer`: chap nhan invitation, review change items, comment, traceability
+- `redline-full-demo-msa-v1-master-services-agreement.docx`
+- `redline-full-demo-msa-v2-master-services-agreement.docx`
+- `redline-full-demo-sow-v1-implementation-sow.docx`
+- `redline-full-demo-sow-v2-implementation-sow.docx`
+- `redline-full-demo-security-addendum-text.pdf`
+- `redline-full-demo-security-addendum-scan.pdf`
 
-De de theo doi, dung 2 email mau:
-- `owner.redline@example.com`
-- `reviewer.redline@example.com`
+## Phase 1 - Authentication
 
-## Phase 1 - Dang ky owner va tao project
-1. Mo `http://127.0.0.1:5173/login`
-2. Chon `Sign up`
-3. Tao account `owner.redline@example.com`
-4. Sau login, ban phai thay `Project List`
-5. Bam `Create Project`
-6. Tao project:
-   - Name: `Redline QA Full Pass`
-   - Description: `Full feature regression workspace`
+1. Open `http://localhost:5173/login`.
+2. Sign in with `vinh@example.com` / `redline123`, or register a new account.
+3. Confirm the authenticated project inventory loads.
 
-### Expected result
-- Project moi xuat hien trong inventory
-- Ban co the mo `Project Detail`
-- Khong co loi `401`
+Expected result:
 
-## Phase 2 - Tao data setup trong project
-Trong `Project Detail`, tao 2 document:
+- user lands on the project/dashboard view;
+- no `401` loop;
+- profile menu is visible;
+- `/account` opens and shows profile controls.
 
-### Contract A - core compare
-- Title: `Master Services Agreement`
-- Type: `MSA`
+## Phase 2 - Project and Team Setup
 
-### Contract B - parser coverage
-- Title: `Security Addendum`
-- Type: `DPA`
+1. Create a project named `MedNova Vendor Review`.
+2. Open the project workspace.
+3. Create or invite a reviewer by email from the Team tab.
+4. If testing invitations, sign out and register/login as the invited email.
+5. Accept the pending invitation from the project inventory.
 
-Tiep theo, trong cung project, tao toi thieu:
+Expected result:
 
-### Requirements
-- `REQ-AUTH-001` - Secure login
-- `REQ-SEC-002` - MFA for privileged users
-- `REQ-LOG-003` - Audit logging
+- project appears for the owner;
+- pending invitation appears for the invited email;
+- after acceptance, the reviewer appears under active members;
+- activity log records project/team operations.
 
-### Test cases
-- `TC-AUTH-001` - Login with valid credentials
-- `TC-SEC-002` - Enforce MFA for admin
-- `TC-LOG-003` - Audit log entry after sign-in
+## Phase 3 - Contract Workspace
 
-### Expected result
-- `Document Inventory` co 2 document
-- `Requirement Inventory` va `Test Case Inventory` co du record
-- `Activity Log` sau do phai co event create document / requirement / test case
+1. In the project workspace, create a contract named `Aster Cloud Master Services Agreement`.
+2. Open the contract workspace.
+3. Upload MSA v1 as draft `v1.0`.
+4. Upload MSA v2 as draft `v2.0`.
 
-## Phase 3 - Test invitation flow
-1. Trong `Project Detail`, mo tab `Team`
-2. Them member:
-   - Email: `reviewer.redline@example.com`
-   - Role: `reviewer` hoac role hien co trong form
-3. Xac nhan ket qua la pending invitation
-4. Dang xuat owner
-5. Dang ky account moi bang dung email `reviewer.redline@example.com`
-6. Sau login, tai `Project List`, phai thay card `Pending Invitations`
-7. Bam `Accept Invitation`
+Expected result:
 
-### Expected result
-- Trong owner account, `Project Detail -> Team`, reviewer hien trong `Active Members`
-- `Pending Invitations` cua project giam hoac bien mat
-- Trong reviewer account, project xuat hien trong `Project List`
+- both drafts appear in draft history;
+- DOCX/PDF-only validation is enforced;
+- draft rows expose parse actions and parser links.
 
-## Phase 4 - Upload va parse parser coverage fixture
-1. Dang nhap lai bang owner
-2. Mo `Parser Coverage Fixture`
-3. Tai `Version Inventory`, upload file:
-   - label: `parser-v1`
-   - file: DOCX/PDF generated from `docs/demo/full-system-demo/source-contracts.md` or another current legal contract fixture
-4. Sau khi upload xong, bam `Parser Workspace` ngay tren version row
-5. Bam `Parse`
+## Phase 4 - Parse Drafts
 
-### Expected result
-- Version parse thanh cong
-- `parse_status` expected: `parsed_with_warnings`
-- Parser summary cho thay:
-  - surface count > 0
-  - warning count > 0
-- Ban co the chuyen qua:
-  - `Body`
-  - `Header`
-  - `Footer`
-  - `Footnote`
-  - `Endnote`
-- Table metadata va row-level truth hien duoc trong inspect panel
+1. Open the parser workspace for `v1.0`.
+2. Run Parse.
+3. Repeat for `v2.0`.
+4. Inspect body/table/header/footer/page surfaces where available.
 
-## Phase 5 - Test AI requirement extraction
-Van o `Parser Workspace` cua `parser-v1`:
-1. Bam `Extract Requirements with AI`
-2. Doi candidate list load xong
-3. Xac nhan candidate summary co `pending`
-4. Accept it nhat 1 candidate
-5. Reject it nhat 1 candidate
+Expected result:
 
-### Expected result
-- Candidate list hien:
-  - `requirement_code`
-  - `title`
-  - `confidence`
-  - `source_section`
-  - provider / fallback metadata neu co
-- Sau accept:
-  - candidate chuyen sang `accepted`
-  - requirement that duoc tao hoac reuse
-- Sau reject:
-  - candidate chuyen sang `rejected`
-  - requirement truth khong bi tao boi reject action
+- each draft reaches `parsed` or `parsed_with_warnings`;
+- `active_parse_run_id` exists for each parsed draft;
+- diagnostics/warnings are visible and do not block compare unless parse failed;
+- compare setup remains locked for drafts without active parser truth.
 
-## Phase 6 - Upload va parse core compare pair
-1. Mo document contract demo hien tai
-2. Upload 2 drafts tu full-system demo fixtures:
-   - `v1.0` -> baseline contract draft
-   - `v2.0` -> revised contract draft
-3. Parse ca 2 versions bang `Parser Workspace`
-4. Quay lai `Document Detail`
+Optional PDF parser smoke:
 
-### Expected result
-- Ca 2 version xuat hien trong `Version Inventory`
-- Compare chi duoc mo khi version co `active_parse_run_id`
-- Neu version nao parse fail thi compare van bi khoa
+1. Upload `redline-full-demo-security-addendum-text.pdf`.
+2. Parse it.
+3. Upload `redline-full-demo-security-addendum-scan.pdf`.
+4. Parse it to exercise OCR fallback.
 
-## Phase 7 - Tao compare run
-1. Trong `Compare Versions`, chon:
-   - Source: `v1.0`
-   - Target: `v2.0`
-2. Bam `Launch Compare`
+## Phase 5 - Deterministic Compare
 
-### Expected result
-- Mo sang `Compare Workspace`
-- `Change Queue` co du lieu that
-- Co the thay item `added`, `removed`, `modified`
+1. Return to the contract workspace.
+2. Select source draft `v1.0`.
+3. Select target draft `v2.0`.
+4. Run compare.
 
-## Phase 8 - Batch AI review drafts
-1. Trong `Compare Workspace`, bam `Generate AI Drafts`
-2. Theo doi job status, badges, va queue refresh
-3. Neu refresh trang giua chung, trang van phai resume duoc polling tu active job
+Expected result:
 
-### Expected result
-- Tao `AIBatchJob` ngay, khong block UI
-- Queue hien trang thai AI theo tung item
-- Sau khi job xong, majority item chuyen sang `generated`
-- Theo benchmark rehearsal hien tai, cap fixture core da tung cho `11/11 generated`
+- compare run opens;
+- change queue contains added/removed/modified clause changes;
+- selected change shows source and target text;
+- compare result does not depend on AI.
 
-## Phase 9 - Human review workspace
-1. Chon 1 change item trong compare queue
-2. Chuyen sang `Review Workspace`
-3. Kiem tra `AI Review Signals`
-4. Luu review decision:
-   - review status: `in_review`
-   - assignee: reviewer hoac owner
-   - summary: mo ta ngan
-5. Them 1 comment
-6. Chon 1 item khac va dat `resolved`
-7. O mot item bat ky, bam `Regenerate AI Draft`
-8. Thu clear assignee va summary roi save lai
+## Phase 6 - AI Review Batch
 
-### Expected result
-- AI draft va confirmed review data tach biet ro
-- Save review update thanh cong
-- Comment moi xuat hien trong history
-- Clear `assignee` / `summary` gui `null` dung nghia, khong de stale data
-- Review queue filter + pagination van giu duoc selected item
+1. In Compare Workspace, click Generate AI Drafts.
+2. Watch the batch job progress.
+3. Refresh the page while a job is active to verify polling resumes.
 
-## Phase 10 - Traceability va impacted tests
-1. Tu `Review Workspace`, mo `Traceability / Impact`
-2. Link change item voi it nhat 1 requirement
-3. Tao it nhat 1 mapping requirement -> test case
-4. Kiem tra `Impacted Tests`
-5. Thu unlink requirement hoac xoa mapping de xac nhan state cap nhat dung
+Expected result:
 
-### Expected result
-- Requirement link xuat hien trong `Impact Chain`
-- `Impacted Tests` chi hien test case map dung requirement dang linked
-- Mapping manager khong duoc tron test case cua requirement khac
+- job is created immediately;
+- UI polls status instead of blocking;
+- generated items show AI metadata;
+- failed provider calls show readable errors without deleting compare truth.
 
-## Phase 11 - Summary / Export
-1. Mo `Summary / Export`
-2. Bam `Generate AI Summary`
-3. Sua summary text trong editor
-4. Thu `Export Markdown`
-5. Thu `Export DOCX`
+If no AI key is configured, mark this phase as `blocked by env`.
 
-### Expected result
-- Summary draft sinh tu compare + review + impact context
-- `Ready to export` chi bat len khi khong con item `open` / `in_review`
-- Export Markdown tao file `.md`
-- Export DOCX tai file report `.docx`
+## Phase 7 - Human Review
 
-## Phase 12 - Analytics va activity log
-1. Quay lai `Project Detail`
-2. Mo `Activity`
-3. Mo `Analytics`
+1. Open the Review route from a selected change.
+2. Read AI analysis if available.
+3. Set review status to `in_review`.
+4. Assign a reviewer.
+5. Add a summary and comment.
+6. Save.
+7. Mark at least one item `resolved`.
 
-### Expected result
-- `Activity Log` co event cho create, upload, parse, compare, review
-- `Project Analytics` co:
-  - total changes
-  - review progress
-  - compare runs
-  - AI accuracy / confidence neu du du lieu
-  - change type / review status charts
-  - per-document breakdown
+Expected result:
 
-## Ket thuc tutorial
-Ban xem nhu full pass thanh cong khi co du bang chung sau:
-- 2 account login duoc
-- invitation duoc accept
-- parser coverage doc parse du tat ca surfaces canonic
-- core compare pair tao compare run thanh cong
-- AI requirement extraction co accept + reject
-- AI review batch chay xong
-- review decision + comments luu duoc
-- traceability link + mapping hoat dong
-- summary export ra file
-- analytics va activity log co du lieu that
+- AI draft and confirmed review data remain separate;
+- review status, assignee, summary, and comment persist;
+- clearing assignee/summary sends `null` and removes stale values;
+- review queue filtering and pagination keep the selected item coherent.
 
-## Neu co buoc fail
-Chuyen sang `how-to-run-full-regression.md` de dung nhanh checklist troubleshooting va cach danh dau `blocked`, `failed`, `needs-investigation`.
+## Phase 8 - Traceability and Impact
+
+1. Open Traceability / Impact for a change item.
+2. Link at least one requirement.
+3. Create a requirement-to-test-case mapping.
+4. Inspect impacted tests.
+5. Unlink/delete a mapping to verify state refresh.
+
+Expected result:
+
+- linked requirements are scoped to the same project;
+- impacted tests are derived from confirmed mappings;
+- AI-suggested links require explicit user acceptance;
+- stale selections clear after unlink/delete.
+
+## Phase 9 - Contract Q&A
+
+1. Open `/contracts/:contractId/chat`.
+2. Ask: `What changed in the liability cap between the two MSA drafts?`
+3. Ask: `Does the new draft still exclude confidentiality breaches from the liability cap?`
+4. Open the Source Evidence panel.
+5. Test Stop and Retry on a longer question.
+
+Expected result:
+
+- answer streams or falls back to JSON depending on config;
+- contract-specific claims include citations;
+- citations point to parsed source blocks;
+- unsupported questions do not become unsupported legal advice;
+- Stop/Retry does not leave the session stuck.
+
+## Phase 10 - Summary and Export
+
+1. Open Summary / Export.
+2. Generate an AI summary if AI is configured.
+3. Edit the summary text.
+4. Export Markdown.
+5. Export DOCX.
+
+Expected result:
+
+- summary uses compare/review/impact context;
+- export readiness reflects open/in-review items;
+- Markdown and DOCX exports complete;
+- layout does not clip metrics or export controls.
+
+## Phase 11 - Analytics and Activity
+
+1. Return to the project workspace.
+2. Open Activity.
+3. Open Analytics.
+
+Expected result:
+
+- Activity contains create/upload/parse/compare/review events.
+- Analytics shows project-level counts, change distribution, review progress, and document breakdown.
+
+## Completion Criteria
+
+A full pass is acceptable when:
+
+- authentication and account page work;
+- project/team/contract CRUD works;
+- at least two drafts parse successfully;
+- compare run produces real change items;
+- human review and comments persist;
+- traceability mappings and impacted tests are correct;
+- Contract Q&A produces grounded answers when AI is configured;
+- summary/export works;
+- analytics/activity reflect the workflow.
+
+If a phase fails, record:
+
+- account used;
+- route;
+- fixture;
+- expected vs actual behavior;
+- screenshot/export artifact if useful;
+- whether failure is a product bug, environment issue, or blocked AI provider.

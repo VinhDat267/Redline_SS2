@@ -1,22 +1,23 @@
 # Redline Testing Documentation Pack
 
-Bộ tài liệu testing là source of truth cho việc demo, smoke test, manual regression, và handoff QA của Redline.
+This pack is the source of truth for Redline smoke tests, manual regression,
+AI evaluation, demo rehearsal, and release-readiness checks.
 
-Cập nhật: 2026-05-23.
+Updated: 2026-05-23.
 
 ## Related Packs
 
 | Pack | Location | Purpose |
 |------|----------|---------|
 | EN Eval Pack | `eval-pack/README.md` | AI Review + Contract Q&A evaluation harness (measured readiness) |
-| VN Demo Showcase | `demo-showcase/README.md` | Vietnamese D4 demo fixtures, freeze checklist, handoff notes |
-| Full System Demo | `../../demo/full-system-demo/README.md` | Realistic MSA/SOW demo kit with presenter script |
+| VN Demo Showcase | `demo-showcase/README.md` | Vietnamese showcase fixtures and historical rehearsal evidence |
+| Full System Demo | `../demo/full-system-demo/README.md` | Realistic MSA/SOW demo kit with presenter script |
 
 ## Audience
 
-- **Technical lead / main developer:** chạy full rehearsal và regression có bằng chứng
-- **QA / testing support:** checklist rõ ràng theo feature, không phải tự suy luận từ code
-- **Presenter / document owner:** luồng demo từ đầu đến cuối, có ghi rõ kết quả mong đợi
+- **Engineering / operations:** run full regression with clear evidence
+- **QA / testing:** execute feature checklists without reading source code
+- **Demo owner:** rehearse the end-to-end workflow with expected results and fallback paths
 
 ## Scope Coverage
 
@@ -27,13 +28,13 @@ Cập nhật: 2026-05-23.
 | Auth | Local register/login, Google OAuth, cookie/CSRF sessions, rate limiting, token revocation |
 | User | Profile update, avatar upload/remove, password change |
 | Project | CRUD, membership, email invitations, pending invitation flow |
-| Contract/Document | CRUD, DOCX upload, PDF upload |
+| Contract/Document | Contract facade, legacy document internals, DOCX upload, PDF upload |
 | Parser | DOCX body/header/footer/footnote/endnote/table, PDF text-layer + OCR fallback, legal numbering, quality diagnostics |
 | Compare | Deterministic clause diff, change items |
 | AI Review | RAG-enhanced batch/per-item generation, with/without-RAG modes |
 | Review | Human review status, comments |
 | Contract Q&A | Attempt-driven streaming, grounded citations, session memory, cancel/retry |
-| Traceability | Requirement ↔ test case mapping, impacted test calculation |
+| Traceability | Requirement links, AI link suggestions, requirement-test case mapping, impacted test calculation |
 | Summary/Export | AI summary, Markdown export, DOCX report |
 | Analytics | Project-level statistics, review status |
 | Activity Log | Project activity tracking |
@@ -41,28 +42,28 @@ Cập nhật: 2026-05-23.
 
 ### Không cover
 
-- Semantic compare (beyond deterministic block diff)
-- Auto traceability mapping bằng AI
+- Semantic compare beyond deterministic block diff
+- Fully autonomous traceability mapping without user confirmation
 - Full OOXML rendering
 - Enterprise RBAC / notifications / realtime collaboration
 
-## Cách đọc
+## How to Read This Pack
 
-1. `tutorial-redline-e2e-full-pass.md` — Tutorial: full pass có hướng dẫn từng bước
-2. `how-to-run-full-regression.md` — How-to: manual regression / smoke / evidence
-3. `reference-feature-test-matrix.md` — Reference: test cases, expected results, automated coverage
-4. `reference-system-map.md` — Reference: commands, ports, routes, statuses, fixtures
-5. `explanation-testing-model-and-truth-boundaries.md` — Explanation: tại sao test theo thứ tự này
+1. `tutorial-redline-e2e-full-pass.md` - end-to-end browser workflow
+2. `how-to-run-full-regression.md` - compact operator checklist
+3. `reference-feature-test-matrix.md` - feature cases, expected results, automated coverage
+4. `reference-system-map.md` - commands, ports, routes, statuses, fixtures
+5. `explanation-testing-model-and-truth-boundaries.md` - truth boundaries and regression ordering
 
 ## Diataxis Map
 
-| File | Type | Mục đích |
+| File | Type | Purpose |
 |------|------|----------|
-| `tutorial-redline-e2e-full-pass.md` | Tutorial | Chạy một full pass có hướng dẫn từng bước |
-| `how-to-run-full-regression.md` | How-to | Chạy manual regression / smoke / evidence collection |
-| `reference-feature-test-matrix.md` | Reference | Danh sách test case, expected result, automated coverage |
+| `tutorial-redline-e2e-full-pass.md` | Tutorial | Guided full product workflow |
+| `how-to-run-full-regression.md` | How-to | Manual regression, smoke checks, evidence collection |
+| `reference-feature-test-matrix.md` | Reference | Test cases, expected results, automated coverage |
 | `reference-system-map.md` | Reference | Commands, ports, routes, statuses, fixtures, API map |
-| `explanation-testing-model-and-truth-boundaries.md` | Explanation | Giải thích tại sao phải test theo thứ tự này |
+| `explanation-testing-model-and-truth-boundaries.md` | Explanation | Why the workflow is tested in this order |
 
 ## Automated Test Baselines
 
@@ -80,7 +81,7 @@ Cập nhật: 2026-05-23.
   - `docs/testing/eval-pack/contract-chat-cases.json`
 - VN demo showcase:
   - `docs/testing/demo-showcase/vn-sample-contract-notes.md`
-  - `docs/testing/demo-showcase/d4-demo-script.md`
+  - `docs/testing/demo-showcase/demo-script.md`
 - Full system demo:
   - `docs/demo/full-system-demo/source-contracts.md`
   - `docs/demo/full-system-demo/scripts/build_full_demo_fixtures.py`
@@ -96,8 +97,8 @@ Cập nhật: 2026-05-23.
 
 ## Quick Rules
 
-- Nếu muốn test full feature set, phải có AI keys hợp lệ; nếu không, đánh dấu các case AI là `blocked by env`
-- Nếu compare bị khóa, kiểm tra `active_parse_run_id` trước khi nghĩ là bug UI
-- Nếu invitation không xuất hiện ở account thứ hai, kiểm tra email đăng ký có trùng email được mời hay không
-- Nếu summary chưa cho export final, kiểm tra số item đang `open` / `in_review`
-- Nếu avatar upload bị reject, kiểm tra file size (<5MB) và content type (JPEG/PNG/WebP/GIF)
+- Full AI validation requires a valid `REDLINE_AI_GEMINI_API_KEY`; otherwise mark AI cases `blocked by env`.
+- If compare is locked, check `active_parse_run_id` before treating it as a UI bug.
+- If an invitation does not appear, confirm the second account uses the exact invited email.
+- If final export is blocked, check whether any change item is still `open` or `in_review`.
+- If avatar upload is rejected, check file size and content type (JPEG/PNG/WebP/GIF).

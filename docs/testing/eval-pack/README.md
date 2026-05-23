@@ -1,8 +1,11 @@
 # Redline EN Eval Pack - AI Review + Contract Q&A
 
-Status: baseline pack, created for D4 demo readiness.
+Status: maintained evaluation pack for provider-backed AI Review and Contract Q&A readiness.
 
-This pack is the source-controlled evaluation harness for the legal-contract pivot. It focuses on English NDA and SOW samples, because the current D4 target needs reliable English evidence before Vietnamese showcase examples are treated as demo material.
+This pack is the source-controlled evaluation harness for Redline's AI support
+layers. It focuses on English NDA and SOW samples because these fixtures are
+stable, easy to score, and useful for comparing provider-backed behavior over
+time.
 
 The pack does not store generated DOCX files. Use `sample-contract-notes.md` as the canonical text source, then generate local DOCX files during rehearsal if the upload flow requires real documents. Generated DOCX files are local artifacts and should not be committed.
 
@@ -36,7 +39,7 @@ Contract Q&A:
 From the repository root:
 
 ```powershell
-python docs/testing/eval-pack/scripts/build_eval_fixtures.py
+docker compose run --rm --no-deps -v "${PWD}:/workspace" -w /workspace backend python docs/testing/eval-pack/scripts/build_eval_fixtures.py
 ```
 
 Expected generated files:
@@ -111,36 +114,46 @@ Readiness target:
 4. Run AI review and map observed outputs to `ai-review-cases.json`.
 5. Open Contract Q&A and ask every question in `contract-chat-cases.json`.
 6. Record observations in `results-template.csv`.
-7. Summarize headline metrics in the demo rehearsal notes.
+7. Summarize headline metrics in release, demo, or QA notes.
 
 ## API-Backed Rehearsal Runner
 
 When the backend is running locally and the database is migrated, the runner can execute the fixture upload, parse, compare, AI review generation, Contract Q&A, CSV write, and summary aggregation:
 
 ```powershell
-python docs/testing/eval-pack/scripts/run_eval_rehearsal.py --results output/eval-pack/results.csv
+.\src\backend\.venv\Scripts\python docs/testing/eval-pack/scripts/run_eval_rehearsal.py --results output/eval-pack/results.csv
 ```
 
 For a fast Contract Q&A-only smoke:
 
 ```powershell
-python docs/testing/eval-pack/scripts/run_eval_rehearsal.py --skip-ai-review --results output/eval-pack/results-chat-smoke.csv
+.\src\backend\.venv\Scripts\python docs/testing/eval-pack/scripts/run_eval_rehearsal.py --skip-ai-review --results output/eval-pack/results-chat-smoke.csv
 ```
 
 Prerequisites:
 - backend available at `http://127.0.0.1:8000`
 - local database migrated with `python -m alembic upgrade head` from `src/backend`
-- AI provider keys configured before running AI Review mode
+- AI provider keys configured before running provider-backed AI modes
 
-If only OpenAI-compatible keys are configured, set `REDLINE_AI_PRIMARY_PROVIDER=openai` before starting the backend. Otherwise the default Gemini primary path can spend time retrying before falling back.
+The current primary provider path is direct Gemini:
+
+```env
+REDLINE_AI_PRIMARY_PROVIDER=gemini
+REDLINE_AI_GEMINI_MODEL=gemini-3.1-flash-lite
+REDLINE_RAG_EMBEDDING_MODEL=gemini-embedding-2
+```
+
+If only OpenAI-compatible keys are configured, set
+`REDLINE_AI_PRIMARY_PROVIDER=openai` before starting the backend. Otherwise the
+default Gemini primary path can spend time retrying before falling back.
 
 To summarize a recorded CSV:
 
 ```powershell
-python docs/testing/eval-pack/scripts/summarize_results.py --results output/eval-pack/results.csv
+.\src\backend\.venv\Scripts\python docs/testing/eval-pack/scripts/summarize_results.py --results output/eval-pack/results.csv
 ```
 
-Latest local full evidence:
+Latest committed local full evidence:
 - command: `python docs/testing/eval-pack/scripts/run_eval_rehearsal.py --base-url http://127.0.0.1:8001 --results output/eval-pack/results-full-rag-calibrated-8001-20260425-014712.csv --timeout 180`
 - rows: `24`
 - AI Review with-RAG:
@@ -152,7 +165,7 @@ Latest local full evidence:
 - Contract Q&A:
   - NDA answer correctness/citation present/citation support/truth boundary: `100%`/`100%`/`100%`/`100%`
   - SOW answer correctness/citation present/citation support/truth boundary: `100%`/`100%`/`100%`/`100%`
-- interpretation: provider-backed NDA/SOW eval now meets the AI Review and Contract Q&A readiness targets; with-RAG matches without-RAG on evidence score in this controlled fixture set.
+- interpretation: provider-backed NDA/SOW eval met the AI Review and Contract Q&A readiness targets for this controlled fixture set.
 
 Previous local chat-only smoke evidence:
 - command: `python docs/testing/eval-pack/scripts/run_eval_rehearsal.py --skip-ai-review --results output/eval-pack/results-chat-after-filter.csv`

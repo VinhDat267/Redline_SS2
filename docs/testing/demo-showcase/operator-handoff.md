@@ -1,19 +1,20 @@
-# D4 Demo Handoff
+# Demo Showcase Operator Handoff
 
-Status: operator notes for running the Redline D4 demo.
+Status: operator notes for running the lightweight Vietnamese showcase.
 
 Audience:
 
 - Presenter: runs the UI and explains the product story.
 - Technical lead: starts services and verifies RAG/LLM health.
-- QA/support: watches for no-go conditions and keeps fallback artifacts ready.
+- QA/support: watches for no-go conditions and keeps fallback notes ready.
 
 ## Demo Promise
 
 Use this one-line framing:
 
 ```text
-Redline turns contract drafts into explainable clause changes, AI risk suggestions, and citation-grounded contract Q&A.
+Redline turns contract drafts into explainable clause changes, AI risk
+suggestions, and citation-grounded contract Q&A.
 ```
 
 Keep the promise narrow:
@@ -30,9 +31,9 @@ Required local services:
 | Service | URL / Port | Purpose |
 | --- | --- | --- |
 | PostgreSQL + pgvector | Docker `redline-pgvector` | Main runtime database and vectors |
-| Direct Gemini | Google Gemini API | AI review, Contract Q&A synthesis, and Gemini embeddings |
-| Backend | `http://127.0.0.1:8000` | FastAPI app |
-| Frontend | `http://127.0.0.1:5173` | Vite app |
+| Direct Gemini | Google Gemini API | AI Review, Contract Q&A synthesis, and embeddings |
+| Backend | `http://localhost:8000` | FastAPI app |
+| Frontend | `http://localhost:5173` | Vite app |
 
 Expected model config:
 
@@ -40,8 +41,6 @@ Expected model config:
 | --- | --- |
 | `REDLINE_AI_PRIMARY_PROVIDER` | `gemini` |
 | `REDLINE_AI_GEMINI_MODEL` | `gemini-3.1-flash-lite` |
-| `REDLINE_RAG_EMBEDDING_PROVIDER` | `openai_compatible` |
-| `REDLINE_RAG_EMBEDDING_BASE_URL` | `https://generativelanguage.googleapis.com/v1beta/openai` |
 | `REDLINE_RAG_EMBEDDING_MODEL` | `gemini-embedding-2` |
 | `REDLINE_RAG_EMBEDDING_DIMENSIONS` | `3072` |
 
@@ -50,70 +49,43 @@ Expected model config:
 From repo root:
 
 ```powershell
-docker compose up -d postgres
+docker compose up --build -d
+docker compose exec backend python -m app.seed
 ```
 
-Confirm direct Gemini key is configured:
+Confirm the Gemini key is configured in `src/backend/.env` if the demo includes
+provider-backed AI/RAG:
 
 ```powershell
 Select-String -Path src/backend/.env -Pattern "REDLINE_AI_GEMINI_API_KEY="
 ```
 
-The key must be set to a real Google AI Studio Gemini API key before provider-backed AI/RAG checks can pass.
-
-Backend:
+Run health checks:
 
 ```powershell
-cd src/backend
-python -m alembic upgrade head
-python -m app.rag_admin health --strict
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+docker compose exec backend python -m app.rag_admin health --strict
+docker compose exec backend python -m app.parser_admin pdf-ocr-health --strict
 ```
 
-Frontend:
+Build VN fixtures from the host:
 
 ```powershell
-cd src/frontend
-npm run dev -- --host 127.0.0.1 --port 5173
+docker compose run --rm --no-deps -v "${PWD}:/workspace" -w /workspace backend python docs/testing/demo-showcase/scripts/build_vn_showcase_fixtures.py
 ```
-
-Build VN fixtures from repo root:
-
-```powershell
-python docs/testing/demo-showcase/scripts/build_vn_showcase_fixtures.py
-```
-
-## Pre-Demo Health Checks
-
-Run this from `src/backend` before the live walkthrough:
-
-```powershell
-python -m app.rag_admin health --strict
-```
-
-Required result:
-
-- `healthy=true`
-- `embedding_provider_ok=true`
-- `configured_provider=openai-compatible:gemini-embedding-2`
-- `embedding_dimensions_ok=true`
-- `pgvector_dimensions_ok=true`
-- `stale_block_count=0`
-
-If provider smoke fails, do not present RAG as provider-backed. Check the Gemini key/config and rerun health.
 
 ## Primary Demo Path
 
 Open:
 
 ```text
-http://127.0.0.1:5173
+http://localhost:5173
 ```
 
 Recommended demo data:
 
 - Use `VN NDA` when you want a simple confidentiality story.
-- Use `VN SOW` when you want commercial impact: acceptance, payment, IP, change control.
+- Use `VN SOW` when you want commercial impact: acceptance, payment, IP, change
+  control.
 
 Walkthrough:
 
@@ -167,66 +139,56 @@ VN SOW:
 
 ## Fallbacks
 
-If direct Gemini is unavailable:
+If Gemini is unavailable:
 
 1. Confirm `REDLINE_AI_GEMINI_API_KEY` is set in `src/backend/.env`.
-2. Rerun `python -m app.rag_admin health --strict`.
-3. If still down, switch to recorded evidence in `docs/testing/demo-showcase/vn-rehearsal-evidence.md`.
+2. Restart backend: `docker compose up --build -d backend`.
+3. Rerun `docker compose exec backend python -m app.rag_admin health --strict`.
+4. If still unavailable, demo deterministic Parser and Compare only.
 
 If embedding provider falls back to `local-hash`:
 
 1. Do not call the run provider-backed.
-2. Fix direct Gemini configuration first.
+2. Fix Gemini configuration first.
 3. Re-embed stale blocks only after provider health is restored:
 
 ```powershell
-python -m app.rag_admin reembed --limit 25
-python -m app.rag_admin health --strict
+docker compose exec backend python -m app.rag_admin reembed --limit 25
+docker compose exec backend python -m app.rag_admin health --strict
 ```
-
-If AI Review generation is slow:
-
-1. Use an already generated AI Review draft from rehearsal data if available.
-2. Explain that Compare remains deterministic and AI is an assistive layer.
-3. Keep the demo moving to Contract Q&A citations.
 
 If Contract Q&A stream is slow:
 
 1. Show Stop.
 2. Explain terminal attempt semantics.
 3. Click Retry.
-4. If retry is still slow, switch to `vn-rehearsal-evidence.md` and screenshots under ignored `output/playwright/`.
-
-If the UI route redirects to login:
-
-1. Log in again.
-2. Confirm backend is still running.
-3. Confirm `VITE_API_BASE_URL` points at `http://127.0.0.1:8000` if a custom env is used.
+4. If retry is still slow, use a shorter prompt or switch to deterministic
+   compare/review flows.
 
 ## Evidence Pack
 
-Source-controlled:
+Current source-controlled docs:
 
 - `docs/testing/eval-pack/README.md`
 - `docs/testing/demo-showcase/README.md`
-- `docs/testing/demo-showcase/d4-demo-script.md`
-- `docs/testing/demo-showcase/d4-feature-freeze-checklist.md`
-- `docs/testing/demo-showcase/d4-demo-handoff.md`
+- `docs/testing/demo-showcase/demo-script.md`
+- `docs/testing/demo-showcase/release-freeze-checklist.md`
+- `docs/testing/demo-showcase/operator-handoff.md`
 - `docs/testing/demo-showcase/vn-rehearsal-evidence.md`
 
 Ignored local artifacts:
 
 - `output/demo-showcase/fixtures/`
 - `output/demo-showcase/vn-rehearsal-*.json`
-- `output/playwright/vn-*-auth.png`
-- `output/playwright/vn-ui-smoke-summary.json`
+- `output/playwright_test/`
 
 ## Presenter Boundaries
 
 Say:
 
 ```text
-AI helps draft review reasoning and answer grounded questions, but it does not approve the contract.
+AI helps draft review reasoning and answer grounded questions, but it does not
+approve the contract.
 ```
 
 Do not say:
@@ -238,7 +200,8 @@ AI decides whether the clause is acceptable.
 Say:
 
 ```text
-Compare is deterministic, and citations let the reviewer inspect source evidence.
+Compare is deterministic, and citations let the reviewer inspect source
+evidence.
 ```
 
 Do not say:
@@ -250,10 +213,10 @@ The chatbot knows the contract independently.
 ## Final Handoff Checklist
 
 - [ ] Services started in the start sequence above.
-- [ ] RAG strict health is green.
+- [ ] RAG strict health is green when provider-backed AI is being shown.
 - [ ] VN fixtures exist under `output/demo-showcase/fixtures/`.
-- [ ] Browser can access `http://127.0.0.1:5173`.
+- [ ] Browser can access `http://localhost:5173`.
 - [ ] Demo account can log in.
-- [ ] Presenter has `d4-demo-script.md` open.
-- [ ] QA has `vn-rehearsal-evidence.md` open.
+- [ ] Presenter has `demo-script.md` open.
+- [ ] QA has `vn-rehearsal-evidence.md` open if historical evidence is needed.
 - [ ] Team agrees not to show support surfaces as core product unless asked.

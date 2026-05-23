@@ -1,8 +1,15 @@
 # VN Showcase Rehearsal Evidence - 2026-04-25
 
-Status: passed for lightweight VN D4 showcase rehearsal.
+Status: historical evidence from a lightweight VN showcase rehearsal.
 
-This is not a benchmark. The EN eval pack remains the measured readiness source. This evidence only confirms the Vietnamese showcase can run end to end through the current local stack.
+This is not a benchmark. The EN eval pack remains the measured readiness source.
+This evidence confirms that the Vietnamese showcase ran end to end at the time
+it was captured.
+
+Important: this evidence predates the current direct Gemini configuration. The
+current system uses direct Gemini settings documented in `README.md` and
+`src/backend/.env.example`. The 9Router/OpenAI-compatible values below are kept
+only to preserve historical evidence, not as current setup guidance.
 
 ## Environment
 
@@ -34,7 +41,7 @@ RAG health result:
 - provider counts: `434` Gemini-backed blocks
 - stale block count: `0`
 
-Direct 9Router smoke:
+Historical 9Router smoke:
 
 - `GET /v1/models` listed `cx/gpt-5.5` and `gemini/gemini-embedding-2-preview`.
 - `POST /v1/embeddings` with `gemini/gemini-embedding-2-preview` returned one 3072-dimensional embedding.
@@ -82,7 +89,10 @@ Streaming Contract Q&A prompts exercised:
 
 ## UI Smoke
 
-Playwright CLI smoke checked authenticated routes and captured screenshots under ignored `output/playwright/`.
+Playwright CLI smoke checked authenticated routes and captured screenshots under
+the then-current ignored `output/playwright/` directory. Those artifacts are
+not expected to exist in a clean checkout; reruns should write fresh artifacts
+under the currently ignored test output directory.
 
 Ignored local artifacts:
 

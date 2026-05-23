@@ -43,6 +43,28 @@ function compareRunPairKey(r) {
   const target = r?.target_version ?? r?.target_draft;
   return `${source?.id ?? draftLabel(source)}:${target?.id ?? draftLabel(target)}`;
 }
+function compareRunRecencyTuple(r) {
+  const parsedTime = Date.parse(r?.completed_at ?? r?.started_at ?? "");
+  return [Number.isFinite(parsedTime) ? parsedTime : 0, Number(r?.id ?? 0)];
+}
+function isNewerCompareRun(candidate, current) {
+  const [candidateTime, candidateId] = compareRunRecencyTuple(candidate);
+  const [currentTime, currentId] = compareRunRecencyTuple(current);
+  return candidateTime > currentTime || (candidateTime === currentTime && candidateId > currentId);
+}
+function latestCompareRunsByPair(runs) {
+  const latestByPair = new Map();
+  for (const run of runs) {
+    const key = compareRunPairKey(run);
+    const current = latestByPair.get(key);
+    if (!current || isNewerCompareRun(run, current)) latestByPair.set(key, run);
+  }
+  return [...latestByPair.values()].sort((a, b) => {
+    const [aTime, aId] = compareRunRecencyTuple(a);
+    const [bTime, bId] = compareRunRecencyTuple(b);
+    return aTime - bTime || aId - bId;
+  });
+}
 function buildCompareRunLabelMap(runs) {
   const pairCounts = new Map();
   for (const run of runs) {
@@ -126,7 +148,9 @@ export function ContractChatPage() {
         setContract(cr); setDrafts(dr); setCompareRuns(rr); setSessions(sr);
         const parsed = dr.filter(hasParsedStatus);
         if (parsed.length) setSelectedDraftId(c => c || String(parsed[0].id));
-        const completedRuns = rr.filter(r => ["completed", "completed_with_warnings"].includes(r.compare_status));
+        const completedRuns = latestCompareRunsByPair(
+          rr.filter(r => ["completed", "completed_with_warnings"].includes(r.compare_status))
+        );
         if (completedRuns.length) setSelectedCompareRunId(c => c || String(completedRuns[completedRuns.length - 1].id));
         if (sr.length) {
           const latest = sr[sr.length - 1];
@@ -157,12 +181,19 @@ export function ContractChatPage() {
 
   const parsedDrafts = useMemo(() => drafts.filter(hasParsedStatus), [drafts]);
   const selectedDraft = parsedDrafts.find(d => String(d.id) === selectedDraftId) ?? null;
-  const selectableCompareRuns = useMemo(
+  const completedCompareRuns = useMemo(
     () => compareRuns.filter(r => ["completed", "completed_with_warnings"].includes(r.compare_status)),
     [compareRuns]
   );
+  const latestCompareRuns = useMemo(() => latestCompareRunsByPair(completedCompareRuns), [completedCompareRuns]);
+  const selectedHistoricalCompareRun = completedCompareRuns.find(r => String(r.id) === selectedCompareRunId) ?? null;
+  const selectableCompareRuns = useMemo(() => {
+    if (!selectedHistoricalCompareRun) return latestCompareRuns;
+    const hasSelected = latestCompareRuns.some(r => String(r.id) === String(selectedHistoricalCompareRun.id));
+    return hasSelected ? latestCompareRuns : [...latestCompareRuns, selectedHistoricalCompareRun];
+  }, [latestCompareRuns, selectedHistoricalCompareRun]);
   const compareRunLabels = useMemo(() => buildCompareRunLabelMap(selectableCompareRuns), [selectableCompareRuns]);
-  const selectedCompareRun = selectableCompareRuns.find(r => String(r.id) === selectedCompareRunId) ?? null;
+  const selectedCompareRun = selectedHistoricalCompareRun ?? selectableCompareRuns.find(r => String(r.id) === selectedCompareRunId) ?? null;
   const selectedCompareTargetDraft = selectedCompareRun?.target_version ?? selectedCompareRun?.target_draft ?? null;
   const selectedCompareRunLabel = selectedCompareRun ? compareRunLabels.get(String(selectedCompareRun.id)) ?? compareRunLabel(selectedCompareRun) : "";
   const activeDraftId = selectedScope === "compare" ? String(selectedCompareTargetDraft?.id ?? "") : selectedDraftId;

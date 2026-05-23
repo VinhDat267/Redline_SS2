@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
@@ -423,7 +423,7 @@ describe("ContractChatPage", () => {
     });
   });
 
-  test("disambiguates duplicate compare run options for the same draft pair", async () => {
+  test("shows only the latest compare run for each draft pair", async () => {
     fetch.mockImplementation((input, init = {}) => {
       const url = String(input);
       const method = init.method || "GET";
@@ -465,8 +465,10 @@ describe("ContractChatPage", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /compared drafts/i }));
 
-    expect(screen.getByRole("option", { name: "vendor-v1 -> vendor-v2 - run #77" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "vendor-v1 -> vendor-v2 - run #78" })).toBeInTheDocument();
+    const compareRunSelect = screen.getByRole("combobox", { name: /compare run/i });
+    const options = within(compareRunSelect).getAllByRole("option");
+    expect(options.map(option => option.textContent)).toEqual(["Choose compare run", "vendor-v1 -> vendor-v2"]);
+    expect(options.map(option => option.value)).toEqual(["", "78"]);
   });
 
   test("stops an active stream and retries in the same answer bubble", async () => {

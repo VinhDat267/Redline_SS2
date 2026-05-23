@@ -1,10 +1,9 @@
 # Redline
 
-Redline is an AI-powered contract review application built for the
-`62FIT3SS2 - Special Subject 2` project. It helps reviewers upload contract
-drafts, parse them into structured blocks, compare revisions, generate
-RAG-assisted review suggestions, and ask grounded contract questions with
-source citations.
+Redline is an AI-powered contract review platform for legal and commercial
+teams. It helps reviewers upload contract drafts, parse them into structured
+blocks, compare revisions, generate RAG-assisted review suggestions, and ask
+grounded contract questions with source citations.
 
 ```text
 Project -> Contract -> Draft Upload -> Parse -> Compare
@@ -33,8 +32,8 @@ Project -> Contract -> Draft Upload -> Parse -> Compare
 
 Updated: 2026-05-23
 
-The system is feature-complete for the final course submission and has been
-verified on the Docker path expected for local review.
+The system is deployable as a full-stack web application and has been verified
+on the Docker path expected for local installation and review.
 
 Latest verified baseline:
 
@@ -132,7 +131,7 @@ FastAPI backend
 ## Repository Layout
 
 ```text
-RedlineSS2/
+redline/
 |-- README.md
 |-- compose.yml
 |-- docs/
@@ -158,7 +157,7 @@ RedlineSS2/
 
 ## Quickstart with Docker
 
-This is the recommended path for graders and reviewers. It starts PostgreSQL,
+This is the recommended path for local operators and reviewers. It starts PostgreSQL,
 backend, and frontend from one command.
 
 ### Prerequisites
@@ -277,7 +276,7 @@ Frontend configuration lives in `src/frontend/.env`. Use
 
 ## Verification
 
-Run these commands before submitting or demoing.
+Run these commands before release, deployment, or demo.
 
 ### Backend tests
 
@@ -426,4 +425,4 @@ Cloudflare R2, Supabase Storage, or any S3-compatible bucket can be used.
 
 ## License
 
-This repository is a course project for `62FIT3SS2 - Special Subject 2`.
+This repository does not currently declare an open-source license.

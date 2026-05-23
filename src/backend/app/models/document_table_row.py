@@ -7,6 +7,7 @@ from app.models.base import Base
 class DocumentTableRow(Base):
     __tablename__ = "document_table_rows"
     __table_args__ = (
+        UniqueConstraint("document_block_id"),
         UniqueConstraint("table_id", "row_index", name="uq_document_table_row_index"),
     )
 

@@ -2,7 +2,7 @@
 
 Bộ tài liệu testing là source of truth cho việc demo, smoke test, manual regression, và handoff QA của Redline.
 
-Cập nhật: 2026-05-15.
+Cập nhật: 2026-05-23.
 
 ## Related Packs
 
@@ -68,8 +68,8 @@ Cập nhật: 2026-05-15.
 
 | Suite | Count | Framework | Notes |
 |-------|-------|-----------|-------|
-| Backend | **211 passed** | Pytest | SQLite fixtures, covers auth, projects, documents, compare, AI, chat, avatar |
-| Frontend | **102 passed** (18 files) | Vitest | Covers routes, auth context, all page workspaces, avatar upload |
+| Backend | **265 passed** | Pytest | SQLite fixtures, covers auth, projects, documents, compare, AI, chat, avatar |
+| Frontend | **111 passed** (19 files) | Vitest | Covers routes, auth context, all page workspaces, avatar upload |
 | Frontend build | Passes | Vite | Existing chunk-size warning only |
 
 ## Suggested Fixture Set

@@ -10,7 +10,7 @@ Project → Contract → DOCX/PDF Draft Upload → Parse → Compare
 
 ## Current Status
 
-Updated: 2026-05-17
+Updated: 2026-05-23
 
 The application is fully functional with production deployments on Heroku (backend) and Vercel (frontend).
 
@@ -23,8 +23,8 @@ The application is fully functional with production deployments on Heroku (backe
 
 **Test suite:**
 
-- Backend: **238 passed** (Pytest, SQLite fixtures)
-- Frontend: **106 passed** (Vitest, 19 test files)
+- Backend: **265 passed** (Pytest, SQLite fixtures)
+- Frontend: **111 passed** (Vitest, 19 test files)
 - Frontend build: passes (Vite chunk-size warning only)
 
 **Core truth boundaries:**
@@ -62,8 +62,8 @@ Use this path when you want PostgreSQL, backend, and frontend to run from Docker
 ```powershell
 Copy-Item src/backend/.env.example src/backend/.env
 Copy-Item src/frontend/.env.example src/frontend/.env
-# Fill REDLINE_AI_GEMINI_API_KEY and REDLINE_GOOGLE_CLIENT_ID in src/backend/.env.
-# Fill VITE_GOOGLE_CLIENT_ID in src/frontend/.env with the same Google Web Client ID.
+# Optional: fill REDLINE_AI_GEMINI_API_KEY for real AI Review / Contract Q&A synthesis.
+# Optional: fill REDLINE_GOOGLE_CLIENT_ID and VITE_GOOGLE_CLIENT_ID for Google login.
 docker compose up --build
 ```
 
@@ -88,7 +88,7 @@ cd src/backend
 python -m venv .venv
 .\.venv\Scripts\python -m pip install -e .[dev]
 Copy-Item .env.example .env
-# Fill REDLINE_AI_GEMINI_API_KEY in .env for direct Gemini AI/RAG features.
+# Optional: fill REDLINE_AI_GEMINI_API_KEY in .env for real Gemini AI/RAG features.
 .\.venv\Scripts\python -m alembic upgrade head
 .\.venv\Scripts\python -m app.seed
 .\.venv\Scripts\python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
@@ -111,11 +111,11 @@ Dev server: `http://localhost:5173`
 ## Verification
 
 ```powershell
-# Backend tests (SQLite fixtures, ~211 tests)
+# Backend tests (SQLite fixtures)
 cd src/backend
 .\.venv\Scripts\python -m pytest tests -q
 
-# Frontend tests (~102 tests)
+# Frontend tests
 cd src/frontend
 npm run test -- --run
 

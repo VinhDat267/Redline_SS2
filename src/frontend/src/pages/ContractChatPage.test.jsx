@@ -50,6 +50,15 @@ function cancellableStreamResponse(chunks, signal) {
   };
 }
 
+function isContractCompareRunsRequest(url) {
+  const parsedUrl = new URL(String(url), "http://localhost");
+  return parsedUrl.pathname === "/api/v1/contracts/10/compare-runs";
+}
+
+function contractCompareRunsSearchParams(url) {
+  return new URL(String(url), "http://localhost").searchParams;
+}
+
 const session = {
   token: "token-123",
   user: {
@@ -104,6 +113,7 @@ function buildContractCompareRun(overrides = {}) {
     source_parse_run_id: 401,
     target_parse_run_id: 402,
     is_stale: false,
+    is_superseded: false,
     warning_count: 0,
     warnings: [],
     contract: buildContractPayload().data,
@@ -155,7 +165,7 @@ describe("ContractChatPage", () => {
         return Promise.resolve(jsonResponse({ data: [buildContractDraft()] }));
       }
 
-      if (url.endsWith("/api/v1/contracts/10/compare-runs") && method === "GET") {
+      if (isContractCompareRunsRequest(url) && method === "GET") {
         return Promise.resolve(jsonResponse({ data: [] }));
       }
 
@@ -257,6 +267,7 @@ describe("ContractChatPage", () => {
       expect(screen.getAllByText(/limited to \$1,000,000/i).length).toBeGreaterThan(0);
       expect(screen.getAllByText(/limitation of liability/i).length).toBeGreaterThan(0);
     });
+    expect(screen.getByText(/local · current draft/i)).toBeInTheDocument();
 
     await waitFor(() => {
       const sessionCall = fetch.mock.calls.find(
@@ -309,7 +320,7 @@ describe("ContractChatPage", () => {
         );
       }
 
-      if (url.endsWith("/api/v1/contracts/10/compare-runs") && method === "GET") {
+      if (isContractCompareRunsRequest(url) && method === "GET") {
         return Promise.resolve(jsonResponse({ data: [buildContractCompareRun()] }));
       }
 
@@ -382,7 +393,7 @@ describe("ContractChatPage", () => {
             "event: metadata\ndata: {\"attempt_id\":981,\"session_id\":771,\"sequence\":1}\n\n",
             "event: delta\ndata: {\"attempt_id\":981,\"session_id\":771,\"sequence\":2,\"content\":\"The liability cap changed from $100,000 to $250,000.\"}\n\n",
             "event: citations\ndata: {\"attempt_id\":981,\"session_id\":771,\"sequence\":3,\"citations\":[{\"block_id\":9901,\"block_key\":\"src-1\",\"section_title\":\"Liability\",\"surface_type\":\"body\",\"surface_key\":\"body-main\",\"content\":\"The liability cap is $100,000.\",\"source_label\":\"source\",\"compare_run_id\":77,\"change_item_id\":990},{\"block_id\":9902,\"block_key\":\"tgt-1\",\"section_title\":\"Liability\",\"surface_type\":\"body\",\"surface_key\":\"body-main\",\"content\":\"The liability cap is $250,000.\",\"source_label\":\"target\",\"compare_run_id\":77,\"change_item_id\":990}]}\n\n",
-            "event: done\ndata: {\"attempt_id\":981,\"session_id\":771,\"sequence\":4,\"assistant_message\":{\"id\":882,\"role\":\"assistant\",\"content\":\"The liability cap changed from $100,000 to $250,000.\",\"citations\":[{\"block_id\":9901,\"block_key\":\"src-1\",\"section_title\":\"Liability\",\"surface_type\":\"body\",\"surface_key\":\"body-main\",\"content\":\"The liability cap is $100,000.\",\"source_label\":\"source\",\"compare_run_id\":77,\"change_item_id\":990},{\"block_id\":9902,\"block_key\":\"tgt-1\",\"section_title\":\"Liability\",\"surface_type\":\"body\",\"surface_key\":\"body-main\",\"content\":\"The liability cap is $250,000.\",\"source_label\":\"target\",\"compare_run_id\":77,\"change_item_id\":990}],\"provider_used\":\"local-compare\",\"created_at\":\"2026-03-26T09:00:06Z\",\"updated_at\":\"2026-03-26T09:00:06Z\"}}\n\n"
+            "event: done\ndata: {\"attempt_id\":981,\"session_id\":771,\"sequence\":4,\"assistant_message\":{\"id\":882,\"role\":\"assistant\",\"content\":\"The liability cap changed from $100,000 to $250,000.\",\"citations\":[{\"block_id\":9901,\"block_key\":\"src-1\",\"section_title\":\"Liability\",\"surface_type\":\"body\",\"surface_key\":\"body-main\",\"content\":\"The liability cap is $100,000.\",\"source_label\":\"source\",\"compare_run_id\":77,\"change_item_id\":990},{\"block_id\":9902,\"block_key\":\"tgt-1\",\"section_title\":\"Liability\",\"surface_type\":\"body\",\"surface_key\":\"body-main\",\"content\":\"The liability cap is $250,000.\",\"source_label\":\"target\",\"compare_run_id\":77,\"change_item_id\":990}],\"provider_used\":\"gemini:contract-chat\",\"created_at\":\"2026-03-26T09:00:06Z\",\"updated_at\":\"2026-03-26T09:00:06Z\"}}\n\n"
           ])
         );
       }
@@ -392,7 +403,7 @@ describe("ContractChatPage", () => {
 
     renderContractChat();
 
-    fireEvent.click(await screen.findByRole("button", { name: /compared drafts/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /compare changes/i }));
     expect(screen.getByRole("combobox", { name: /compare run/i })).toHaveValue("77");
 
     fireEvent.change(screen.getByLabelText(/ask about this contract/i), {
@@ -401,6 +412,7 @@ describe("ContractChatPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /send message/i }));
 
     expect(await screen.findByText(/changed from \$100,000 to \$250,000/i)).toBeInTheDocument();
+    expect(screen.getByText(/gemini · compare changes/i)).toBeInTheDocument();
     expect(screen.getAllByText(/source/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/target/i).length).toBeGreaterThan(0);
 
@@ -446,7 +458,7 @@ describe("ContractChatPage", () => {
         );
       }
 
-      if (url.endsWith("/api/v1/contracts/10/compare-runs") && method === "GET") {
+      if (isContractCompareRunsRequest(url) && method === "GET") {
         return Promise.resolve(
           jsonResponse({
             data: [
@@ -466,13 +478,17 @@ describe("ContractChatPage", () => {
 
     renderContractChat();
 
-    fireEvent.click(await screen.findByRole("button", { name: /compared drafts/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /compare changes/i }));
 
     const compareRunSelect = screen.getByRole("combobox", { name: /compare run/i });
     const options = within(compareRunSelect).getAllByRole("option");
     expect(options.map(option => option.textContent)).toEqual(["Choose compare run", "vendor-v1 -> vendor-v2"]);
     expect(options.map(option => option.value)).toEqual(["", "78"]);
-    expect(screen.getByText(/latest completed compare for each draft pair/i)).toBeInTheDocument();
+    expect(screen.getByText(/latest fresh compare changes for each draft pair/i)).toBeInTheDocument();
+
+    const compareRunsCall = fetch.mock.calls.find(([requestUrl]) => isContractCompareRunsRequest(requestUrl));
+    expect(contractCompareRunsSearchParams(compareRunsCall[0]).get("latest_per_pair")).toBe("true");
+    expect(contractCompareRunsSearchParams(compareRunsCall[0]).get("fresh_only")).toBe("true");
   });
 
   test("hides stale compare runs from new compare Q&A selection", async () => {
@@ -495,7 +511,7 @@ describe("ContractChatPage", () => {
         );
       }
 
-      if (url.endsWith("/api/v1/contracts/10/compare-runs") && method === "GET") {
+      if (isContractCompareRunsRequest(url) && method === "GET") {
         return Promise.resolve(
           jsonResponse({
             data: [
@@ -515,7 +531,7 @@ describe("ContractChatPage", () => {
 
     renderContractChat();
 
-    fireEvent.click(await screen.findByRole("button", { name: /compared drafts/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /compare changes/i }));
 
     const compareRunSelect = screen.getByRole("combobox", { name: /compare run/i });
     const options = within(compareRunSelect).getAllByRole("option");
@@ -543,13 +559,20 @@ describe("ContractChatPage", () => {
         );
       }
 
-      if (url.endsWith("/api/v1/contracts/10/compare-runs") && method === "GET") {
+      if (isContractCompareRunsRequest(url) && method === "GET") {
         return Promise.resolve(
           jsonResponse({
             data: [
-              buildContractCompareRun({ id: 77, is_stale: true, target_parse_run_id: 399 }),
               buildContractCompareRun({ id: 78 })
             ]
+          })
+        );
+      }
+
+      if (url.endsWith("/api/v1/contract-compare-runs/77") && method === "GET") {
+        return Promise.resolve(
+          jsonResponse({
+            data: buildContractCompareRun({ id: 77, is_stale: true, target_parse_run_id: 399 })
           })
         );
       }
@@ -598,6 +621,7 @@ describe("ContractChatPage", () => {
     renderContractChat();
 
     expect(await screen.findByText(/earlier compare answer/i)).toBeInTheDocument();
+    expect(screen.getByText(/local · compare fallback/i)).toBeInTheDocument();
     const compareRunSelect = screen.getByRole("combobox", { name: /compare run/i });
     expect(compareRunSelect).toHaveValue("77");
     expect(screen.getByRole("option", { name: /stale, run #77/i })).toBeInTheDocument();
@@ -608,6 +632,98 @@ describe("ContractChatPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /send message/i }));
 
     expect(await screen.findByText(/asking compare questions/i)).toBeInTheDocument();
+    expect(fetch.mock.calls.some(([requestUrl, requestInit = {}]) =>
+      String(requestUrl).endsWith("/api/v1/contracts/10/chat/sessions/771/attempts") &&
+      (requestInit.method || "GET") === "POST"
+    )).toBe(false);
+  });
+
+  test("keeps superseded historical compare sessions readable but blocks new questions", async () => {
+    fetch.mockImplementation((input, init = {}) => {
+      const url = String(input);
+      const method = init.method || "GET";
+
+      if (url.endsWith("/api/v1/contracts/10") && method === "GET") {
+        return Promise.resolve(jsonResponse(buildContractPayload()));
+      }
+
+      if (url.endsWith("/api/v1/contracts/10/drafts") && method === "GET") {
+        return Promise.resolve(
+          jsonResponse({
+            data: [
+              buildContractDraft({ id: 501, draft_label: "vendor-v1", active_parse_run_id: 401 }),
+              buildContractDraft({ id: 502, draft_label: "vendor-v2", active_parse_run_id: 402 })
+            ]
+          })
+        );
+      }
+
+      if (isContractCompareRunsRequest(url) && method === "GET") {
+        return Promise.resolve(jsonResponse({ data: [buildContractCompareRun({ id: 78 })] }));
+      }
+
+      if (url.endsWith("/api/v1/contract-compare-runs/77") && method === "GET") {
+        return Promise.resolve(
+          jsonResponse({
+            data: buildContractCompareRun({ id: 77, is_superseded: true })
+          })
+        );
+      }
+
+      if (url.endsWith("/api/v1/contracts/10/chat/sessions") && method === "GET") {
+        return Promise.resolve(
+          jsonResponse({
+            data: [
+              {
+                id: 771,
+                contract_id: 10,
+                draft_id: 502,
+                compare_run_id: 77,
+                scope_type: "compare_run",
+                title: "vendor-v1 -> vendor-v2 Q&A",
+                created_by_user_id: 1,
+                created_at: "2026-03-26T09:00:00Z",
+                updated_at: "2026-03-26T09:00:00Z"
+              }
+            ]
+          })
+        );
+      }
+
+      if (url.endsWith("/api/v1/contracts/10/chat/sessions/771/messages") && method === "GET") {
+        return Promise.resolve(
+          jsonResponse({
+            data: [
+              {
+                id: 881,
+                role: "assistant",
+                content: "Earlier compare answer from the superseded run.",
+                citations: [],
+                provider_used: "local-compare",
+                created_at: "2026-03-26T09:00:05Z",
+                updated_at: "2026-03-26T09:00:05Z"
+              }
+            ]
+          })
+        );
+      }
+
+      return Promise.reject(new Error(`Unhandled request: ${url} ${method}`));
+    });
+
+    renderContractChat();
+
+    expect(await screen.findByText(/earlier compare answer from the superseded run/i)).toBeInTheDocument();
+    const compareRunSelect = screen.getByRole("combobox", { name: /compare run/i });
+    expect(compareRunSelect).toHaveValue("77");
+    expect(screen.getByRole("option", { name: /superseded, run #77/i })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/ask about this contract/i), {
+      target: { value: "What changed now?" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: /send message/i }));
+
+    expect(await screen.findByText(/before asking compare questions/i)).toBeInTheDocument();
     expect(fetch.mock.calls.some(([requestUrl, requestInit = {}]) =>
       String(requestUrl).endsWith("/api/v1/contracts/10/chat/sessions/771/attempts") &&
       (requestInit.method || "GET") === "POST"
@@ -627,7 +743,7 @@ describe("ContractChatPage", () => {
         return Promise.resolve(jsonResponse({ data: [buildContractDraft()] }));
       }
 
-      if (url.endsWith("/api/v1/contracts/10/compare-runs") && method === "GET") {
+      if (isContractCompareRunsRequest(url) && method === "GET") {
         return Promise.resolve(jsonResponse({ data: [] }));
       }
 
@@ -659,7 +775,7 @@ describe("ContractChatPage", () => {
         return Promise.resolve(jsonResponse({ data: [buildContractDraft()] }));
       }
 
-      if (url.endsWith("/api/v1/contracts/10/compare-runs") && method === "GET") {
+      if (isContractCompareRunsRequest(url) && method === "GET") {
         return Promise.resolve(jsonResponse({ data: [] }));
       }
 
@@ -834,7 +950,7 @@ describe("ContractChatPage", () => {
         return Promise.resolve(jsonResponse({ data: [buildContractDraft()] }));
       }
 
-      if (url.endsWith("/api/v1/contracts/10/compare-runs") && method === "GET") {
+      if (isContractCompareRunsRequest(url) && method === "GET") {
         return Promise.resolve(jsonResponse({ data: [] }));
       }
 
@@ -1004,7 +1120,7 @@ describe("ContractChatPage", () => {
         return Promise.resolve(jsonResponse({ data: [buildContractDraft()] }));
       }
 
-      if (url.endsWith("/api/v1/contracts/10/compare-runs") && method === "GET") {
+      if (isContractCompareRunsRequest(url) && method === "GET") {
         return Promise.resolve(jsonResponse({ data: [] }));
       }
 
@@ -1125,7 +1241,7 @@ describe("ContractChatPage", () => {
         return Promise.resolve(jsonResponse({ data: [buildContractDraft()] }));
       }
 
-      if (url.endsWith("/api/v1/contracts/10/compare-runs") && method === "GET") {
+      if (isContractCompareRunsRequest(url) && method === "GET") {
         return Promise.resolve(jsonResponse({ data: [] }));
       }
 

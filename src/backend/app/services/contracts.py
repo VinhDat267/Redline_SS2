@@ -83,6 +83,7 @@ def serialize_contract_compare_run(compare_run_detail: dict[str, object]) -> dic
         "source_parse_run_id": compare_run_detail["source_parse_run_id"],
         "target_parse_run_id": compare_run_detail["target_parse_run_id"],
         "is_stale": compare_run_detail["is_stale"],
+        "is_superseded": compare_run_detail["is_superseded"],
         "warning_count": compare_run_detail["warning_count"],
         "warnings": compare_run_detail["warnings"],
         "contract": {

@@ -357,6 +357,64 @@ def test_contract_compare_runs_can_be_listed_for_compare_q_and_a(client, auth_he
     assert compare_runs[0]["target_draft"]["draft_label"] == "vendor-v2"
 
 
+def test_contract_compare_run_reports_superseded_for_older_same_pair_run(client, auth_headers):
+    setup = _create_contract_compare_chat_setup(client, auth_headers)
+    contract_id = setup["contract_id"]
+    source_draft_id = setup["source_draft_id"]
+    target_draft_id = setup["target_draft_id"]
+    first_compare_run_id = setup["compare_run_id"]
+
+    second_response = client.post(
+        f"/api/v1/contracts/{contract_id}/compare-runs",
+        json={"source_draft_id": source_draft_id, "target_draft_id": target_draft_id},
+        headers=auth_headers,
+    )
+    assert second_response.status_code == 201
+    second_compare_run_id = second_response.json()["data"]["id"]
+
+    response = client.get(f"/api/v1/contracts/{contract_id}/compare-runs", headers=auth_headers)
+
+    assert response.status_code == 200
+    compare_runs = {compare_run["id"]: compare_run for compare_run in response.json()["data"]}
+    assert compare_runs[first_compare_run_id]["is_stale"] is False
+    assert compare_runs[first_compare_run_id]["is_superseded"] is True
+    assert compare_runs[second_compare_run_id]["is_stale"] is False
+    assert compare_runs[second_compare_run_id]["is_superseded"] is False
+
+
+def test_contract_compare_runs_can_filter_latest_fresh_run_per_pair(client, auth_headers):
+    setup = _create_contract_compare_chat_setup(client, auth_headers)
+    contract_id = setup["contract_id"]
+    source_draft_id = setup["source_draft_id"]
+    target_draft_id = setup["target_draft_id"]
+
+    second_response = client.post(
+        f"/api/v1/contracts/{contract_id}/compare-runs",
+        json={"source_draft_id": source_draft_id, "target_draft_id": target_draft_id},
+        headers=auth_headers,
+    )
+    assert second_response.status_code == 201
+    second_compare_run_id = second_response.json()["data"]["id"]
+
+    latest_response = client.get(
+        f"/api/v1/contracts/{contract_id}/compare-runs?latest_per_pair=true&fresh_only=true",
+        headers=auth_headers,
+    )
+
+    assert latest_response.status_code == 200
+    assert [compare_run["id"] for compare_run in latest_response.json()["data"]] == [second_compare_run_id]
+
+    assert client.post(f"/api/v1/contract-drafts/{target_draft_id}/parse", headers=auth_headers).status_code == 200
+
+    stale_latest_response = client.get(
+        f"/api/v1/contracts/{contract_id}/compare-runs?latest_per_pair=true&fresh_only=true",
+        headers=auth_headers,
+    )
+
+    assert stale_latest_response.status_code == 200
+    assert stale_latest_response.json()["data"] == []
+
+
 def test_contract_compare_run_reports_stale_after_reparse(client, auth_headers):
     setup = _create_contract_compare_chat_setup(client, auth_headers)
     contract_id = setup["contract_id"]
@@ -441,6 +499,53 @@ def test_existing_compare_chat_session_rejects_new_questions_after_reparse(clien
     )
     assert attempt_response.status_code == 422
     assert "stale" in attempt_response.json()["detail"].lower()
+
+
+def test_existing_compare_chat_session_rejects_new_questions_after_superseded(client, auth_headers):
+    setup = _create_contract_compare_chat_setup(client, auth_headers)
+    contract_id = setup["contract_id"]
+    source_draft_id = setup["source_draft_id"]
+    target_draft_id = setup["target_draft_id"]
+    first_compare_run_id = setup["compare_run_id"]
+
+    session_response = client.post(
+        f"/api/v1/contracts/{contract_id}/chat/sessions",
+        json={
+            "draft_id": target_draft_id,
+            "compare_run_id": first_compare_run_id,
+            "title": "Compare v1 to v2 Q&A",
+        },
+        headers=auth_headers,
+    )
+    assert session_response.status_code == 201
+    session_id = session_response.json()["data"]["id"]
+
+    second_response = client.post(
+        f"/api/v1/contracts/{contract_id}/compare-runs",
+        json={"source_draft_id": source_draft_id, "target_draft_id": target_draft_id},
+        headers=auth_headers,
+    )
+    assert second_response.status_code == 201
+
+    message_response = client.post(
+        f"/api/v1/contracts/{contract_id}/chat/sessions/{session_id}/messages",
+        json={"query": "What changed in liability now?"},
+        headers=auth_headers,
+    )
+    assert message_response.status_code == 422
+    assert "superseded" in message_response.json()["detail"].lower()
+
+    attempt_response = client.post(
+        f"/api/v1/contracts/{contract_id}/chat/sessions/{session_id}/attempts",
+        json={
+            "draft_id": target_draft_id,
+            "query": "What changed in liability now?",
+            "client_request_id": "superseded-attempt-1",
+        },
+        headers=auth_headers,
+    )
+    assert attempt_response.status_code == 422
+    assert "superseded" in attempt_response.json()["detail"].lower()
 
 
 def test_contract_compare_chat_answers_from_deterministic_change_items(client, auth_headers):

@@ -110,7 +110,7 @@ These are the preferred product-facing routes.
 - `DELETE /api/v1/contract-drafts/{draft_id}`
 - `POST /api/v1/contract-drafts/{draft_id}/parse`
 - `POST /api/v1/contracts/{contract_id}/compare-runs`
-- `GET /api/v1/contracts/{contract_id}/compare-runs`
+- `GET /api/v1/contracts/{contract_id}/compare-runs` (`latest_per_pair` and `fresh_only` are available for Q&A selectors)
 - `GET /api/v1/contract-compare-runs/{compare_run_id}`
 - `GET /api/v1/contract-compare-runs/{compare_run_id}/clause-changes`
 
@@ -120,6 +120,9 @@ Chat sessions are scoped to one parsed draft by default. A session can also
 include `compare_run_id`; in that mode the target draft remains the active
 attempt draft, while answers are grounded in deterministic `ChangeItem` data
 from the selected compare run.
+New compare-scoped questions require a current compare run: stale parse snapshots
+or superseded runs for the same draft pair are kept readable as history but are
+blocked for new Q&A attempts.
 
 - `POST /api/v1/contracts/{contract_id}/chat/sessions`
 - `GET /api/v1/contracts/{contract_id}/chat/sessions`

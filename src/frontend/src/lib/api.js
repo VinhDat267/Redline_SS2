@@ -522,8 +522,15 @@ export async function createContractCompareRun(token, contractId, payload) {
   return normalizeContractCompareRun(compareRun);
 }
 
-export async function listContractCompareRuns(token, contractId) {
-  const compareRuns = await apiRequest(`/api/v1/contracts/${contractId}/compare-runs`, { token });
+export async function listContractCompareRuns(token, contractId, options = {}) {
+  const params = new URLSearchParams();
+  if (options.latestPerPair) params.set("latest_per_pair", "true");
+  if (options.freshOnly) params.set("fresh_only", "true");
+  const query = params.toString();
+  const compareRuns = await apiRequest(
+    `/api/v1/contracts/${contractId}/compare-runs${query ? `?${query}` : ""}`,
+    { token }
+  );
   return (Array.isArray(compareRuns) ? compareRuns : []).map(normalizeContractCompareRun);
 }
 

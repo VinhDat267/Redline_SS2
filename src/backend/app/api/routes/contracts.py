@@ -1,6 +1,6 @@
 import json
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, status
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -281,11 +281,18 @@ def create_contract_compare_run(
 @router.get("/contracts/{contract_id}/compare-runs")
 def list_contract_compare_runs(
     contract_id: int,
+    latest_per_pair: bool = Query(False),
+    fresh_only: bool = Query(False),
     current_user: User = Depends(get_current_user),
     database: Session = Depends(get_db_session),
 ):
     project_access_service.ensure_document_access_or_404(database, contract_id, current_user.id)
-    compare_runs = compare_service.list_document_compare_run_details(database, contract_id)
+    compare_runs = compare_service.list_document_compare_run_details(
+        database,
+        contract_id,
+        latest_per_pair=latest_per_pair,
+        fresh_only=fresh_only,
+    )
     return {
         "data": [
             ContractCompareRunRead.model_validate(contract_service.serialize_contract_compare_run(compare_run)).model_dump(mode="json")

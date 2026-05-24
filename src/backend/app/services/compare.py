@@ -23,6 +23,7 @@ from app.services import ai_batch_jobs as ai_batch_job_service
 
 
 _PARSED_STATUSES = {"parsed", "parsed_with_warnings"}
+_COMPLETED_COMPARE_STATUSES = {"completed", "completed_with_warnings"}
 _ROOT_SECTION = "__ROOT__"
 _KEY_FAMILY_ALIASES = {
     "requirement_id": {"requirement id", "req id", "req_id", "requirement_id"},
@@ -122,6 +123,7 @@ def get_compare_run_detail(session: Session, compare_run_id: int) -> dict[str, o
         "source_parse_run_id": compare_run.source_parse_run_id,
         "target_parse_run_id": compare_run.target_parse_run_id,
         "is_stale": is_compare_run_stale(compare_run),
+        "is_superseded": is_compare_run_superseded(session, compare_run),
         "warning_count": compare_run.warning_count,
         "warnings": _parse_warnings(compare_run.summary_json),
         "document": CompareDocumentRead.model_validate(compare_run.source_version.document).model_dump(mode="json"),
@@ -136,7 +138,13 @@ def get_compare_run_detail(session: Session, compare_run_id: int) -> dict[str, o
     }
 
 
-def list_document_compare_run_details(session: Session, document_id: int) -> list[dict[str, object]]:
+def list_document_compare_run_details(
+    session: Session,
+    document_id: int,
+    *,
+    latest_per_pair: bool = False,
+    fresh_only: bool = False,
+) -> list[dict[str, object]]:
     compare_runs = list(
         session.scalars(
             select(CompareRun)
@@ -145,7 +153,12 @@ def list_document_compare_run_details(session: Session, document_id: int) -> lis
             .order_by(CompareRun.id)
         )
     )
-    return [get_compare_run_detail(session, compare_run.id) for compare_run in compare_runs]
+    compare_run_details = [get_compare_run_detail(session, compare_run.id) for compare_run in compare_runs]
+    if latest_per_pair:
+        compare_run_details = _latest_compare_run_details_by_pair(compare_run_details)
+    if fresh_only:
+        compare_run_details = [compare_run for compare_run in compare_run_details if not compare_run["is_stale"]]
+    return compare_run_details
 
 
 def is_compare_run_stale(compare_run: CompareRun) -> bool:
@@ -155,6 +168,40 @@ def is_compare_run_stale(compare_run: CompareRun) -> bool:
         compare_run.source_parse_run_id != source_active_parse_run_id
         or compare_run.target_parse_run_id != target_active_parse_run_id
     )
+
+
+def is_compare_run_superseded(session: Session, compare_run: CompareRun) -> bool:
+    if compare_run.compare_status not in _COMPLETED_COMPARE_STATUSES:
+        return False
+
+    newer_compare_run_id = session.scalar(
+        select(CompareRun.id)
+        .where(
+            CompareRun.source_version_id == compare_run.source_version_id,
+            CompareRun.target_version_id == compare_run.target_version_id,
+            CompareRun.compare_status.in_(_COMPLETED_COMPARE_STATUSES),
+            CompareRun.id > compare_run.id,
+        )
+        .order_by(CompareRun.id.desc())
+        .limit(1)
+    )
+    return newer_compare_run_id is not None
+
+
+def _latest_compare_run_details_by_pair(compare_run_details: list[dict[str, object]]) -> list[dict[str, object]]:
+    latest_by_pair: dict[tuple[int, int], dict[str, object]] = {}
+    for compare_run in compare_run_details:
+        if compare_run["compare_status"] not in _COMPLETED_COMPARE_STATUSES:
+            continue
+        pair_key = (
+            compare_run["source_version"]["id"],
+            compare_run["target_version"]["id"],
+        )
+        current = latest_by_pair.get(pair_key)
+        if current is None or compare_run["id"] > current["id"]:
+            latest_by_pair[pair_key] = compare_run
+
+    return sorted(latest_by_pair.values(), key=lambda compare_run: compare_run["id"])
 
 
 def list_compare_run_change_items(session: Session, compare_run_id: int) -> list[dict[str, object]]:

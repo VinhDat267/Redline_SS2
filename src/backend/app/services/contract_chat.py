@@ -130,7 +130,7 @@ def create_chat_session(
         )
     if compare_run is not None:
         _ensure_compare_run_belongs_to_contract(contract, compare_run)
-        ensure_compare_run_is_current(compare_run)
+        ensure_compare_run_is_current(session, compare_run)
         if compare_run.target_version_id != draft.id:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -350,11 +350,19 @@ def _ensure_compare_run_belongs_to_contract(contract: Document, compare_run: Com
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Compare run not found")
 
 
-def ensure_compare_run_is_current(compare_run: CompareRun) -> None:
+def ensure_compare_run_is_current(session: Session, compare_run: CompareRun) -> None:
     if compare_service.is_compare_run_stale(compare_run):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Compare run is stale because one of its drafts was parsed again. Run Compare again before starting compare Q&A.",
+        )
+    if compare_service.is_compare_run_superseded(session, compare_run):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                "Compare run is superseded by a newer run for the same draft pair. "
+                "Use the latest Compare run before asking compare Q&A."
+            ),
         )
 
 
@@ -371,7 +379,7 @@ def ensure_chat_session_compare_run_is_current(session: Session, chat_session: C
     )
     if compare_run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Compare run not found")
-    ensure_compare_run_is_current(compare_run)
+    ensure_compare_run_is_current(session, compare_run)
 
 
 def _build_session_memory_answer(

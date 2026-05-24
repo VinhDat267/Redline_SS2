@@ -10,7 +10,7 @@ import { useAuth } from "../auth/AuthContext";
 import { Sidebar } from "../components/ScreenFrame";
 import {
   ApiError, cancelContractChatAttempt, createContractChatAttempt,
-  createContractChatSession, getContract, listContractChatMessages,
+  createContractChatSession, getContract, getContractCompareRun, listContractChatMessages,
   listContractChatSessions, listContractCompareRuns, listContractDrafts, sendContractChatMessage
 } from "../lib/api";
 import { streamChatAttempt } from "../lib/contractChatStream";
@@ -76,6 +76,7 @@ function buildCompareRunLabelMap(runs) {
     const base = compareRunLabel(run);
     const annotations = [];
     if (run?.is_stale) annotations.push("stale");
+    if (run?.is_superseded) annotations.push("superseded");
     if (pairCounts.get(compareRunPairKey(run)) > 1 && run?.id) annotations.push(`run #${run.id}`);
     const suffix = annotations.length ? ` (${annotations.join(", ")})` : "";
     labels.set(String(run.id), `${base}${suffix}`);
@@ -83,9 +84,36 @@ function buildCompareRunLabelMap(runs) {
   return labels;
 }
 function isCompletedCompareRun(r) { return ["completed", "completed_with_warnings"].includes(r.compare_status); }
-function isFreshCompletedCompareRun(r) { return isCompletedCompareRun(r) && !r.is_stale; }
+function isFreshCompletedCompareRun(r) { return isCompletedCompareRun(r) && !r.is_stale && !r.is_superseded; }
 function staleCompareRunMessage() {
   return "This compare run is stale because a draft was parsed again. Run Compare again before asking compare questions.";
+}
+function supersededCompareRunMessage() {
+  return "This compare run has been superseded. Use the latest Compare run before asking compare questions.";
+}
+function compareRunUnavailableMessage(run) {
+  if (run?.is_stale) return staleCompareRunMessage();
+  if (run?.is_superseded) return supersededCompareRunMessage();
+  return "";
+}
+function mergeCompareRuns(currentRuns, incomingRuns) {
+  const byId = new Map();
+  for (const run of [...currentRuns, ...incomingRuns]) {
+    if (run?.id) byId.set(String(run.id), run);
+  }
+  return [...byId.values()].sort((a, b) => Number(a.id ?? 0) - Number(b.id ?? 0));
+}
+function providerBadgeLabel(message) {
+  const provider = message?.provider_used;
+  if (!provider) return "";
+  const rawBase = provider.split(":")[0] || provider;
+  const base = rawBase.startsWith("local") ? "local" : rawBase;
+  const hasCompareEvidence = Array.isArray(message.citations) && message.citations.some(c => c.compare_run_id || c.change_item_id || c.source_label);
+  if (rawBase === "local-compare") return "local · compare fallback";
+  if (hasCompareEvidence) return `${base} · compare changes`;
+  if (provider === "session-memory") return "session memory";
+  if (provider === "contract-metadata") return "contract metadata";
+  return `${base} · current draft`;
 }
 function citationScopeLabel(c) { return c.source_label === "source" ? "Source" : c.source_label === "target" ? "Target" : ""; }
 function citationTitle(c) {
@@ -149,17 +177,23 @@ export function ContractChatPage() {
         const [cr, dr, rr, sr] = await Promise.all([
           getContract(token, contractId),
           listContractDrafts(token, contractId),
-          listContractCompareRuns(token, contractId),
+          listContractCompareRuns(token, contractId, { latestPerPair: true, freshOnly: true }),
           listContractChatSessions(token, contractId)
         ]);
         if (!ok) return;
-        setContract(cr); setDrafts(dr); setCompareRuns(rr); setSessions(sr);
+        let loadedCompareRuns = rr;
+        const latest = sr[sr.length - 1];
+        if (latest?.compare_run_id && !loadedCompareRuns.some(r => String(r.id) === String(latest.compare_run_id))) {
+          const historicalCompareRun = await getContractCompareRun(token, latest.compare_run_id);
+          if (!ok) return;
+          loadedCompareRuns = mergeCompareRuns(loadedCompareRuns, [historicalCompareRun]);
+        }
+        setContract(cr); setDrafts(dr); setCompareRuns(loadedCompareRuns); setSessions(sr);
         const parsed = dr.filter(hasParsedStatus);
         if (parsed.length) setSelectedDraftId(c => c || String(parsed[0].id));
-        const completedRuns = latestCompareRunsByPair(rr.filter(isFreshCompletedCompareRun));
+        const completedRuns = latestCompareRunsByPair(loadedCompareRuns.filter(isFreshCompletedCompareRun));
         if (completedRuns.length) setSelectedCompareRunId(c => c || String(completedRuns[completedRuns.length - 1].id));
         if (sr.length) {
-          const latest = sr[sr.length - 1];
           setSelectedSessionId(String(latest.id));
           if (latest.compare_run_id) {
             setSelectedScope("compare");
@@ -201,6 +235,8 @@ export function ContractChatPage() {
   const selectedCompareTargetDraft = selectedCompareRun?.target_version ?? selectedCompareRun?.target_draft ?? null;
   const selectedCompareRunLabel = selectedCompareRun ? compareRunLabels.get(String(selectedCompareRun.id)) ?? compareRunLabel(selectedCompareRun) : "";
   const selectedCompareRunIsStale = Boolean(selectedCompareRun?.is_stale);
+  const selectedCompareRunIsSuperseded = Boolean(selectedCompareRun?.is_superseded);
+  const selectedCompareRunUnavailableMessage = compareRunUnavailableMessage(selectedCompareRun);
   const activeDraftId = selectedScope === "compare" ? String(selectedCompareTargetDraft?.id ?? "") : selectedDraftId;
   const activeScopeLabel = selectedScope === "compare" && selectedCompareRun ? selectedCompareRunLabel : draftLabel(selectedDraft);
   const promptExamples = selectedScope === "compare" ? COMPARE_PROMPT_EXAMPLES : PROMPT_EXAMPLES;
@@ -257,6 +293,15 @@ export function ContractChatPage() {
     });
   }
 
+  async function ensureCompareRunLoaded(compareRunId) {
+    if (!compareRunId) return null;
+    const existing = compareRuns.find(r => String(r.id) === String(compareRunId));
+    if (existing) return existing;
+    const loaded = await getContractCompareRun(token, compareRunId);
+    setCompareRuns(current => mergeCompareRuns(current, [loaded]));
+    return loaded;
+  }
+
   async function runAttempt({ session, normalizedQuery, draftId, supersedesAttemptId = null, replaceMessageId = null, appendUserMessage = true }) {
     const req = { query: normalizedQuery, draft_id: Number(draftId), client_request_id: createClientRequestId() };
     if (supersedesAttemptId) req.supersedes_attempt_id = supersedesAttemptId;
@@ -304,7 +349,7 @@ export function ContractChatPage() {
     const q = query.trim();
     if (!q) { setError("Please enter a contract question."); return; }
     if (selectedScope === "compare" && !selectedCompareRun) { setError("Choose a completed compare run first."); return; }
-    if (selectedScope === "compare" && selectedCompareRunIsStale) { setError(staleCompareRunMessage()); return; }
+    if (selectedScope === "compare" && selectedCompareRunUnavailableMessage) { setError(selectedCompareRunUnavailableMessage); return; }
     if (!activeDraftId) { setError("Choose a parsed contract draft first."); return; }
     setIsSending(true); setIsStopping(false); setError(""); setStreamingAnswer(null);
     try {
@@ -336,27 +381,31 @@ export function ContractChatPage() {
   async function handleRetry(msg) {
     if (!msg?.source_query || !msg.session_id || !msg.draft_id || !msg.attempt_id) return;
     const session = sessions.find(s => s.id === msg.session_id) ?? { id: msg.session_id, draft_id: msg.draft_id };
-    const sessionCompareRun = session?.compare_run_id ? completedCompareRuns.find(r => String(r.id) === String(session.compare_run_id)) : null;
-    if (sessionCompareRun?.is_stale) { setError(staleCompareRunMessage()); return; }
     setIsSending(true); setIsStopping(false); setError("");
-    try { await runAttempt({ session, normalizedQuery: msg.source_query, draftId: msg.draft_id, supersedesAttemptId: msg.attempt_id, replaceMessageId: msg.id, appendUserMessage: false }); }
+    try {
+      const sessionCompareRun = session?.compare_run_id ? await ensureCompareRunLoaded(session.compare_run_id) : null;
+      const unavailableMessage = compareRunUnavailableMessage(sessionCompareRun);
+      if (unavailableMessage) { setError(unavailableMessage); return; }
+      await runAttempt({ session, normalizedQuery: msg.source_query, draftId: msg.draft_id, supersedesAttemptId: msg.attempt_id, replaceMessageId: msg.id, appendUserMessage: false });
+    }
     catch (e) { if (e instanceof ApiError && e.status === 401) { logout(); return; } setError(e.message); }
     finally { setIsSending(false); }
   }
 
   async function handleSelectSession(sid) {
     setSelectedSessionId(String(sid)); setShowSessions(false);
-    const s = sessions.find(s => s.id === sid);
-    if (s) {
-      setSelectedDraftId(String(s.draft_id));
-      if (s.compare_run_id) {
-        setSelectedScope("compare");
-        setSelectedCompareRunId(String(s.compare_run_id));
-      } else {
-        setSelectedScope("draft");
-      }
-    }
     try {
+      const s = sessions.find(s => s.id === sid);
+      if (s) {
+        setSelectedDraftId(String(s.draft_id));
+        if (s.compare_run_id) {
+          await ensureCompareRunLoaded(s.compare_run_id);
+          setSelectedScope("compare");
+          setSelectedCompareRunId(String(s.compare_run_id));
+        } else {
+          setSelectedScope("draft");
+        }
+      }
       const msgs = await listContractChatMessages(token, contractId, sid);
       setMessages(msgs); setStreamingAnswer(readPartial(contractId, sid)); setError("");
     } catch (e) { if (e instanceof ApiError && e.status === 401) { logout(); return; } setError(e.message); }
@@ -443,7 +492,7 @@ export function ContractChatPage() {
             <button type="button" aria-pressed={selectedScope === "compare"} disabled={isSending || hasStream || selectableCompareRuns.length === 0}
               onClick={() => handleScopeChange("compare")}
               style={{ padding: "5px 6px", borderRadius: "7px", border: selectedScope === "compare" ? "1px solid #F0B90B" : "1px solid #E6E8EA", background: selectedScope === "compare" ? "#FFF8E6" : "#F4F5F7", color: selectableCompareRuns.length ? "#1E2026" : "#848E9C", fontSize: "11px", fontWeight: 700, cursor: selectableCompareRuns.length ? "pointer" : "not-allowed" }}>
-              Compared Drafts
+              Compare Changes
             </button>
           </div>
           <div style={{ position: "relative" }}>
@@ -471,10 +520,12 @@ export function ContractChatPage() {
             <ChevronDown size={11} style={{ position: "absolute", right: "7px", top: "50%", transform: "translateY(-50%)", color: "#848E9C", pointerEvents: "none" }} />
           </div>
           {selectedScope === "compare" && (
-            <p style={{ margin: "6px 0 0", fontSize: "10px", lineHeight: 1.4, color: selectedCompareRunIsStale ? "#C47A00" : "#848E9C" }}>
+            <p style={{ margin: "6px 0 0", fontSize: "10px", lineHeight: 1.4, color: selectedCompareRunUnavailableMessage ? "#C47A00" : "#848E9C" }}>
               {selectedCompareRunIsStale
                 ? "This historical compare used an older parse snapshot. Run Compare again before asking new questions."
-                : "Showing the latest completed compare for each draft pair."}
+                : selectedCompareRunIsSuperseded
+                  ? "This historical compare was replaced by a newer run. Use the latest Compare run for new questions."
+                  : "Showing the latest fresh compare changes for each draft pair."}
             </p>
           )}
         </div>
@@ -618,7 +669,7 @@ export function ContractChatPage() {
                       )}
                       {!msg.streaming && msg.provider_used && (
                         <span style={{ fontSize: "9px", fontWeight: 600, padding: "1px 5px", borderRadius: "3px", background: "#F4F5F7", color: "#848E9C", border: "1px solid #E6E8EA" }}>
-                          {msg.provider_used.split(":")[0]}
+                          {providerBadgeLabel(msg)}
                         </span>
                       )}
                     </>

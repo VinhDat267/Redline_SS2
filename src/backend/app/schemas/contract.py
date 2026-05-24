@@ -88,6 +88,7 @@ class ContractCompareRunRead(BaseModel):
     source_parse_run_id: int
     target_parse_run_id: int
     is_stale: bool = False
+    is_superseded: bool = False
     warning_count: int = 0
     warnings: list[str] = Field(default_factory=list)
     contract: ContractSummaryRead

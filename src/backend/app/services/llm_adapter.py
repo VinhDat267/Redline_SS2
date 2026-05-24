@@ -826,7 +826,8 @@ class LLMAdapter:
             "Return JSON only. "
             "Use only this top-level key: answer. "
             "Answer using only the supplied contract metadata, recent conversation, and cited evidence. "
-            "Do not invent facts. If the evidence is insufficient, say that the parsed contract draft does not contain enough grounded evidence. "
+            "For compare Q&A, explain only differences present in the supplied source/target evidence. "
+            "Do not invent facts. If the evidence is insufficient, say that the supplied grounded evidence is not enough to answer. "
             "Preserve the user's language. When using evidence, cite it inline with bracket numbers like [1]."
         )
 

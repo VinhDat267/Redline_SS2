@@ -225,6 +225,7 @@ def generate_chat_answer(
             contract=contract,
             chat_session=chat_session,
             query=query,
+            should_cancel=should_cancel,
         )
         if compare_answer is not None:
             _raise_if_cancelled(should_cancel)
@@ -425,7 +426,9 @@ def _build_compare_run_answer(
     contract: Document,
     chat_session: ChatSession,
     query: str,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> ContractChatAnswer | None:
+    _raise_if_cancelled(should_cancel)
     compare_run = session.scalar(
         select(CompareRun)
         .where(CompareRun.id == chat_session.compare_run_id)
@@ -464,6 +467,24 @@ def _build_compare_run_answer(
 
     source_label = compare_run.source_version.version_label
     target_label = compare_run.target_version.version_label
+    citations = _serialize_compare_citations(selected, compare_run_id=compare_run.id)
+    if settings.contract_chat_llm_enabled and citations:
+        llm_answer = _try_generate_llm_compare_answer(
+            session,
+            contract=contract,
+            chat_session=chat_session,
+            compare_run=compare_run,
+            query=query,
+            citations=citations,
+            should_cancel=should_cancel,
+        )
+        if llm_answer is not None:
+            return ContractChatAnswer(
+                content=llm_answer["content"],
+                citations=citations,
+                provider_used=llm_answer["provider_used"],
+            )
+
     lines = [
         f"Compare Q&A is using deterministic compare truth for {source_label} -> {target_label}.",
     ]
@@ -479,9 +500,97 @@ def _build_compare_run_answer(
 
     return ContractChatAnswer(
         content="\n".join(lines),
-        citations=_serialize_compare_citations(selected, compare_run_id=compare_run.id),
+        citations=citations,
         provider_used="local-compare",
     )
+
+
+def _try_generate_llm_compare_answer(
+    session: Session,
+    *,
+    contract: Document,
+    chat_session: ChatSession,
+    compare_run: CompareRun,
+    query: str,
+    citations: list[dict[str, object]],
+    should_cancel: Callable[[], bool] | None = None,
+) -> dict[str, str] | None:
+    _raise_if_cancelled(should_cancel)
+    payload = _build_compare_chat_llm_payload(
+        session,
+        contract=contract,
+        chat_session=chat_session,
+        compare_run=compare_run,
+        query=query,
+        citations=citations,
+    )
+    try:
+        _raise_if_cancelled(should_cancel)
+        generated = get_llm_adapter().generate_contract_chat_answer(
+            payload,
+            should_cancel=should_cancel,
+        )
+        _raise_if_cancelled(should_cancel)
+    except ProviderRequestCancelled as exc:
+        raise ChatGenerationCancelled() from exc
+    except Exception:
+        logger.exception("Compare Q&A LLM synthesis failed unexpectedly; falling back to local compare answer.")
+        return None
+
+    if generated.error_message or not generated.content.strip():
+        return None
+    return {
+        "content": generated.content.strip(),
+        "provider_used": f"{generated.provider_used}:contract-chat",
+    }
+
+
+def _build_compare_chat_llm_payload(
+    session: Session,
+    *,
+    contract: Document,
+    chat_session: ChatSession,
+    compare_run: CompareRun,
+    query: str,
+    citations: list[dict[str, object]],
+) -> dict[str, object]:
+    return {
+        "contract": {
+            "title": contract.title,
+            "document_type": contract.document_type,
+            "description": contract.description,
+            "source_draft_label": compare_run.source_version.version_label,
+            "target_draft_label": compare_run.target_version.version_label,
+            "compare_run_id": compare_run.id,
+        },
+        "question": query,
+        "recent_messages": _build_recent_conversation_messages(
+            session,
+            chat_session_id=chat_session.id,
+            current_query=query,
+        ),
+        "evidence": [
+            {
+                "citation_number": index,
+                "source_label": item.get("source_label"),
+                "change_item_id": item.get("change_item_id"),
+                "section_title": item.get("section_title"),
+                "block_key": item.get("block_key"),
+                "surface_type": item.get("surface_type"),
+                "surface_key": item.get("surface_key"),
+                "content": item.get("content"),
+            }
+            for index, item in enumerate(citations, start=1)
+        ],
+        "instructions": {
+            "truth_boundary": (
+                "Use only the supplied compare metadata, recent conversation, and source/target evidence. "
+                "Do not invent changes or rely on outside contract knowledge."
+            ),
+            "citation_style": "When relying on source/target evidence, cite it inline as [citation_number].",
+            "fallback": "If the compare evidence does not answer the question, say the compare run does not contain enough grounded evidence.",
+        },
+    }
 
 
 def _select_compare_change_items(

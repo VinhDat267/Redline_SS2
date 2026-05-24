@@ -3,7 +3,7 @@
 This pack is the source of truth for Redline smoke tests, manual regression,
 AI evaluation, demo rehearsal, and release-readiness checks.
 
-Updated: 2026-05-23.
+Updated: 2026-05-24.
 
 ## Related Packs
 
@@ -33,7 +33,7 @@ Updated: 2026-05-23.
 | Compare | Deterministic clause diff, change items |
 | AI Review | RAG-enhanced batch/per-item generation, with/without-RAG modes |
 | Review | Human review status, comments |
-| Contract Q&A | Attempt-driven streaming, draft/compare scopes, grounded citations, session memory, cancel/retry |
+| Contract Q&A | Attempt-driven streaming, draft/compare scopes, provider-backed synthesis when configured, grounded citations, session memory, cancel/retry |
 | Traceability | Requirement links, AI link suggestions, requirement-test case mapping, impacted test calculation |
 | Summary/Export | AI summary, Markdown export, DOCX report |
 | Analytics | Project-level statistics, review status |
@@ -69,7 +69,7 @@ Updated: 2026-05-23.
 
 | Suite | Count | Framework | Notes |
 |-------|-------|-----------|-------|
-| Backend | **268 passed** | Pytest | SQLite fixtures, covers auth, projects, documents, compare, AI, chat, avatar |
+| Backend | **272 passed** | Pytest | SQLite fixtures, covers auth, projects, documents, compare, AI, chat, avatar |
 | Frontend | **116 passed** (19 files) | Vitest | Covers routes, auth context, all page workspaces, avatar upload, compare-scoped Q&A |
 | Frontend build | Passes | Vite | Existing chunk-size warning only |
 

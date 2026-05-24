@@ -39,7 +39,7 @@ Latest verified baseline:
 
 | Area | Result |
 | --- | --- |
-| Backend test suite | `268 passed` |
+| Backend test suite | `272 passed` |
 | Frontend test suite | `116 passed` across 19 files |
 | Frontend production build | Passes, with Vite chunk-size warning only |
 | Alembic schema check | No new upgrade operations detected |
@@ -71,7 +71,7 @@ Latest verified baseline:
 | Parser | DOCX body/header/footer/footnote/endnote/table parsing; PDF text-layer parsing; OCR fallback with Tesseract |
 | Compare | Deterministic clause-level diff between parsed drafts |
 | AI Review | Per-item and batched AI review draft generation with RAG context |
-| Contract Q&A | Attempt-driven streaming chat, single-draft and compare-run scopes, grounded citations, source evidence panel, cancel/retry |
+| Contract Q&A | Attempt-driven streaming chat, single-draft and compare-run scopes, LLM synthesis when configured, grounded citations, source evidence panel, cancel/retry |
 | Traceability | Requirement links, test-case mappings, impacted test calculation, AI link suggestions |
 | Summary / Export | AI summary, Markdown export, DOCX report export |
 | Analytics | Project-level metrics and review status charts |
@@ -286,7 +286,7 @@ cd src/backend
 .\.venv\Scripts\python -m pytest tests -q
 ```
 
-Expected baseline: `265 passed`.
+Expected baseline: `272 passed`.
 
 ### Frontend tests
 

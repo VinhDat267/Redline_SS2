@@ -215,7 +215,7 @@ These routes remain supported because the internal model names are still
 - Human review truth lives in `ChangeItem.review_status`, `assignee_user_id`, `summary`, and `ReviewComment`.
 - Requirement/test traceability truth is created by user-confirmed links and mappings.
 - AI Review, AI requirement extraction, AI traceability suggestions, and Contract Q&A are support layers.
-- Compare-scoped Contract Q&A may explain compare truth, but it must not create or overwrite compare truth.
+- Compare-scoped Contract Q&A may use provider-backed synthesis over compare truth, but it must not create or overwrite compare truth.
 - Summary/export is derived output, not an independent truth source.
 
 ## Environment Variables
@@ -261,7 +261,7 @@ cd src/backend
 .\.venv\Scripts\python -m pytest tests -q
 ```
 
-Expected baseline: `268 passed`.
+Expected baseline: `272 passed`.
 
 ### Frontend
 

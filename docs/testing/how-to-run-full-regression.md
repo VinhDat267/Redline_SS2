@@ -197,7 +197,7 @@ cd src/backend
 .\.venv\Scripts\python -m alembic check
 ```
 
-Expected baseline: `265 passed` and no migration drift.
+Expected baseline: `272 passed` and no migration drift.
 
 ### Frontend
 

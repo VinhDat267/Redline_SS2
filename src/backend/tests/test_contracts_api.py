@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.models import ChatAttempt, ChatMessage, ChatSession, Document, DocumentVersion
+from app.services import compare as compare_service
 from app.services import contract_chat
 from app.services import contract_chat_attempts
 from app.services import documents as document_service
@@ -413,6 +414,45 @@ def test_contract_compare_runs_can_filter_latest_fresh_run_per_pair(client, auth
 
     assert stale_latest_response.status_code == 200
     assert stale_latest_response.json()["data"] == []
+
+
+def test_contract_compare_runs_latest_fresh_endpoint_does_not_hydrate_superseded_history(
+    client,
+    auth_headers,
+    monkeypatch,
+):
+    setup = _create_contract_compare_chat_setup(client, auth_headers)
+    contract_id = setup["contract_id"]
+    source_draft_id = setup["source_draft_id"]
+    target_draft_id = setup["target_draft_id"]
+    first_compare_run_id = setup["compare_run_id"]
+
+    second_response = client.post(
+        f"/api/v1/contracts/{contract_id}/compare-runs",
+        json={"source_draft_id": source_draft_id, "target_draft_id": target_draft_id},
+        headers=auth_headers,
+    )
+    assert second_response.status_code == 201
+    second_compare_run_id = second_response.json()["data"]["id"]
+
+    hydrated_compare_run_ids = []
+    original_list_compare_run_change_items = compare_service.list_compare_run_change_items
+
+    def spy_list_compare_run_change_items(session, compare_run_id):
+        hydrated_compare_run_ids.append(compare_run_id)
+        return original_list_compare_run_change_items(session, compare_run_id)
+
+    monkeypatch.setattr(compare_service, "list_compare_run_change_items", spy_list_compare_run_change_items)
+
+    latest_response = client.get(
+        f"/api/v1/contracts/{contract_id}/compare-runs?latest_per_pair=true&fresh_only=true",
+        headers=auth_headers,
+    )
+
+    assert latest_response.status_code == 200
+    assert [compare_run["id"] for compare_run in latest_response.json()["data"]] == [second_compare_run_id]
+    assert first_compare_run_id not in hydrated_compare_run_ids
+    assert hydrated_compare_run_ids == [second_compare_run_id]
 
 
 def test_contract_compare_run_reports_stale_after_reparse(client, auth_headers):

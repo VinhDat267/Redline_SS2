@@ -2,8 +2,8 @@ import json
 from collections import defaultdict
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session, aliased, joinedload
 
 from app.models import (
     AIBatchJob,
@@ -145,20 +145,62 @@ def list_document_compare_run_details(
     latest_per_pair: bool = False,
     fresh_only: bool = False,
 ) -> list[dict[str, object]]:
-    compare_runs = list(
-        session.scalars(
+    compare_runs = _list_document_compare_runs(
+        session,
+        document_id,
+        latest_per_pair=latest_per_pair,
+        fresh_only=fresh_only,
+    )
+    return [get_compare_run_detail(session, compare_run.id) for compare_run in compare_runs]
+
+
+def _list_document_compare_runs(
+    session: Session,
+    document_id: int,
+    *,
+    latest_per_pair: bool = False,
+    fresh_only: bool = False,
+) -> list[CompareRun]:
+    SourceVersion = aliased(DocumentVersion)
+    TargetVersion = aliased(DocumentVersion)
+
+    if latest_per_pair:
+        latest_id_query = (
+            select(func.max(CompareRun.id).label("compare_run_id"))
+            .join(SourceVersion, CompareRun.source_version_id == SourceVersion.id)
+            .join(TargetVersion, CompareRun.target_version_id == TargetVersion.id)
+            .where(
+                SourceVersion.document_id == document_id,
+                CompareRun.compare_status.in_(_COMPLETED_COMPARE_STATUSES),
+            )
+            .group_by(CompareRun.source_version_id, CompareRun.target_version_id)
+        )
+        if fresh_only:
+            latest_id_query = latest_id_query.where(
+                CompareRun.source_parse_run_id == SourceVersion.active_parse_run_id,
+                CompareRun.target_parse_run_id == TargetVersion.active_parse_run_id,
+            )
+
+        latest_id_subquery = latest_id_query.subquery()
+        statement = (
             select(CompareRun)
-            .join(DocumentVersion, CompareRun.source_version_id == DocumentVersion.id)
-            .where(DocumentVersion.document_id == document_id)
+            .where(CompareRun.id.in_(select(latest_id_subquery.c.compare_run_id)))
             .order_by(CompareRun.id)
         )
+        return list(session.scalars(statement))
+
+    statement = (
+        select(CompareRun)
+        .join(SourceVersion, CompareRun.source_version_id == SourceVersion.id)
+        .where(SourceVersion.document_id == document_id)
+        .order_by(CompareRun.id)
     )
-    compare_run_details = [get_compare_run_detail(session, compare_run.id) for compare_run in compare_runs]
-    if latest_per_pair:
-        compare_run_details = _latest_compare_run_details_by_pair(compare_run_details)
     if fresh_only:
-        compare_run_details = [compare_run for compare_run in compare_run_details if not compare_run["is_stale"]]
-    return compare_run_details
+        statement = statement.join(TargetVersion, CompareRun.target_version_id == TargetVersion.id).where(
+            CompareRun.source_parse_run_id == SourceVersion.active_parse_run_id,
+            CompareRun.target_parse_run_id == TargetVersion.active_parse_run_id,
+        )
+    return list(session.scalars(statement))
 
 
 def is_compare_run_stale(compare_run: CompareRun) -> bool:
@@ -186,22 +228,6 @@ def is_compare_run_superseded(session: Session, compare_run: CompareRun) -> bool
         .limit(1)
     )
     return newer_compare_run_id is not None
-
-
-def _latest_compare_run_details_by_pair(compare_run_details: list[dict[str, object]]) -> list[dict[str, object]]:
-    latest_by_pair: dict[tuple[int, int], dict[str, object]] = {}
-    for compare_run in compare_run_details:
-        if compare_run["compare_status"] not in _COMPLETED_COMPARE_STATUSES:
-            continue
-        pair_key = (
-            compare_run["source_version"]["id"],
-            compare_run["target_version"]["id"],
-        )
-        current = latest_by_pair.get(pair_key)
-        if current is None or compare_run["id"] > current["id"]:
-            latest_by_pair[pair_key] = compare_run
-
-    return sorted(latest_by_pair.values(), key=lambda compare_run: compare_run["id"])
 
 
 def list_compare_run_change_items(session: Session, compare_run_id: int) -> list[dict[str, object]]:

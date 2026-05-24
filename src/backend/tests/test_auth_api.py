@@ -792,6 +792,7 @@ def test_demo_seed_creates_live_workspace_data(client, auth_headers):
     assert documents_response.status_code == 200
     documents = documents_response.json()["data"]
     assert len(documents) >= 1
+    assert first_seed_payload["project"]["document_count"] == len(documents)
 
     versions_response = client.get(
         f"/api/v1/documents/{documents[0]['id']}/versions",

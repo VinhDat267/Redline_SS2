@@ -2,7 +2,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import Project, ProjectInvitation, ProjectMember, User
+from app.models import Document, Project, ProjectInvitation, ProjectMember, User
 from app.schemas.project import ProjectCreate, ProjectUpdate
 from app.schemas.project_member import ProjectMemberCreate, ProjectMemberUpdate
 from app.services.auth import normalize_email
@@ -19,6 +19,23 @@ def get_project_or_404(session: Session, project_id: int) -> Project:
     if project is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
     return project
+
+
+def count_project_documents(session: Session, project_id: int) -> int:
+    return count_projects_documents(session, [project_id]).get(project_id, 0)
+
+
+def count_projects_documents(session: Session, project_ids: list[int]) -> dict[int, int]:
+    unique_project_ids = sorted(set(project_ids))
+    if not unique_project_ids:
+        return {}
+
+    rows = session.execute(
+        select(Document.project_id, func.count(Document.id).label("document_count"))
+        .where(Document.project_id.in_(unique_project_ids))
+        .group_by(Document.project_id)
+    ).all()
+    return {row.project_id: int(row.document_count) for row in rows}
 
 
 def create_project(session: Session, payload: ProjectCreate, owner_user_id: int) -> Project:

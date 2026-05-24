@@ -1,9 +1,8 @@
 from fastapi import APIRouter, Depends, Response, status
-from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_current_user, get_db_session
-from app.models import Document, User
+from app.models import Project, User
 from app.schemas.project import ProjectCreate, ProjectRead, ProjectUpdate
 from app.schemas.project_invitation import ProjectInvitationRead
 from app.schemas.project_member import (
@@ -21,6 +20,12 @@ from app.services import projects as project_service
 router = APIRouter(tags=["projects"], dependencies=[Depends(get_current_user)])
 
 
+def _project_read_data(project: Project, document_count: int = 0) -> dict:
+    data = ProjectRead.model_validate(project).model_dump(mode="json")
+    data["document_count"] = document_count
+    return data
+
+
 @router.get("/projects")
 def list_projects(
     current_user: User = Depends(get_current_user),
@@ -28,21 +33,13 @@ def list_projects(
 ):
     projects = project_service.list_projects(database, current_user.id)
     project_ids = [p.id for p in projects]
-
-    # Single query: count documents per project
-    count_rows = database.execute(
-        select(Document.project_id, func.count(Document.id).label("cnt"))
-        .where(Document.project_id.in_(project_ids))
-        .group_by(Document.project_id)
-    ).all() if project_ids else []
-    doc_counts: dict[int, int] = {row.project_id: row.cnt for row in count_rows}
-
-    result = []
-    for project in projects:
-        data = ProjectRead.model_validate(project).model_dump(mode="json")
-        data["document_count"] = doc_counts.get(project.id, 0)
-        result.append(data)
-    return {"data": result}
+    doc_counts = project_service.count_projects_documents(database, project_ids)
+    return {
+        "data": [
+            _project_read_data(project, doc_counts.get(project.id, 0))
+            for project in projects
+        ]
+    }
 
 
 @router.post("/projects", status_code=status.HTTP_201_CREATED)
@@ -52,7 +49,7 @@ def create_project(
     database: Session = Depends(get_db_session),
 ):
     project = project_service.create_project(database, payload, current_user.id)
-    return {"data": ProjectRead.model_validate(project).model_dump(mode="json")}
+    return {"data": _project_read_data(project)}
 
 
 @router.get("/projects/{project_id}")
@@ -62,7 +59,8 @@ def get_project(
     database: Session = Depends(get_db_session),
 ):
     project = project_access_service.ensure_project_access_or_404(database, project_id, current_user.id)
-    return {"data": ProjectRead.model_validate(project).model_dump(mode="json")}
+    document_count = project_service.count_project_documents(database, project.id)
+    return {"data": _project_read_data(project, document_count)}
 
 
 @router.patch("/projects/{project_id}")
@@ -74,7 +72,8 @@ def update_project(
 ):
     project = project_access_service.ensure_project_admin_or_403(database, project_id, current_user.id)
     project = project_service.update_project(database, project, payload)
-    return {"data": ProjectRead.model_validate(project).model_dump(mode="json")}
+    document_count = project_service.count_project_documents(database, project.id)
+    return {"data": _project_read_data(project, document_count)}
 
 
 @router.delete("/projects/{project_id}", status_code=status.HTTP_204_NO_CONTENT)

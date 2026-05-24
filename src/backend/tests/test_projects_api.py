@@ -11,15 +11,26 @@ def test_project_crud_flow(client, auth_headers):
     assert create_response.status_code == 201
     created_project = create_response.json()["data"]
     assert created_project["name"] == "Redline SS2 Demo"
+    assert created_project["document_count"] == 0
     project_id = created_project["id"]
+
+    for title in ("Master Services Agreement", "Statement of Work"):
+        document_response = client.post(
+            f"/api/v1/projects/{project_id}/documents",
+            json={"title": title, "document_type": "contract"},
+            headers=auth_headers,
+        )
+        assert document_response.status_code == 201
 
     list_response = client.get("/api/v1/projects", headers=auth_headers)
     assert list_response.status_code == 200
-    assert any(project["id"] == project_id for project in list_response.json()["data"])
+    listed_project = next(project for project in list_response.json()["data"] if project["id"] == project_id)
+    assert listed_project["document_count"] == 2
 
     detail_response = client.get(f"/api/v1/projects/{project_id}", headers=auth_headers)
     assert detail_response.status_code == 200
     assert detail_response.json()["data"]["description"] == "Current demo workspace"
+    assert detail_response.json()["data"]["document_count"] == 2
 
     update_response = client.patch(
         f"/api/v1/projects/{project_id}",
@@ -28,6 +39,7 @@ def test_project_crud_flow(client, auth_headers):
     )
     assert update_response.status_code == 200
     assert update_response.json()["data"]["name"] == "Redline SS2 Review Workspace"
+    assert update_response.json()["data"]["document_count"] == 2
 
     delete_response = client.delete(f"/api/v1/projects/{project_id}", headers=auth_headers)
     assert delete_response.status_code == 204

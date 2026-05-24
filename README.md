@@ -39,7 +39,7 @@ Latest verified baseline:
 
 | Area | Result |
 | --- | --- |
-| Backend test suite | `272 passed` |
+| Backend test suite | `274 passed` |
 | Frontend test suite | `116 passed` across 19 files |
 | Frontend production build | Passes, with Vite chunk-size warning only |
 | Alembic schema check | No new upgrade operations detected |
@@ -286,7 +286,7 @@ cd src/backend
 .\.venv\Scripts\python -m pytest tests -q
 ```
 
-Expected baseline: `272 passed`.
+Expected baseline: `274 passed`.
 
 ### Frontend tests
 

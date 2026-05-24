@@ -463,7 +463,14 @@ def _build_compare_run_answer(
 
     selected = _select_compare_change_items(query, change_items, limit=_CHAT_CONTEXT_LIMIT)
     if not selected:
-        selected = change_items[:_CHAT_CONTEXT_LIMIT]
+        if _is_compare_overview_query(query):
+            selected = change_items[:_CHAT_CONTEXT_LIMIT]
+        else:
+            return ContractChatAnswer(
+                content="The compare run does not contain enough grounded evidence to answer that question.",
+                citations=[],
+                provider_used="local-compare",
+            )
 
     source_label = compare_run.source_version.version_label
     target_label = compare_run.target_version.version_label
@@ -475,6 +482,7 @@ def _build_compare_run_answer(
             chat_session=chat_session,
             compare_run=compare_run,
             query=query,
+            change_items=selected,
             citations=citations,
             should_cancel=should_cancel,
         )
@@ -512,6 +520,7 @@ def _try_generate_llm_compare_answer(
     chat_session: ChatSession,
     compare_run: CompareRun,
     query: str,
+    change_items: list[ChangeItem],
     citations: list[dict[str, object]],
     should_cancel: Callable[[], bool] | None = None,
 ) -> dict[str, str] | None:
@@ -522,6 +531,7 @@ def _try_generate_llm_compare_answer(
         chat_session=chat_session,
         compare_run=compare_run,
         query=query,
+        change_items=change_items,
         citations=citations,
     )
     try:
@@ -552,6 +562,7 @@ def _build_compare_chat_llm_payload(
     chat_session: ChatSession,
     compare_run: CompareRun,
     query: str,
+    change_items: list[ChangeItem],
     citations: list[dict[str, object]],
 ) -> dict[str, object]:
     return {
@@ -569,6 +580,18 @@ def _build_compare_chat_llm_payload(
             chat_session_id=chat_session.id,
             current_query=query,
         ),
+        "changes": [
+            {
+                "change_item_id": item.id,
+                "change_type": item.change_type,
+                "review_status": item.review_status,
+                "section_title": item.section_title,
+                "summary": item.summary,
+                "source_content": item.old_content,
+                "target_content": item.new_content,
+            }
+            for item in change_items
+        ],
         "evidence": [
             {
                 "citation_number": index,
@@ -584,7 +607,7 @@ def _build_compare_chat_llm_payload(
         ],
         "instructions": {
             "truth_boundary": (
-                "Use only the supplied compare metadata, recent conversation, and source/target evidence. "
+                "Use only the supplied compare metadata, structured changes, recent conversation, and source/target evidence. "
                 "Do not invent changes or rely on outside contract knowledge."
             ),
             "citation_style": "When relying on source/target evidence, cite it inline as [citation_number].",
@@ -626,6 +649,89 @@ def _select_compare_change_items(
         return []
     scored.sort(key=lambda item: (-item[0], item[1]))
     return [item for _score, _index, item in scored[:limit]]
+
+
+def _is_compare_overview_query(query: str) -> bool:
+    normalized = _normalize_query_for_intent(query)
+    if not normalized:
+        return False
+
+    query_tokens = set(_tokenize(normalized))
+    overview_phrases = (
+        "what changed",
+        "what are the changes",
+        "summarize changes",
+        "summary of changes",
+        "summarize the differences",
+        "what are the differences",
+        "difference between",
+        "differences between",
+        "compare these drafts",
+        "compare the drafts",
+        "compare two drafts",
+        "thay doi gi",
+        "co gi thay doi",
+        "khac nhau gi",
+        "diem khac nhau",
+        "tom tat thay doi",
+    )
+    generic_tokens = {
+        "about",
+        "all",
+        "any",
+        "brief",
+        "briefly",
+        "change",
+        "changed",
+        "changes",
+        "co",
+        "compare",
+        "compared",
+        "comparison",
+        "difference",
+        "differences",
+        "diem",
+        "draft",
+        "drafts",
+        "between",
+        "how",
+        "it",
+        "key",
+        "main",
+        "major",
+        "two",
+        "thay",
+        "doi",
+        "khac",
+        "nhau",
+        "summary",
+        "summarize",
+        "tom",
+        "tat",
+        "version",
+        "versions",
+    }
+    if not query_tokens or not query_tokens <= generic_tokens:
+        return False
+    overview_markers = {
+        "change",
+        "changed",
+        "changes",
+        "compare",
+        "compared",
+        "comparison",
+        "difference",
+        "differences",
+        "summary",
+        "summarize",
+        "thay",
+        "doi",
+        "khac",
+        "nhau",
+        "tom",
+        "tat",
+    }
+    return any(phrase in normalized for phrase in overview_phrases) or bool(query_tokens & overview_markers)
 
 
 def _find_latest_declared_name(session: Session, chat_session_id: int, *, current_query: str) -> str | None:

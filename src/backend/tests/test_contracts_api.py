@@ -531,6 +531,60 @@ def test_contract_compare_chat_uses_llm_synthesis_when_provider_is_available(cli
     assert {item["source_label"] for item in captured_payload["evidence"]} == {"source", "target"}
     assert "$100,000" in captured_payload["evidence"][0]["content"]
     assert "$250,000" in captured_payload["evidence"][1]["content"]
+    assert captured_payload["changes"][0]["change_type"] == "modified"
+    assert captured_payload["changes"][0]["review_status"] == "open"
+    assert captured_payload["changes"][0]["source_content"] == "The liability cap is $100,000 and excludes confidentiality breaches."
+    assert captured_payload["changes"][0]["target_content"] == "The liability cap is $250,000 and includes confidentiality breaches."
+
+
+def test_contract_compare_chat_does_not_use_unrelated_change_items_for_specific_question(
+    client,
+    auth_headers,
+    monkeypatch,
+):
+    setup = _create_contract_compare_chat_setup(client, auth_headers)
+    contract_id = setup["contract_id"]
+    target_draft_id = setup["target_draft_id"]
+    compare_run_id = setup["compare_run_id"]
+    adapter_called = False
+
+    class FakeChatAdapter:
+        def generate_contract_chat_answer(self, payload, **kwargs):
+            nonlocal adapter_called
+            adapter_called = True
+            return SimpleNamespace(
+                content="Payment terms changed materially.",
+                provider_used="gemini",
+                fallback_used=False,
+                error_message=None,
+            )
+
+    monkeypatch.setattr(contract_chat.settings, "contract_chat_llm_enabled", True)
+    monkeypatch.setattr(contract_chat, "get_llm_adapter", lambda: FakeChatAdapter())
+
+    session_response = client.post(
+        f"/api/v1/contracts/{contract_id}/chat/sessions",
+        json={
+            "draft_id": target_draft_id,
+            "compare_run_id": compare_run_id,
+            "title": "Compare v1 to v2 Q&A",
+        },
+        headers=auth_headers,
+    )
+    session_id = session_response.json()["data"]["id"]
+
+    message_response = client.post(
+        f"/api/v1/contracts/{contract_id}/chat/sessions/{session_id}/messages",
+        json={"query": "What changed about payment terms?"},
+        headers=auth_headers,
+    )
+
+    assert message_response.status_code == 201
+    assistant_message = message_response.json()["data"]["assistant_message"]
+    assert "compare run does not contain enough grounded evidence" in assistant_message["content"]
+    assert assistant_message["provider_used"] == "local-compare"
+    assert assistant_message["citations"] == []
+    assert adapter_called is False
 
 
 def test_contract_chat_remembers_session_context_without_document_citations(client, auth_headers):
@@ -1664,3 +1718,9 @@ def test_contract_chat_context_rejects_weak_evidence():
     ]
 
     assert contract_chat._select_chat_context("What is the cafeteria menu?", weak_blocks, limit=4) == []
+
+
+def test_compare_overview_intent_distinguishes_generic_and_topic_specific_questions():
+    assert contract_chat._is_compare_overview_query("What changed between the two drafts?") is True
+    assert contract_chat._is_compare_overview_query("Summarize the key changes.") is True
+    assert contract_chat._is_compare_overview_query("What changed about payment terms?") is False

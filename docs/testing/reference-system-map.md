@@ -261,7 +261,7 @@ cd src/backend
 .\.venv\Scripts\python -m pytest tests -q
 ```
 
-Expected baseline: `272 passed`.
+Expected baseline: `274 passed`.
 
 ### Frontend
 

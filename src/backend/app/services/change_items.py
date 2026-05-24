@@ -14,6 +14,7 @@ from app.models import (
     Document,
     ProjectMember,
 )
+from app.services import compare as compare_service
 
 
 def get_change_item_detail(session: Session, change_item_id: int) -> dict[str, object]:
@@ -27,6 +28,7 @@ def update_change_item(
     updates: dict[str, object],
 ) -> dict[str, object]:
     change_item = _get_change_item_or_404(session, change_item_id)
+    compare_service.ensure_compare_run_is_current(session, change_item.compare_run)
 
     if "review_status" in updates:
         change_item.review_status = updates["review_status"]
@@ -66,6 +68,7 @@ def create_review_comment(
     content: str,
 ) -> dict[str, object]:
     change_item = _get_change_item_or_404(session, change_item_id)
+    compare_service.ensure_compare_run_is_current(session, change_item.compare_run)
     author = session.get(User, author_user_id)
     if author is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Comment author not found")
@@ -89,6 +92,7 @@ def create_requirement_link(
     link_type: str = "manual",
 ) -> dict[str, object]:
     change_item = _get_change_item_or_404(session, change_item_id)
+    compare_service.ensure_compare_run_is_current(session, change_item.compare_run)
     requirement = session.get(Requirement, requirement_id)
     if requirement is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Requirement not found")
@@ -141,7 +145,8 @@ def delete_requirement_link(
     change_item_id: int,
     requirement_id: int,
 ) -> dict[str, object]:
-    _get_change_item_or_404(session, change_item_id)
+    change_item = _get_change_item_or_404(session, change_item_id)
+    compare_service.ensure_compare_run_is_current(session, change_item.compare_run)
 
     link = session.scalar(
         select(ChangeItemRequirementLink)

@@ -230,6 +230,25 @@ def is_compare_run_superseded(session: Session, compare_run: CompareRun) -> bool
     return newer_compare_run_id is not None
 
 
+def ensure_compare_run_is_current(session: Session, compare_run: CompareRun) -> None:
+    if is_compare_run_stale(compare_run):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                "Compare run is stale because one of its drafts was parsed again. "
+                "Run Compare again before updating review, AI, or traceability data."
+            ),
+        )
+    if is_compare_run_superseded(session, compare_run):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                "Compare run is superseded by a newer run for the same draft pair. "
+                "Use the latest compare run before updating review, AI, or traceability data."
+            ),
+        )
+
+
 def list_compare_run_change_items(session: Session, compare_run_id: int) -> list[dict[str, object]]:
     compare_run = _get_compare_run_or_404(session, compare_run_id)
     active_job_item_statuses = _load_active_job_item_statuses(session, compare_run.id)

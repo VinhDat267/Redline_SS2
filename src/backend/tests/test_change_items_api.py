@@ -103,6 +103,61 @@ def _create_compare_run(client, auth_headers) -> int:
     return response.json()["data"]["id"]
 
 
+def _create_change_item(client, auth_headers, session_factory) -> int:
+    compare_run_id = _create_compare_run(client, auth_headers)
+    with session_factory() as session:
+        change_item = session.scalar(
+            select(ChangeItem).where(ChangeItem.compare_run_id == compare_run_id).order_by(ChangeItem.id)
+        )
+        assert change_item is not None
+        return change_item.id
+
+
+def _compare_run_setup_for_change_item(session_factory, change_item_id: int) -> dict[str, int]:
+    with session_factory() as session:
+        change_item = session.get(ChangeItem, change_item_id)
+        assert change_item is not None
+        compare_run = change_item.compare_run
+        return {
+            "document_id": compare_run.source_version.document_id,
+            "compare_run_id": compare_run.id,
+            "source_version_id": compare_run.source_version_id,
+            "target_version_id": compare_run.target_version_id,
+        }
+
+
+def _reparse_target_version_for_change_item(client, auth_headers, session_factory, change_item_id: int) -> None:
+    target_version_id = _compare_run_setup_for_change_item(session_factory, change_item_id)["target_version_id"]
+    response = client.post(f"/api/v1/document-versions/{target_version_id}/parse", headers=auth_headers)
+    assert response.status_code == 200
+
+
+def _supersede_compare_run_for_change_item(client, auth_headers, session_factory, change_item_id: int) -> int:
+    setup = _compare_run_setup_for_change_item(session_factory, change_item_id)
+    response = client.post(
+        f"/api/v1/documents/{setup['document_id']}/compare-runs",
+        json={
+            "source_version_id": setup["source_version_id"],
+            "target_version_id": setup["target_version_id"],
+        },
+        headers=auth_headers,
+    )
+    assert response.status_code == 201
+    superseding_compare_run_id = response.json()["data"]["id"]
+    assert superseding_compare_run_id != setup["compare_run_id"]
+    return superseding_compare_run_id
+
+
+def _assert_stale_compare_mutation(response) -> None:
+    assert response.status_code == 422
+    assert "stale" in response.json()["detail"].lower()
+
+
+def _assert_superseded_compare_mutation(response) -> None:
+    assert response.status_code == 422
+    assert "superseded" in response.json()["detail"].lower()
+
+
 def _create_compare_run_with_requirement_links(client, auth_headers, session_factory) -> int:
     compare_run_id = _create_compare_run(client, auth_headers)
 
@@ -244,6 +299,105 @@ def test_post_change_item_comment_persists_review_discussion(client, auth_header
     detail_payload = detail_response.json()["data"]
     assert len(detail_payload["comments"]) == 1
     assert detail_payload["comments"][0]["content"] == payload["content"]
+
+
+def test_stale_compare_run_rejects_change_item_review_ai_and_traceability_mutations(
+    client,
+    auth_headers,
+    session_factory,
+):
+    from app.services.ai_traceability import build_suggestion_token
+
+    change_item_id = _create_change_item(client, auth_headers, session_factory)
+    existing_link_requirement_id = _seed_active_requirement(
+        session_factory,
+        change_item_id,
+        code="REQ-EXISTING-LINK-001",
+    )
+    manual_requirement_id = _seed_active_requirement(
+        session_factory,
+        change_item_id,
+        code="REQ-MANUAL-LINK-002",
+    )
+    ai_requirement_id = _seed_active_requirement(
+        session_factory,
+        change_item_id,
+        code="REQ-AI-LINK-003",
+    )
+
+    existing_link_response = client.post(
+        f"/api/v1/change-items/{change_item_id}/requirement-links",
+        json={"requirement_id": existing_link_requirement_id},
+        headers=auth_headers,
+    )
+    assert existing_link_response.status_code == 201
+
+    _reparse_target_version_for_change_item(client, auth_headers, session_factory, change_item_id)
+
+    _assert_stale_compare_mutation(
+        client.patch(
+            f"/api/v1/change-items/{change_item_id}",
+            json={"review_status": "resolved"},
+            headers=auth_headers,
+        )
+    )
+    _assert_stale_compare_mutation(
+        client.post(
+            f"/api/v1/change-items/{change_item_id}/comments",
+            json={"content": "This comment should not attach to stale compare truth."},
+            headers=auth_headers,
+        )
+    )
+    _assert_stale_compare_mutation(
+        client.post(
+            f"/api/v1/change-items/{change_item_id}/ai-review-draft/generate",
+            json={"force_regenerate": True},
+            headers=auth_headers,
+        )
+    )
+    _assert_stale_compare_mutation(
+        client.post(f"/api/v1/change-items/{change_item_id}/suggest-links", headers=auth_headers)
+    )
+    _assert_stale_compare_mutation(
+        client.post(
+            f"/api/v1/change-items/{change_item_id}/requirement-links",
+            json={"requirement_id": manual_requirement_id},
+            headers=auth_headers,
+        )
+    )
+    _assert_stale_compare_mutation(
+        client.post(
+            f"/api/v1/change-items/{change_item_id}/requirement-links/ai-suggested",
+            json={
+                "requirement_id": ai_requirement_id,
+                "suggestion_token": build_suggestion_token(change_item_id, ai_requirement_id),
+            },
+            headers=auth_headers,
+        )
+    )
+    _assert_stale_compare_mutation(
+        client.delete(
+            f"/api/v1/change-items/{change_item_id}/requirement-links/{existing_link_requirement_id}",
+            headers=auth_headers,
+        )
+    )
+
+
+def test_superseded_compare_run_rejects_change_item_review_mutation(
+    client,
+    auth_headers,
+    session_factory,
+):
+    change_item_id = _create_change_item(client, auth_headers, session_factory)
+    _supersede_compare_run_for_change_item(client, auth_headers, session_factory, change_item_id)
+
+    _assert_superseded_compare_mutation(
+        client.patch(
+            f"/api/v1/change-items/{change_item_id}",
+            json={"review_status": "resolved"},
+            headers=auth_headers,
+        )
+    )
 
 
 def test_change_item_detail_includes_provider_and_fallback_metadata(

@@ -19,10 +19,15 @@ from app.services import ai_rate_limit
 from app.services import ai_review_drafts as ai_review_draft_service
 from app.services import ai_traceability as ai_traceability_service
 from app.services import change_items as change_item_service
+from app.services import compare as compare_service
 from app.services import project_access as project_access_service
 
 
 router = APIRouter(tags=["change-items"], dependencies=[Depends(get_current_user)])
+
+
+def _ensure_change_item_can_be_mutated(database: Session, change_item) -> None:
+    compare_service.ensure_compare_run_is_current(database, change_item.compare_run)
 
 
 @router.get("/change-items/{change_item_id}")
@@ -44,6 +49,7 @@ def update_change_item(
     database: Session = Depends(get_db_session),
 ):
     change_item = project_access_service.ensure_change_item_access_or_404(database, change_item_id, current_user.id)
+    _ensure_change_item_can_be_mutated(database, change_item)
     detail = change_item_service.update_change_item(
         database,
         change_item_id=change_item_id,
@@ -70,7 +76,8 @@ def create_review_comment(
     current_user: User = Depends(get_current_user),
     database: Session = Depends(get_db_session),
 ):
-    project_access_service.ensure_change_item_access_or_404(database, change_item_id, current_user.id)
+    change_item = project_access_service.ensure_change_item_access_or_404(database, change_item_id, current_user.id)
+    _ensure_change_item_can_be_mutated(database, change_item)
     comment = change_item_service.create_review_comment(
         database,
         change_item_id=change_item_id,
@@ -87,7 +94,8 @@ def generate_change_item_ai_review_draft(
     current_user: User = Depends(get_current_user),
     database: Session = Depends(get_db_session),
 ):
-    project_access_service.ensure_change_item_access_or_404(database, change_item_id, current_user.id)
+    change_item = project_access_service.ensure_change_item_access_or_404(database, change_item_id, current_user.id)
+    _ensure_change_item_can_be_mutated(database, change_item)
     ai_rate_limit.enforce_ai_review_draft_rate_limit(database, current_user.id)
     result = ai_review_draft_service.generate_change_item_ai_draft(
         database,
@@ -105,7 +113,8 @@ def suggest_traceability_links(
     current_user: User = Depends(get_current_user),
     database: Session = Depends(get_db_session),
 ):
-    project_access_service.ensure_change_item_access_or_404(database, change_item_id, current_user.id)
+    change_item = project_access_service.ensure_change_item_access_or_404(database, change_item_id, current_user.id)
+    _ensure_change_item_can_be_mutated(database, change_item)
     ai_rate_limit.enforce_ai_traceability_suggest_rate_limit(database, current_user.id)
     result = ai_traceability_service.suggest_traceability_links(database, change_item_id)
     return {"data": TraceabilitySuggestResponse.model_validate(result).model_dump(mode="json")}
@@ -118,7 +127,8 @@ def accept_ai_suggested_requirement_link(
     current_user: User = Depends(get_current_user),
     database: Session = Depends(get_db_session),
 ):
-    project_access_service.ensure_change_item_access_or_404(database, change_item_id, current_user.id)
+    change_item = project_access_service.ensure_change_item_access_or_404(database, change_item_id, current_user.id)
+    _ensure_change_item_can_be_mutated(database, change_item)
     ai_traceability_service.verify_suggestion_token(
         database,
         change_item_id=change_item_id,
@@ -142,7 +152,8 @@ def create_requirement_link(
     current_user: User = Depends(get_current_user),
     database: Session = Depends(get_db_session),
 ):
-    project_access_service.ensure_change_item_access_or_404(database, change_item_id, current_user.id)
+    change_item = project_access_service.ensure_change_item_access_or_404(database, change_item_id, current_user.id)
+    _ensure_change_item_can_be_mutated(database, change_item)
     detail = change_item_service.create_requirement_link(
         database,
         change_item_id=change_item_id,
@@ -159,7 +170,8 @@ def delete_requirement_link(
     current_user: User = Depends(get_current_user),
     database: Session = Depends(get_db_session),
 ):
-    project_access_service.ensure_change_item_access_or_404(database, change_item_id, current_user.id)
+    change_item = project_access_service.ensure_change_item_access_or_404(database, change_item_id, current_user.id)
+    _ensure_change_item_can_be_mutated(database, change_item)
     detail = change_item_service.delete_requirement_link(
         database,
         change_item_id=change_item_id,

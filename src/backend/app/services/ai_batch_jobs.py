@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.core.config import settings
 from app.models import AIBatchJob, AIBatchJobItem, ChangeItem, CompareRun
 from app.models.mixins import utcnow
+from app.services import compare as compare_service
 from app.services import ai_review_drafts
 from app.services.llm_adapter import LLMAdapter
 
@@ -34,6 +35,7 @@ def create_compare_run_ai_batch_job(
     compare_run = session.get(CompareRun, compare_run_id)
     if compare_run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Compare run not found")
+    compare_service.ensure_compare_run_is_current(session, compare_run)
 
     existing_job = session.scalar(
         select(AIBatchJob)

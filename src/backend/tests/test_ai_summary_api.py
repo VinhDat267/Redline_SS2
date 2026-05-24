@@ -91,6 +91,15 @@ def _create_compare_run(client, auth_headers) -> int:
     return compare_response.json()["data"]["id"]
 
 
+def _target_version_id_for_compare_run(session_factory, compare_run_id: int) -> int:
+    with session_factory() as session:
+        change_item = session.scalar(
+            select(ChangeItem).where(ChangeItem.compare_run_id == compare_run_id).order_by(ChangeItem.id)
+        )
+        assert change_item is not None
+        return change_item.compare_run.target_version_id
+
+
 def test_generate_compare_run_ai_summary(client, auth_headers):
     compare_run_id = _create_compare_run(client, auth_headers)
 
@@ -106,3 +115,17 @@ def test_generate_compare_run_ai_summary(client, auth_headers):
     assert "provider_used" in payload
     assert "fallback_used" in payload
     assert "error_message" in payload
+
+
+def test_generate_compare_run_ai_summary_rejects_stale_compare_run(client, auth_headers, session_factory):
+    compare_run_id = _create_compare_run(client, auth_headers)
+    target_version_id = _target_version_id_for_compare_run(session_factory, compare_run_id)
+    assert client.post(f"/api/v1/document-versions/{target_version_id}/parse", headers=auth_headers).status_code == 200
+
+    response = client.post(
+        f"/api/v1/compare-runs/{compare_run_id}/ai-summary-drafts/generate",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 422
+    assert "stale" in response.json()["detail"].lower()

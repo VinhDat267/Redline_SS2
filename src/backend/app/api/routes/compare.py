@@ -78,7 +78,8 @@ def generate_compare_run_ai_review_drafts(
     current_user: User = Depends(get_current_user),
     database: Session = Depends(get_db_session),
 ):
-    project_access_service.ensure_compare_run_access_or_404(database, compare_run_id, current_user.id)
+    compare_run = project_access_service.ensure_compare_run_access_or_404(database, compare_run_id, current_user.id)
+    compare_service.ensure_compare_run_is_current(database, compare_run)
     ai_rate_limit.enforce_ai_batch_rate_limit(database, current_user.id)
     result = ai_batch_job_service.create_compare_run_ai_batch_job(
         database,
@@ -105,7 +106,8 @@ def generate_compare_run_ai_summary_draft(
     current_user: User = Depends(get_current_user),
     database: Session = Depends(get_db_session),
 ):
-    project_access_service.ensure_compare_run_access_or_404(database, compare_run_id, current_user.id)
+    compare_run = project_access_service.ensure_compare_run_access_or_404(database, compare_run_id, current_user.id)
+    compare_service.ensure_compare_run_is_current(database, compare_run)
     ai_rate_limit.enforce_ai_summary_rate_limit(database, current_user.id)
     result = ai_summary_service.generate_ai_summary_draft(database, compare_run_id)
     return result

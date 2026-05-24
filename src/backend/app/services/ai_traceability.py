@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models import ChangeItem, Requirement
+from app.services import compare as compare_service
 from app.services.llm_adapter import LLMAdapter, NormalizedTraceabilitySuggestionResult
 
 
@@ -39,6 +40,7 @@ def suggest_traceability_links(
     ``create_requirement_link`` service with ``link_type="ai_suggested"``.
     """
     change_item = _get_change_item_or_404(session, change_item_id)
+    compare_service.ensure_compare_run_is_current(session, change_item.compare_run)
     project_id = _get_project_id(change_item)
 
     requirements = _load_project_requirements(session, project_id)
@@ -104,7 +106,8 @@ def verify_suggestion_token(
     requirement_id: int,
     suggestion_token: str,
 ) -> None:
-    _get_change_item_or_404(session, change_item_id)
+    change_item = _get_change_item_or_404(session, change_item_id)
+    compare_service.ensure_compare_run_is_current(session, change_item.compare_run)
     if session.get(Requirement, requirement_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Requirement not found")
     expected = build_suggestion_token(change_item_id, requirement_id)

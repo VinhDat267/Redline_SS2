@@ -91,6 +91,42 @@ def _create_compare_run(client, auth_headers) -> int:
     return compare_response.json()["data"]["id"]
 
 
+def _compare_run_setup(session_factory, compare_run_id: int) -> dict[str, int]:
+    with session_factory() as session:
+        change_item = session.scalar(
+            select(ChangeItem).where(ChangeItem.compare_run_id == compare_run_id).order_by(ChangeItem.id)
+        )
+        assert change_item is not None
+        compare_run = change_item.compare_run
+        return {
+            "document_id": compare_run.source_version.document_id,
+            "source_version_id": compare_run.source_version_id,
+            "target_version_id": compare_run.target_version_id,
+        }
+
+
+def _reparse_target_version(client, auth_headers, session_factory, compare_run_id: int) -> None:
+    target_version_id = _compare_run_setup(session_factory, compare_run_id)["target_version_id"]
+    response = client.post(f"/api/v1/document-versions/{target_version_id}/parse", headers=auth_headers)
+    assert response.status_code == 200
+
+
+def _supersede_compare_run(client, auth_headers, session_factory, compare_run_id: int) -> int:
+    setup = _compare_run_setup(session_factory, compare_run_id)
+    response = client.post(
+        f"/api/v1/documents/{setup['document_id']}/compare-runs",
+        json={
+            "source_version_id": setup["source_version_id"],
+            "target_version_id": setup["target_version_id"],
+        },
+        headers=auth_headers,
+    )
+    assert response.status_code == 201
+    superseding_compare_run_id = response.json()["data"]["id"]
+    assert superseding_compare_run_id != compare_run_id
+    return superseding_compare_run_id
+
+
 def test_batch_generate_endpoint_creates_job_immediately_without_generating_drafts(
     client,
     auth_headers,
@@ -142,6 +178,34 @@ def test_batch_generate_endpoint_creates_job_immediately_without_generating_draf
     assert len(jobs) == 1
     assert len(items) == 2
     assert drafts == []
+
+
+def test_ai_batch_generate_rejects_stale_compare_run(client, auth_headers, session_factory):
+    compare_run_id = _create_compare_run(client, auth_headers)
+    _reparse_target_version(client, auth_headers, session_factory, compare_run_id)
+
+    response = client.post(
+        f"/api/v1/compare-runs/{compare_run_id}/ai-review-drafts/generate",
+        json={"force_regenerate": True},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 422
+    assert "stale" in response.json()["detail"].lower()
+
+
+def test_ai_batch_generate_rejects_superseded_compare_run(client, auth_headers, session_factory):
+    compare_run_id = _create_compare_run(client, auth_headers)
+    _supersede_compare_run(client, auth_headers, session_factory, compare_run_id)
+
+    response = client.post(
+        f"/api/v1/compare-runs/{compare_run_id}/ai-review-drafts/generate",
+        json={"force_regenerate": True},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 422
+    assert "superseded" in response.json()["detail"].lower()
 
 
 def test_compare_run_detail_exposes_active_ai_batch_job(client, auth_headers):

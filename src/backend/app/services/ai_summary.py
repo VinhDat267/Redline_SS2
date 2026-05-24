@@ -1,18 +1,26 @@
+import json
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
-from app.services.llm_adapter import LLMAdapter
-from app.services.compare import get_compare_run_detail
+
 from app.models import (
+    CompareRun,
     ChangeItem,
     ChangeItemRequirementLink,
     Requirement,
     RequirementTestCaseMapping,
     User,
-    ReviewComment
+    ReviewComment,
 )
-import json
+from app.services import compare as compare_service
+from app.services.compare import get_compare_run_detail
+from app.services.llm_adapter import LLMAdapter
+
 
 def generate_ai_summary_draft(session: Session, compare_run_id: int) -> dict:
+    compare_run = session.get(CompareRun, compare_run_id)
+    if compare_run is not None:
+        compare_service.ensure_compare_run_is_current(session, compare_run)
     compare_run_detail = get_compare_run_detail(session, compare_run_id)
 
     change_items = session.execute(

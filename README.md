@@ -30,7 +30,7 @@ Project -> Contract -> Draft Upload -> Parse -> Compare
 
 ## Project Status
 
-Updated: 2026-05-23
+Updated: 2026-05-24
 
 The system is deployable as a full-stack web application and has been verified
 on the Docker path expected for local installation and review.
@@ -39,8 +39,8 @@ Latest verified baseline:
 
 | Area | Result |
 | --- | --- |
-| Backend test suite | `274 passed` |
-| Frontend test suite | `116 passed` across 19 files |
+| Backend test suite | `285 passed` |
+| Frontend test suite | `117 passed` across 19 files |
 | Frontend production build | Passes, with Vite chunk-size warning only |
 | Alembic schema check | No new upgrade operations detected |
 | Docker full stack | Backend, frontend, and PostgreSQL start successfully |
@@ -286,7 +286,7 @@ cd src/backend
 .\.venv\Scripts\python -m pytest tests -q
 ```
 
-Expected baseline: `274 passed`.
+Expected baseline: `285 passed`.
 
 ### Frontend tests
 
@@ -295,7 +295,7 @@ cd src/frontend
 npm run test -- --run
 ```
 
-Expected baseline: `116 passed`.
+Expected baseline: `117 passed`.
 
 ### Frontend production build
 

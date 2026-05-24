@@ -197,7 +197,7 @@ cd src/backend
 .\.venv\Scripts\python -m alembic check
 ```
 
-Expected baseline: `274 passed` and no migration drift.
+Expected baseline: `285 passed` and no migration drift.
 
 ### Frontend
 
@@ -208,7 +208,7 @@ npm run build
 npm audit
 ```
 
-Expected baseline: `116 passed`, build succeeds, `0 vulnerabilities`.
+Expected baseline: `117 passed`, build succeeds, `0 vulnerabilities`.
 
 ## Result Recording
 

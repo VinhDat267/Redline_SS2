@@ -20,6 +20,7 @@ from app.models import (
 )
 from app.models.mixins import utcnow
 from app.services import change_items as change_item_service
+from app.services import compare as compare_service
 from app.services.llm_adapter import LLMAdapter, NormalizedAIReviewDraft
 
 
@@ -35,7 +36,8 @@ def generate_compare_run_ai_drafts(
     use_rag: bool = True,
     change_item_ids: list[int] | None = None,
 ) -> dict[str, object]:
-    _get_compare_run_or_404(session, compare_run_id)
+    compare_run = _get_compare_run_or_404(session, compare_run_id)
+    compare_service.ensure_compare_run_is_current(session, compare_run)
     change_items = _load_compare_run_change_items(session, compare_run_id, change_item_ids)
     adapter = get_llm_adapter()
 
@@ -97,6 +99,7 @@ def generate_change_item_ai_draft_record(
     adapter: LLMAdapter | None = None,
 ) -> tuple[AIReviewDraft, bool]:
     change_item = _get_change_item_or_404(session, change_item_id)
+    compare_service.ensure_compare_run_is_current(session, change_item.compare_run)
     return _generate_change_item_ai_review_draft_result(
         change_item,
         session=session,
@@ -121,6 +124,8 @@ def generate_change_item_ai_draft_records_batch(
 
     ordered_change_item_ids = list(dict.fromkeys(change_item_ids))
     change_items = _load_change_items_by_ids(session, ordered_change_item_ids)
+    for change_item in change_items:
+        compare_service.ensure_compare_run_is_current(session, change_item.compare_run)
     review_adapter = adapter or get_llm_adapter()
 
     results_by_change_item_id: dict[int, tuple[AIReviewDraft, bool]] = {}

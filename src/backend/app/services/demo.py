@@ -1,3 +1,5 @@
+import hashlib
+import json
 from io import BytesIO
 from pathlib import Path
 
@@ -14,6 +16,7 @@ from app.services.upload_storage import store_bytes
 WORKSPACE_PROJECT_NAME = "Redline Review Workspace"
 LEGACY_PROJECT_NAMES = {WORKSPACE_PROJECT_NAME, "Redline SS2 Demo"}
 WORKSPACE_PROJECT_DESCRIPTION = "Starter review workspace for live Redline project, document, parser, and compare flows."
+DEMO_SEED_REVISION = "full-contracts-word-tables-v1"
 DEMO_DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 PARSED_STATUSES = {"parsed", "parsed_with_warnings"}
 DEMO_DOCUMENT_SPECS = [
@@ -85,6 +88,46 @@ def _ensure_demo_upload(document_id: int, file_name: str, version_label: str) ->
         f"Original file: {file_name}\n"
     ).encode("utf-8")
     return store_bytes(stored_path, payload, content_type="text/plain; charset=utf-8")
+
+
+def _demo_seed_fingerprint(*, file_name: str, version_label: str) -> str:
+    section_id = _section_id_for_demo_version(file_name, version_label)
+    lines = _get_section_lines(section_id)
+    payload = "\n".join(
+        [
+            DEMO_SEED_REVISION,
+            file_name,
+            version_label,
+            section_id,
+            *lines,
+        ]
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _parsed_snapshot_has_demo_seed(version: DocumentVersion, fingerprint: str) -> bool:
+    try:
+        parsed_snapshot = json.loads(version.parsed_snapshot or "{}")
+    except json.JSONDecodeError:
+        return False
+    return (
+        parsed_snapshot.get("demo_seed_revision") == DEMO_SEED_REVISION
+        and parsed_snapshot.get("demo_seed_fingerprint") == fingerprint
+    )
+
+
+def _mark_demo_seed_snapshot(session: Session, version: DocumentVersion, fingerprint: str) -> DocumentVersion:
+    try:
+        parsed_snapshot = json.loads(version.parsed_snapshot or "{}")
+    except json.JSONDecodeError:
+        parsed_snapshot = {}
+    parsed_snapshot["demo_seed_revision"] = DEMO_SEED_REVISION
+    parsed_snapshot["demo_seed_fingerprint"] = fingerprint
+    version.parsed_snapshot = json.dumps(parsed_snapshot, separators=(",", ":"), sort_keys=True)
+    session.add(version)
+    session.commit()
+    session.refresh(version)
+    return version
 
 
 def _get_section_lines(section_id: str) -> list[str]:
@@ -176,27 +219,25 @@ def _add_body_from_lines(document: DocxDocument, lines: list[str]) -> None:
         index += 1
 
 
-def _build_demo_docx(file_name: str, version_label: str) -> DocxDocument:
-    section_id = None
+def _section_id_for_demo_version(file_name: str, version_label: str) -> str:
     fn_lower = file_name.lower()
     vl_lower = version_label.lower()
 
     if "msa" in fn_lower:
         if "2.0" in vl_lower or "v2" in vl_lower:
-            section_id = "MSA_V2"
-        else:
-            section_id = "MSA_V1"
+            return "MSA_V2"
+        return "MSA_V1"
     elif "sow" in fn_lower:
         if "2.0" in vl_lower or "v2" in vl_lower:
-            section_id = "SOW_V2"
-        else:
-            section_id = "SOW_V1"
+            return "SOW_V2"
+        return "SOW_V1"
     elif "security-addendum" in fn_lower:
-        section_id = "SECURITY_ADDENDUM"
+        return "SECURITY_ADDENDUM"
+    return "MSA_V1"
 
-    if not section_id:
-        section_id = "MSA_V1"
 
+def _build_demo_docx(file_name: str, version_label: str) -> DocxDocument:
+    section_id = _section_id_for_demo_version(file_name, version_label)
     lines = _get_section_lines(section_id)
 
     document = DocxDocument()
@@ -329,6 +370,10 @@ def seed_demo_workspace(session: Session, current_user: User) -> dict[str, objec
         }
 
         for version_spec in document_spec["versions"]:
+            demo_seed_fingerprint = _demo_seed_fingerprint(
+                file_name=version_spec["file_name"],
+                version_label=version_spec["version_label"],
+            )
             file_path = _ensure_demo_upload(
                 document.id,
                 version_spec["file_name"],
@@ -363,12 +408,14 @@ def seed_demo_workspace(session: Session, current_user: User) -> dict[str, objec
                 and (
                     version.active_parse_run_id is None
                     or version.parse_status not in PARSED_STATUSES
+                    or not _parsed_snapshot_has_demo_seed(version, demo_seed_fingerprint)
                 )
             )
             if should_parse:
                 from app.services import document_parser
                 try:
-                    document_parser.parse_document_version(session, version)
+                    version = document_parser.parse_document_version(session, version)
+                    _mark_demo_seed_snapshot(session, version, demo_seed_fingerprint)
                 except Exception as exc:
                     raise RuntimeError(f"Failed parsing demo seed document {version.file_name}: {exc}") from exc
 

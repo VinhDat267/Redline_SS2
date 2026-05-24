@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.config import settings
 from app.models import ChangeItem, ChatMessage, ChatSession, CompareRun, Document, DocumentBlock, DocumentVersion
+from app.services import compare as compare_service
 from app.services import rag_service
 from app.services.llm_adapter import LLMAdapter, ProviderRequestCancelled
 
@@ -129,6 +130,7 @@ def create_chat_session(
         )
     if compare_run is not None:
         _ensure_compare_run_belongs_to_contract(contract, compare_run)
+        ensure_compare_run_is_current(compare_run)
         if compare_run.target_version_id != draft.id:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -196,6 +198,7 @@ def generate_chat_answer(
 ) -> ContractChatAnswer:
     _raise_if_cancelled(should_cancel)
     _ensure_chat_session_belongs_to_contract(contract, chat_session)
+    ensure_chat_session_compare_run_is_current(session, chat_session)
 
     memory_answer = _build_session_memory_answer(
         session,
@@ -344,6 +347,30 @@ def _ensure_compare_run_belongs_to_contract(contract: Document, compare_run: Com
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Compare run not found")
     if source_version.document_id != contract.id or target_version.document_id != contract.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Compare run not found")
+
+
+def ensure_compare_run_is_current(compare_run: CompareRun) -> None:
+    if compare_service.is_compare_run_stale(compare_run):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Compare run is stale because one of its drafts was parsed again. Run Compare again before starting compare Q&A.",
+        )
+
+
+def ensure_chat_session_compare_run_is_current(session: Session, chat_session: ChatSession) -> None:
+    if chat_session.compare_run_id is None:
+        return
+    compare_run = session.scalar(
+        select(CompareRun)
+        .where(CompareRun.id == chat_session.compare_run_id)
+        .options(
+            joinedload(CompareRun.source_version),
+            joinedload(CompareRun.target_version),
+        )
+    )
+    if compare_run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Compare run not found")
+    ensure_compare_run_is_current(compare_run)
 
 
 def _build_session_memory_answer(

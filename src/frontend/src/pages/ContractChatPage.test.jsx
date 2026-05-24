@@ -101,11 +101,14 @@ function buildContractCompareRun(overrides = {}) {
     compare_status: "completed",
     started_at: "2026-03-26T09:00:00Z",
     completed_at: "2026-03-26T09:00:01Z",
+    source_parse_run_id: 401,
+    target_parse_run_id: 402,
+    is_stale: false,
     warning_count: 0,
     warnings: [],
     contract: buildContractPayload().data,
-    source_draft: buildContractDraft({ id: 501, draft_label: "vendor-v1" }),
-    target_draft: buildContractDraft({ id: 502, draft_label: "vendor-v2" }),
+    source_draft: buildContractDraft({ id: 501, draft_label: "vendor-v1", active_parse_run_id: 401 }),
+    target_draft: buildContractDraft({ id: 502, draft_label: "vendor-v2", active_parse_run_id: 402 }),
     summary: { total: 1, added: 0, removed: 0, modified: 1 },
     selected_clause_change_id: 990,
     has_ai_clause_risk_analyses: false,
@@ -240,7 +243,7 @@ describe("ContractChatPage", () => {
     expect(screen.getByRole("main", { name: /contract conversation/i })).toBeInTheDocument();
     expect(screen.getByRole("complementary", { name: /source evidence/i })).toBeInTheDocument();
     expect(screen.getByText(/ready for grounded q&a/i)).toBeInTheDocument();
-    expect(screen.getByText(/test session memory/i)).toBeInTheDocument();
+    expect(screen.getByText(/session memory/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /source evidence/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/back to contract/i)).toHaveAttribute("href", "/contracts/10");
     expect(screen.getByRole("option", { name: "vendor-v1" })).toBeInTheDocument();
@@ -469,6 +472,176 @@ describe("ContractChatPage", () => {
     const options = within(compareRunSelect).getAllByRole("option");
     expect(options.map(option => option.textContent)).toEqual(["Choose compare run", "vendor-v1 -> vendor-v2"]);
     expect(options.map(option => option.value)).toEqual(["", "78"]);
+    expect(screen.getByText(/latest completed compare for each draft pair/i)).toBeInTheDocument();
+  });
+
+  test("hides stale compare runs from new compare Q&A selection", async () => {
+    fetch.mockImplementation((input, init = {}) => {
+      const url = String(input);
+      const method = init.method || "GET";
+
+      if (url.endsWith("/api/v1/contracts/10") && method === "GET") {
+        return Promise.resolve(jsonResponse(buildContractPayload()));
+      }
+
+      if (url.endsWith("/api/v1/contracts/10/drafts") && method === "GET") {
+        return Promise.resolve(
+          jsonResponse({
+            data: [
+              buildContractDraft({ id: 501, draft_label: "vendor-v1", active_parse_run_id: 401 }),
+              buildContractDraft({ id: 502, draft_label: "vendor-v2", active_parse_run_id: 402 })
+            ]
+          })
+        );
+      }
+
+      if (url.endsWith("/api/v1/contracts/10/compare-runs") && method === "GET") {
+        return Promise.resolve(
+          jsonResponse({
+            data: [
+              buildContractCompareRun({ id: 77 }),
+              buildContractCompareRun({ id: 78, is_stale: true, target_parse_run_id: 399 })
+            ]
+          })
+        );
+      }
+
+      if (url.endsWith("/api/v1/contracts/10/chat/sessions") && method === "GET") {
+        return Promise.resolve(jsonResponse({ data: [] }));
+      }
+
+      return Promise.reject(new Error(`Unhandled request: ${url} ${method}`));
+    });
+
+    renderContractChat();
+
+    fireEvent.click(await screen.findByRole("button", { name: /compared drafts/i }));
+
+    const compareRunSelect = screen.getByRole("combobox", { name: /compare run/i });
+    const options = within(compareRunSelect).getAllByRole("option");
+    expect(options.map(option => option.value)).toEqual(["", "77"]);
+    expect(screen.queryByRole("option", { name: /run #78/i })).not.toBeInTheDocument();
+  });
+
+  test("keeps stale historical compare sessions readable but blocks new questions", async () => {
+    fetch.mockImplementation((input, init = {}) => {
+      const url = String(input);
+      const method = init.method || "GET";
+
+      if (url.endsWith("/api/v1/contracts/10") && method === "GET") {
+        return Promise.resolve(jsonResponse(buildContractPayload()));
+      }
+
+      if (url.endsWith("/api/v1/contracts/10/drafts") && method === "GET") {
+        return Promise.resolve(
+          jsonResponse({
+            data: [
+              buildContractDraft({ id: 501, draft_label: "vendor-v1", active_parse_run_id: 401 }),
+              buildContractDraft({ id: 502, draft_label: "vendor-v2", active_parse_run_id: 402 })
+            ]
+          })
+        );
+      }
+
+      if (url.endsWith("/api/v1/contracts/10/compare-runs") && method === "GET") {
+        return Promise.resolve(
+          jsonResponse({
+            data: [
+              buildContractCompareRun({ id: 77, is_stale: true, target_parse_run_id: 399 }),
+              buildContractCompareRun({ id: 78 })
+            ]
+          })
+        );
+      }
+
+      if (url.endsWith("/api/v1/contracts/10/chat/sessions") && method === "GET") {
+        return Promise.resolve(
+          jsonResponse({
+            data: [
+              {
+                id: 771,
+                contract_id: 10,
+                draft_id: 502,
+                compare_run_id: 77,
+                scope_type: "compare_run",
+                title: "vendor-v1 -> vendor-v2 Q&A",
+                created_by_user_id: 1,
+                created_at: "2026-03-26T09:00:00Z",
+                updated_at: "2026-03-26T09:00:00Z"
+              }
+            ]
+          })
+        );
+      }
+
+      if (url.endsWith("/api/v1/contracts/10/chat/sessions/771/messages") && method === "GET") {
+        return Promise.resolve(
+          jsonResponse({
+            data: [
+              {
+                id: 881,
+                role: "assistant",
+                content: "Earlier compare answer from the old parse snapshot.",
+                citations: [],
+                provider_used: "local-compare",
+                created_at: "2026-03-26T09:00:05Z",
+                updated_at: "2026-03-26T09:00:05Z"
+              }
+            ]
+          })
+        );
+      }
+
+      return Promise.reject(new Error(`Unhandled request: ${url} ${method}`));
+    });
+
+    renderContractChat();
+
+    expect(await screen.findByText(/earlier compare answer/i)).toBeInTheDocument();
+    const compareRunSelect = screen.getByRole("combobox", { name: /compare run/i });
+    expect(compareRunSelect).toHaveValue("77");
+    expect(screen.getByRole("option", { name: /stale, run #77/i })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/ask about this contract/i), {
+      target: { value: "What changed now?" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: /send message/i }));
+
+    expect(await screen.findByText(/asking compare questions/i)).toBeInTheDocument();
+    expect(fetch.mock.calls.some(([requestUrl, requestInit = {}]) =>
+      String(requestUrl).endsWith("/api/v1/contracts/10/chat/sessions/771/attempts") &&
+      (requestInit.method || "GET") === "POST"
+    )).toBe(false);
+  });
+
+  test("uses production session memory copy", async () => {
+    fetch.mockImplementation((input, init = {}) => {
+      const url = String(input);
+      const method = init.method || "GET";
+
+      if (url.endsWith("/api/v1/contracts/10") && method === "GET") {
+        return Promise.resolve(jsonResponse(buildContractPayload()));
+      }
+
+      if (url.endsWith("/api/v1/contracts/10/drafts") && method === "GET") {
+        return Promise.resolve(jsonResponse({ data: [buildContractDraft()] }));
+      }
+
+      if (url.endsWith("/api/v1/contracts/10/compare-runs") && method === "GET") {
+        return Promise.resolve(jsonResponse({ data: [] }));
+      }
+
+      if (url.endsWith("/api/v1/contracts/10/chat/sessions") && method === "GET") {
+        return Promise.resolve(jsonResponse({ data: [] }));
+      }
+
+      return Promise.reject(new Error(`Unhandled request: ${url} ${method}`));
+    });
+
+    renderContractChat();
+
+    expect(await screen.findByText("Session memory")).toBeInTheDocument();
+    expect(screen.queryByText("Test session memory")).not.toBeInTheDocument();
   });
 
   test("stops an active stream and retries in the same answer bubble", async () => {

@@ -39,8 +39,8 @@ Latest verified baseline:
 
 | Area | Result |
 | --- | --- |
-| Backend test suite | `265 passed` |
-| Frontend test suite | `113 passed` across 19 files |
+| Backend test suite | `268 passed` |
+| Frontend test suite | `116 passed` across 19 files |
 | Frontend production build | Passes, with Vite chunk-size warning only |
 | Alembic schema check | No new upgrade operations detected |
 | Docker full stack | Backend, frontend, and PostgreSQL start successfully |
@@ -295,7 +295,7 @@ cd src/frontend
 npm run test -- --run
 ```
 
-Expected baseline: `113 passed`.
+Expected baseline: `116 passed`.
 
 ### Frontend production build
 

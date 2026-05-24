@@ -357,6 +357,92 @@ def test_contract_compare_runs_can_be_listed_for_compare_q_and_a(client, auth_he
     assert compare_runs[0]["target_draft"]["draft_label"] == "vendor-v2"
 
 
+def test_contract_compare_run_reports_stale_after_reparse(client, auth_headers):
+    setup = _create_contract_compare_chat_setup(client, auth_headers)
+    contract_id = setup["contract_id"]
+    target_draft_id = setup["target_draft_id"]
+    compare_run_id = setup["compare_run_id"]
+
+    initial_response = client.get(f"/api/v1/contracts/{contract_id}/compare-runs", headers=auth_headers)
+    assert initial_response.status_code == 200
+    initial_compare_run = initial_response.json()["data"][0]
+    assert initial_compare_run["id"] == compare_run_id
+    assert initial_compare_run["is_stale"] is False
+    assert initial_compare_run["target_parse_run_id"] == initial_compare_run["target_draft"]["active_parse_run_id"]
+
+    assert client.post(f"/api/v1/contract-drafts/{target_draft_id}/parse", headers=auth_headers).status_code == 200
+
+    stale_response = client.get(f"/api/v1/contracts/{contract_id}/compare-runs", headers=auth_headers)
+    assert stale_response.status_code == 200
+    stale_compare_run = stale_response.json()["data"][0]
+    assert stale_compare_run["id"] == compare_run_id
+    assert stale_compare_run["is_stale"] is True
+    assert stale_compare_run["target_parse_run_id"] != stale_compare_run["target_draft"]["active_parse_run_id"]
+
+
+def test_contract_compare_chat_rejects_stale_compare_run(client, auth_headers):
+    setup = _create_contract_compare_chat_setup(client, auth_headers)
+    contract_id = setup["contract_id"]
+    target_draft_id = setup["target_draft_id"]
+    compare_run_id = setup["compare_run_id"]
+
+    assert client.post(f"/api/v1/contract-drafts/{target_draft_id}/parse", headers=auth_headers).status_code == 200
+
+    session_response = client.post(
+        f"/api/v1/contracts/{contract_id}/chat/sessions",
+        json={
+            "draft_id": target_draft_id,
+            "compare_run_id": compare_run_id,
+            "title": "Stale compare Q&A",
+        },
+        headers=auth_headers,
+    )
+
+    assert session_response.status_code == 422
+    assert "stale" in session_response.json()["detail"].lower()
+
+
+def test_existing_compare_chat_session_rejects_new_questions_after_reparse(client, auth_headers):
+    setup = _create_contract_compare_chat_setup(client, auth_headers)
+    contract_id = setup["contract_id"]
+    target_draft_id = setup["target_draft_id"]
+    compare_run_id = setup["compare_run_id"]
+
+    session_response = client.post(
+        f"/api/v1/contracts/{contract_id}/chat/sessions",
+        json={
+            "draft_id": target_draft_id,
+            "compare_run_id": compare_run_id,
+            "title": "Compare v1 to v2 Q&A",
+        },
+        headers=auth_headers,
+    )
+    assert session_response.status_code == 201
+    session_id = session_response.json()["data"]["id"]
+
+    assert client.post(f"/api/v1/contract-drafts/{target_draft_id}/parse", headers=auth_headers).status_code == 200
+
+    message_response = client.post(
+        f"/api/v1/contracts/{contract_id}/chat/sessions/{session_id}/messages",
+        json={"query": "What changed in liability now?"},
+        headers=auth_headers,
+    )
+    assert message_response.status_code == 422
+    assert "stale" in message_response.json()["detail"].lower()
+
+    attempt_response = client.post(
+        f"/api/v1/contracts/{contract_id}/chat/sessions/{session_id}/attempts",
+        json={
+            "draft_id": target_draft_id,
+            "query": "What changed in liability now?",
+            "client_request_id": "stale-attempt-1",
+        },
+        headers=auth_headers,
+    )
+    assert attempt_response.status_code == 422
+    assert "stale" in attempt_response.json()["detail"].lower()
+
+
 def test_contract_compare_chat_answers_from_deterministic_change_items(client, auth_headers):
     setup = _create_contract_compare_chat_setup(client, auth_headers)
     contract_id = setup["contract_id"]

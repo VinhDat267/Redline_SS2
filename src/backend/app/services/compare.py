@@ -119,6 +119,9 @@ def get_compare_run_detail(session: Session, compare_run_id: int) -> dict[str, o
         "compare_status": compare_run.compare_status,
         "started_at": compare_run.started_at,
         "completed_at": compare_run.completed_at,
+        "source_parse_run_id": compare_run.source_parse_run_id,
+        "target_parse_run_id": compare_run.target_parse_run_id,
+        "is_stale": is_compare_run_stale(compare_run),
         "warning_count": compare_run.warning_count,
         "warnings": _parse_warnings(compare_run.summary_json),
         "document": CompareDocumentRead.model_validate(compare_run.source_version.document).model_dump(mode="json"),
@@ -143,6 +146,15 @@ def list_document_compare_run_details(session: Session, document_id: int) -> lis
         )
     )
     return [get_compare_run_detail(session, compare_run.id) for compare_run in compare_runs]
+
+
+def is_compare_run_stale(compare_run: CompareRun) -> bool:
+    source_active_parse_run_id = compare_run.source_version.active_parse_run_id if compare_run.source_version else None
+    target_active_parse_run_id = compare_run.target_version.active_parse_run_id if compare_run.target_version else None
+    return (
+        compare_run.source_parse_run_id != source_active_parse_run_id
+        or compare_run.target_parse_run_id != target_active_parse_run_id
+    )
 
 
 def list_compare_run_change_items(session: Session, compare_run_id: int) -> list[dict[str, object]]:

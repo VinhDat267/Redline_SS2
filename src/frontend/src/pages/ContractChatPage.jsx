@@ -74,10 +74,18 @@ function buildCompareRunLabelMap(runs) {
   const labels = new Map();
   for (const run of runs) {
     const base = compareRunLabel(run);
-    const suffix = pairCounts.get(compareRunPairKey(run)) > 1 && run?.id ? ` - run #${run.id}` : "";
+    const annotations = [];
+    if (run?.is_stale) annotations.push("stale");
+    if (pairCounts.get(compareRunPairKey(run)) > 1 && run?.id) annotations.push(`run #${run.id}`);
+    const suffix = annotations.length ? ` (${annotations.join(", ")})` : "";
     labels.set(String(run.id), `${base}${suffix}`);
   }
   return labels;
+}
+function isCompletedCompareRun(r) { return ["completed", "completed_with_warnings"].includes(r.compare_status); }
+function isFreshCompletedCompareRun(r) { return isCompletedCompareRun(r) && !r.is_stale; }
+function staleCompareRunMessage() {
+  return "This compare run is stale because a draft was parsed again. Run Compare again before asking compare questions.";
 }
 function citationScopeLabel(c) { return c.source_label === "source" ? "Source" : c.source_label === "target" ? "Target" : ""; }
 function citationTitle(c) {
@@ -148,9 +156,7 @@ export function ContractChatPage() {
         setContract(cr); setDrafts(dr); setCompareRuns(rr); setSessions(sr);
         const parsed = dr.filter(hasParsedStatus);
         if (parsed.length) setSelectedDraftId(c => c || String(parsed[0].id));
-        const completedRuns = latestCompareRunsByPair(
-          rr.filter(r => ["completed", "completed_with_warnings"].includes(r.compare_status))
-        );
+        const completedRuns = latestCompareRunsByPair(rr.filter(isFreshCompletedCompareRun));
         if (completedRuns.length) setSelectedCompareRunId(c => c || String(completedRuns[completedRuns.length - 1].id));
         if (sr.length) {
           const latest = sr[sr.length - 1];
@@ -181,11 +187,9 @@ export function ContractChatPage() {
 
   const parsedDrafts = useMemo(() => drafts.filter(hasParsedStatus), [drafts]);
   const selectedDraft = parsedDrafts.find(d => String(d.id) === selectedDraftId) ?? null;
-  const completedCompareRuns = useMemo(
-    () => compareRuns.filter(r => ["completed", "completed_with_warnings"].includes(r.compare_status)),
-    [compareRuns]
-  );
-  const latestCompareRuns = useMemo(() => latestCompareRunsByPair(completedCompareRuns), [completedCompareRuns]);
+  const completedCompareRuns = useMemo(() => compareRuns.filter(isCompletedCompareRun), [compareRuns]);
+  const freshCompletedCompareRuns = useMemo(() => completedCompareRuns.filter(r => !r.is_stale), [completedCompareRuns]);
+  const latestCompareRuns = useMemo(() => latestCompareRunsByPair(freshCompletedCompareRuns), [freshCompletedCompareRuns]);
   const selectedHistoricalCompareRun = completedCompareRuns.find(r => String(r.id) === selectedCompareRunId) ?? null;
   const selectableCompareRuns = useMemo(() => {
     if (!selectedHistoricalCompareRun) return latestCompareRuns;
@@ -196,6 +200,7 @@ export function ContractChatPage() {
   const selectedCompareRun = selectedHistoricalCompareRun ?? selectableCompareRuns.find(r => String(r.id) === selectedCompareRunId) ?? null;
   const selectedCompareTargetDraft = selectedCompareRun?.target_version ?? selectedCompareRun?.target_draft ?? null;
   const selectedCompareRunLabel = selectedCompareRun ? compareRunLabels.get(String(selectedCompareRun.id)) ?? compareRunLabel(selectedCompareRun) : "";
+  const selectedCompareRunIsStale = Boolean(selectedCompareRun?.is_stale);
   const activeDraftId = selectedScope === "compare" ? String(selectedCompareTargetDraft?.id ?? "") : selectedDraftId;
   const activeScopeLabel = selectedScope === "compare" && selectedCompareRun ? selectedCompareRunLabel : draftLabel(selectedDraft);
   const promptExamples = selectedScope === "compare" ? COMPARE_PROMPT_EXAMPLES : PROMPT_EXAMPLES;
@@ -299,6 +304,7 @@ export function ContractChatPage() {
     const q = query.trim();
     if (!q) { setError("Please enter a contract question."); return; }
     if (selectedScope === "compare" && !selectedCompareRun) { setError("Choose a completed compare run first."); return; }
+    if (selectedScope === "compare" && selectedCompareRunIsStale) { setError(staleCompareRunMessage()); return; }
     if (!activeDraftId) { setError("Choose a parsed contract draft first."); return; }
     setIsSending(true); setIsStopping(false); setError(""); setStreamingAnswer(null);
     try {
@@ -330,6 +336,8 @@ export function ContractChatPage() {
   async function handleRetry(msg) {
     if (!msg?.source_query || !msg.session_id || !msg.draft_id || !msg.attempt_id) return;
     const session = sessions.find(s => s.id === msg.session_id) ?? { id: msg.session_id, draft_id: msg.draft_id };
+    const sessionCompareRun = session?.compare_run_id ? completedCompareRuns.find(r => String(r.id) === String(session.compare_run_id)) : null;
+    if (sessionCompareRun?.is_stale) { setError(staleCompareRunMessage()); return; }
     setIsSending(true); setIsStopping(false); setError("");
     try { await runAttempt({ session, normalizedQuery: msg.source_query, draftId: msg.draft_id, supersedesAttemptId: msg.attempt_id, replaceMessageId: msg.id, appendUserMessage: false }); }
     catch (e) { if (e instanceof ApiError && e.status === 401) { logout(); return; } setError(e.message); }
@@ -462,6 +470,13 @@ export function ContractChatPage() {
             )}
             <ChevronDown size={11} style={{ position: "absolute", right: "7px", top: "50%", transform: "translateY(-50%)", color: "#848E9C", pointerEvents: "none" }} />
           </div>
+          {selectedScope === "compare" && (
+            <p style={{ margin: "6px 0 0", fontSize: "10px", lineHeight: 1.4, color: selectedCompareRunIsStale ? "#C47A00" : "#848E9C" }}>
+              {selectedCompareRunIsStale
+                ? "This historical compare used an older parse snapshot. Run Compare again before asking new questions."
+                : "Showing the latest completed compare for each draft pair."}
+            </p>
+          )}
         </div>
 
         {/* Session list */}
@@ -501,7 +516,7 @@ export function ContractChatPage() {
         <div style={{ flexShrink: 0, borderTop: "1px solid #E6E8EA", padding: "10px 12px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "5px", marginBottom: "4px" }}>
             <History size={11} style={{ color: "#848E9C" }} />
-            <span style={{ fontSize: "10px", fontWeight: 700, color: "#848E9C", textTransform: "uppercase", letterSpacing: ".06em" }}>Test session memory</span>
+            <span style={{ fontSize: "10px", fontWeight: 700, color: "#848E9C", textTransform: "uppercase", letterSpacing: ".06em" }}>Session memory</span>
           </div>
           <p style={{ fontSize: "10px", color: "#C0C6CF", lineHeight: 1.6 }}>Follow-up questions use session context. Grounded answers still cite source evidence.</p>
         </div>

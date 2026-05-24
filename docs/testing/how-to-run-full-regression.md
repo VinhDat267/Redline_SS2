@@ -208,7 +208,7 @@ npm run build
 npm audit
 ```
 
-Expected baseline: `111 passed`, build succeeds, `0 vulnerabilities`.
+Expected baseline: `116 passed`, build succeeds, `0 vulnerabilities`.
 
 ## Result Recording
 

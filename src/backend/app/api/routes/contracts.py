@@ -388,6 +388,7 @@ def create_contract_chat_attempt(
     contract = project_access_service.ensure_document_access_or_404(database, contract_id, current_user.id)
     chat_session = contract_chat_service.get_chat_session_or_404(database, chat_session_id)
     draft = project_access_service.ensure_document_version_access_or_404(database, payload.draft_id, current_user.id)
+    contract_chat_service.ensure_chat_session_compare_run_is_current(database, chat_session)
     result, created = contract_chat_attempt_service.create_attempt(
         database,
         contract=contract,

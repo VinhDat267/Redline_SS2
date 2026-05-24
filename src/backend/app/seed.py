@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.security import build_demo_password_hash
 from app.core.database import SessionLocal
 from app.models import User
+from app.services.demo import seed_demo_workspace
 
 
 DEMO_USERS = [
@@ -41,6 +42,12 @@ def main() -> None:
         print(f"Seeded {len(users)} demo users.")
         for user in users:
             print(f"{user.id}: {user.display_name} <{user.email}>")
+        if users:
+            res = seed_demo_workspace(session, users[0])
+            print(
+                f"Seeded workspace: '{res['project'].name}' "
+                f"(Docs: {res['documents_seeded']}, Versions: {res['versions_seeded']})"
+            )
 
 
 if __name__ == "__main__":

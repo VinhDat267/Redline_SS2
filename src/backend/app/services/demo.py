@@ -1,18 +1,21 @@
+from io import BytesIO
 from pathlib import Path
 
 from docx import Document as DocxDocument
+from docx.shared import Inches, Pt, RGBColor
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models import Document, DocumentVersion, Project, ProjectMember, User
-from app.seed import seed_demo_users
-from app.services.upload_storage import to_stored_upload_path
+from app.services.upload_storage import store_bytes
 
 
 WORKSPACE_PROJECT_NAME = "Redline Review Workspace"
 LEGACY_PROJECT_NAMES = {WORKSPACE_PROJECT_NAME, "Redline SS2 Demo"}
 WORKSPACE_PROJECT_DESCRIPTION = "Starter review workspace for live Redline project, document, parser, and compare flows."
+DEMO_DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+PARSED_STATUSES = {"parsed", "parsed_with_warnings"}
 DEMO_DOCUMENT_SPECS = [
     {
         "title": "Master Services Agreement",
@@ -34,6 +37,25 @@ DEMO_DOCUMENT_SPECS = [
         ],
     },
     {
+        "title": "Statement of Work",
+        "document_type": "SOW",
+        "description": "Implementation statement of work for live Redline review and compare workflows.",
+        "versions": [
+            {
+                "version_label": "v1.0",
+                "file_name": "sow-v1.0.docx",
+                "parse_status": "parsed",
+                "notes": "Starter baseline statement of work for review and compare.",
+            },
+            {
+                "version_label": "v2.0",
+                "file_name": "sow-v2.0.docx",
+                "parse_status": "parsed",
+                "notes": "Starter revised statement of work for review and compare.",
+            },
+        ],
+    },
+    {
         "title": "Security Addendum",
         "document_type": "DPA",
         "description": "Secondary contract artifact that keeps the project detail page populated with real data.",
@@ -41,7 +63,7 @@ DEMO_DOCUMENT_SPECS = [
             {
                 "version_label": "v1.0",
                 "file_name": "security-addendum-v1.0.docx",
-                "parse_status": "pending",
+                "parse_status": "parsed",
                 "notes": "Seeded secondary contract draft for the project inventory.",
             }
         ],
@@ -50,60 +72,187 @@ DEMO_DOCUMENT_SPECS = [
 
 
 def _ensure_demo_upload(document_id: int, file_name: str, version_label: str) -> str:
-    target_dir = Path(settings.uploads_dir) / "demo" / f"document-{document_id}"
-    target_dir.mkdir(parents=True, exist_ok=True)
-    stored_file = target_dir / f"{version_label}-{file_name}"
-    if stored_file.suffix.lower() == ".docx" and not _is_valid_docx(stored_file):
-        _write_demo_docx(stored_file, file_name=file_name, version_label=version_label)
-    elif not stored_file.exists():
-        stored_file.write_text(
-            (
-                f"Starter workspace upload for document {document_id} / {version_label}\n"
-                f"Original file: {file_name}\n"
-            ),
-            encoding="utf-8",
+    stored_path = f"demo/document-{document_id}/{version_label}-{file_name}"
+    if Path(file_name).suffix.lower() == ".docx":
+        return store_bytes(
+            stored_path,
+            _build_demo_docx_bytes(file_name=file_name, version_label=version_label),
+            content_type=DEMO_DOCX_CONTENT_TYPE,
         )
-    return to_stored_upload_path(stored_file)
+
+    payload = (
+        f"Starter workspace upload for document {document_id} / {version_label}\n"
+        f"Original file: {file_name}\n"
+    ).encode("utf-8")
+    return store_bytes(stored_path, payload, content_type="text/plain; charset=utf-8")
 
 
-def _is_valid_docx(file_path: Path) -> bool:
-    if not file_path.exists():
-        return False
-    try:
-        DocxDocument(file_path)
-    except Exception:
-        return False
-    return True
+def _get_section_lines(section_id: str) -> list[str]:
+    source_path = Path(__file__).resolve().parents[1] / "assets/source-contracts.md"
+    if not source_path.exists():
+        source_path = Path(__file__).resolve().parents[4] / "docs/demo/full-system-demo/source-contracts.md"
+    if not source_path.exists():
+        return [
+            f"### {section_id}",
+            f"Placeholder content for {section_id} because source-contracts.md was not found."
+        ]
+
+    current_id = None
+    lines = []
+    for line in source_path.read_text(encoding="utf-8").splitlines():
+        if line.startswith("## ") and " - " in line:
+            header = line.removeprefix("## ").strip()
+            item_id = [part.strip() for part in header.split(" - ", 1)][0]
+            if current_id == section_id:
+                break
+            if item_id == section_id:
+                current_id = item_id
+            continue
+        if current_id == section_id:
+            lines.append(line)
+
+    # Trim empty lines from beginning/end
+    start = 0
+    end = len(lines)
+    while start < end and not lines[start].strip():
+        start += 1
+    while end > start and not lines[end - 1].strip():
+        end -= 1
+    return lines[start:end]
+
+
+def _add_markdown_table(document: DocxDocument, table_lines: list[str]) -> None:
+    rows = [
+        [cell.strip() for cell in line.strip("|").split("|")]
+        for line in table_lines
+        if not set(line.replace("|", "").strip()) <= {"-", " "}
+    ]
+    if not rows:
+        return
+    column_count = max(len(row) for row in rows)
+    table = document.add_table(rows=len(rows), cols=column_count)
+    table.style = "Table Grid"
+    for row_index, row_values in enumerate(rows):
+        for column_index in range(column_count):
+            cell = table.cell(row_index, column_index)
+            cell.text = row_values[column_index] if column_index < len(row_values) else ""
+            for paragraph in cell.paragraphs:
+                for run in paragraph.runs:
+                    run.font.name = "Arial"
+                    run.font.size = Pt(8.5)
+                    run.bold = row_index == 0
+    document.add_paragraph()
+
+
+def _add_body_from_lines(document: DocxDocument, lines: list[str]) -> None:
+    index = 0
+    while index < len(lines):
+        line = lines[index].rstrip()
+        stripped = line.strip()
+        if not stripped:
+            index += 1
+            continue
+        if stripped.startswith("### "):
+            document.add_heading(stripped.removeprefix("### ").strip(), level=1)
+            index += 1
+            continue
+        if stripped.startswith("#### "):
+            document.add_heading(stripped.removeprefix("#### ").strip(), level=2)
+            index += 1
+            continue
+        if stripped.startswith("|"):
+            table_lines: list[str] = []
+            while index < len(lines) and lines[index].strip().startswith("|"):
+                table_lines.append(lines[index].strip())
+                index += 1
+            _add_markdown_table(document, table_lines)
+            continue
+        if stripped.startswith("- "):
+            paragraph = document.add_paragraph(style="List Bullet")
+            paragraph.add_run(stripped.removeprefix("- ").strip())
+            index += 1
+            continue
+        document.add_paragraph(stripped)
+        index += 1
+
+
+def _build_demo_docx(file_name: str, version_label: str) -> DocxDocument:
+    section_id = None
+    fn_lower = file_name.lower()
+    vl_lower = version_label.lower()
+
+    if "msa" in fn_lower:
+        if "2.0" in vl_lower or "v2" in vl_lower:
+            section_id = "MSA_V2"
+        else:
+            section_id = "MSA_V1"
+    elif "sow" in fn_lower:
+        if "2.0" in vl_lower or "v2" in vl_lower:
+            section_id = "SOW_V2"
+        else:
+            section_id = "SOW_V1"
+    elif "security-addendum" in fn_lower:
+        section_id = "SECURITY_ADDENDUM"
+
+    if not section_id:
+        section_id = "MSA_V1"
+
+    lines = _get_section_lines(section_id)
+
+    document = DocxDocument()
+
+    section = document.sections[0]
+    section.top_margin = Inches(0.75)
+    section.bottom_margin = Inches(0.75)
+    section.left_margin = Inches(0.8)
+    section.right_margin = Inches(0.8)
+
+    styles = document.styles
+    normal = styles["Normal"]
+    normal.font.name = "Arial"
+    normal.font.size = Pt(10)
+    normal.paragraph_format.space_after = Pt(6)
+
+    # Use title of the section if found
+    title_text = "Redline Seed Contract"
+    if section_id == "MSA_V1":
+        title_text = "Master Services Agreement (v1.1)"
+    elif section_id == "MSA_V2":
+        title_text = "Master Services Agreement (v2.0)"
+    elif section_id == "SOW_V1":
+        title_text = "Statement of Work (v1.0)"
+    elif section_id == "SOW_V2":
+        title_text = "Statement of Work (v2.0)"
+    elif section_id == "SECURITY_ADDENDUM":
+        title_text = "Security and Data Processing Addendum (v1.0)"
+
+    title = document.add_paragraph()
+    title_run = title.add_run(title_text)
+    title_run.bold = True
+    title_run.font.size = Pt(18)
+
+    subtitle = document.add_paragraph()
+    subtitle_run = subtitle.add_run("Redline full-system demo seed document")
+    subtitle_run.italic = True
+    subtitle_run.font.color.rgb = RGBColor(91, 104, 124)
+
+    _add_body_from_lines(document, lines)
+    return document
+
+
+def _build_demo_docx_bytes(*, file_name: str, version_label: str) -> bytes:
+    buffer = BytesIO()
+    _build_demo_docx(file_name, version_label).save(buffer)
+    return buffer.getvalue()
 
 
 def _write_demo_docx(file_path: Path, *, file_name: str, version_label: str) -> None:
-    document = DocxDocument()
-    document.add_heading("Master Services Agreement", level=1)
-    document.add_paragraph(f"Demo contract draft {version_label} generated for Redline parser and compare workflows.")
-
-    document.add_heading("1. Purpose", level=2)
-    document.add_paragraph(
-        "The system supports contract review by parsing uploaded drafts, comparing clauses, "
-        "and keeping review decisions traceable."
-    )
-
-    document.add_heading("2. Scope", level=2)
-    if "v2" in version_label.lower() or "v2" in file_name.lower():
-        document.add_paragraph(
-            "The revised draft adds Contract Q&A, RAG-supported AI review, and parser diagnostics for reviewer trust."
-        )
-        document.add_paragraph("Reviewers must confirm AI suggestions before they become final review truth.")
-    else:
-        document.add_paragraph(
-            "The baseline draft covers upload, parsing, deterministic comparison, and human review tracking."
-        )
-
-    document.add_heading("3. Acceptance", level=2)
-    document.add_paragraph("Parser output must preserve clause anchors for Compare, Review, and Contract Q&A.")
+    document = _build_demo_docx(file_name, version_label)
     document.save(file_path)
 
 
 def seed_demo_workspace(session: Session, current_user: User) -> dict[str, object]:
+    from app.seed import seed_demo_users
     demo_users = seed_demo_users(session)
 
     matching_projects = list(
@@ -185,16 +334,9 @@ def seed_demo_workspace(session: Session, current_user: User) -> dict[str, objec
                 version_spec["file_name"],
                 version_spec["version_label"],
             )
-            existing_version = existing_versions.get(version_spec["version_label"])
-            if existing_version is not None:
-                existing_version.file_name = version_spec["file_name"]
-                existing_version.file_path = file_path
-                existing_version.notes = version_spec["notes"]
-                session.add(existing_version)
-                continue
-
-            session.add(
-                DocumentVersion(
+            version = existing_versions.get(version_spec["version_label"])
+            if version is None:
+                version = DocumentVersion(
                     document_id=document.id,
                     version_label=version_spec["version_label"],
                     file_name=version_spec["file_name"],
@@ -203,8 +345,32 @@ def seed_demo_workspace(session: Session, current_user: User) -> dict[str, objec
                     parse_status=version_spec["parse_status"],
                     notes=version_spec["notes"],
                 )
+                session.add(version)
+                session.commit()
+                session.refresh(version)
+                versions_seeded += 1
+            else:
+                version.file_name = version_spec["file_name"]
+                version.file_path = file_path
+                version.notes = version_spec["notes"]
+                session.add(version)
+                session.commit()
+                session.refresh(version)
+
+            # Trigger parsing immediately if the version status is parsed
+            should_parse = (
+                version_spec["parse_status"] == "parsed"
+                and (
+                    version.active_parse_run_id is None
+                    or version.parse_status not in PARSED_STATUSES
+                )
             )
-            versions_seeded += 1
+            if should_parse:
+                from app.services import document_parser
+                try:
+                    document_parser.parse_document_version(session, version)
+                except Exception as exc:
+                    raise RuntimeError(f"Failed parsing demo seed document {version.file_name}: {exc}") from exc
 
     session.commit()
     session.refresh(project)

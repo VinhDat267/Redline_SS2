@@ -31,6 +31,7 @@ function renderContractDetail(path = "/contracts/10") {
           <Route element={<ContractDetailPage />} path="/contracts/:contractId" />
           <Route element={<div>Contract parser route</div>} path="/contracts/:contractId/parser" />
           <Route element={<div>Legacy document parser route</div>} path="/documents/:documentId/parser" />
+          <Route element={<div>Compare workspace route</div>} path="/compare-runs/:compareRunId" />
         </Routes>
       </MemoryRouter>
     </AuthProvider>
@@ -100,6 +101,10 @@ describe("ContractDetailPage", () => {
         );
       }
 
+      if (url.includes("/api/v1/contracts/10/compare-runs") && method === "GET") {
+        return Promise.resolve(jsonResponse({ data: [] }));
+      }
+
       return Promise.reject(new Error(`Unhandled request: ${url} ${method}`));
     });
 
@@ -114,6 +119,73 @@ describe("ContractDetailPage", () => {
     expect(screen.getByRole("columnheader", { name: /quality/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /compare setup/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /run compare/i })).toBeInTheDocument();
+  });
+
+  test("keeps contract workspace usable when recent comparisons fail to load", async () => {
+    fetch.mockImplementation((input, init = {}) => {
+      const url = String(input);
+      const method = init.method || "GET";
+
+      if (url.endsWith("/api/v1/contracts/10") && method === "GET") {
+        return Promise.resolve(
+          jsonResponse({
+            data: {
+              id: 10,
+              project_id: 1,
+              title: "Vendor Master Services Agreement",
+              contract_type: "MSA",
+              description: "Primary commercial agreement.",
+              created_at: "2026-03-26T08:00:00Z",
+              updated_at: "2026-03-26T09:00:00Z"
+            }
+          })
+        );
+      }
+
+      if (url.endsWith("/api/v1/contracts/10/drafts") && method === "GET") {
+        return Promise.resolve(
+          jsonResponse({
+            data: [
+              {
+                id: 501,
+                contract_id: 10,
+                draft_label: "vendor-v1",
+                file_name: "vendor-v1.docx",
+                parse_status: "parsed",
+                notes: "Initial vendor draft",
+                uploaded_by_display_name: "Redline Tester",
+                uploaded_at: "2026-03-26T08:00:00Z",
+                active_parse_run_id: 401
+              },
+              {
+                id: 502,
+                contract_id: 10,
+                draft_label: "vendor-v2",
+                file_name: "vendor-v2.docx",
+                parse_status: "parsed",
+                notes: "Counterparty markup",
+                uploaded_by_display_name: "Redline Tester",
+                uploaded_at: "2026-03-26T09:00:00Z",
+                active_parse_run_id: 402
+              }
+            ]
+          })
+        );
+      }
+
+      if (url.includes("/api/v1/contracts/10/compare-runs") && method === "GET") {
+        return Promise.reject(new Error("recent comparisons unavailable"));
+      }
+
+      return Promise.reject(new Error(`Unhandled request: ${url} ${method}`));
+    });
+
+    renderContractDetail();
+
+    expect(await screen.findByRole("heading", { name: /vendor master services agreement/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /draft history/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /run compare/i })).toBeInTheDocument();
+    expect(screen.queryByText(/recent comparisons unavailable/i)).not.toBeInTheDocument();
   });
 
   test("opens parser workspace through the contract facade route", async () => {
@@ -155,6 +227,10 @@ describe("ContractDetailPage", () => {
             ]
           })
         );
+      }
+
+      if (url.includes("/api/v1/contracts/10/compare-runs") && method === "GET") {
+        return Promise.resolve(jsonResponse({ data: [] }));
       }
 
       return Promise.reject(new Error(`Unhandled request: ${url} ${method}`));
@@ -219,6 +295,10 @@ describe("ContractDetailPage", () => {
         return Promise.resolve(jsonResponse({ data: uploadedDraft }, 201));
       }
 
+      if (url.includes("/api/v1/contracts/10/compare-runs") && method === "GET") {
+        return Promise.resolve(jsonResponse({ data: [] }));
+      }
+
       return Promise.reject(new Error(`Unhandled request: ${url} ${method}`));
     });
 
@@ -259,5 +339,142 @@ describe("ContractDetailPage", () => {
       expect(requestInit.body.get("notes")).toBe("Scanned counterparty draft");
       expect(requestInit.body.get("file")).toBe(file);
     });
+  });
+
+  test("shows Resume Compare when a fresh compare run already exists for the selected pair", async () => {
+    const existingCompareRun = {
+      id: 77,
+      compare_version: "v1",
+      compare_status: "completed",
+      started_at: "2026-03-26T09:05:00Z",
+      completed_at: "2026-03-26T09:05:05Z",
+      source_parse_run_id: 401,
+      target_parse_run_id: 402,
+      is_stale: false,
+      is_superseded: false,
+      warning_count: 0,
+      warnings: [],
+      contract: { id: 10, project_id: 1, title: "Vendor MSA", contract_type: "MSA", description: null },
+      source_draft: { id: 501, contract_id: 10, draft_label: "vendor-v1", parse_status: "parsed", active_parse_run_id: 401 },
+      target_draft: { id: 502, contract_id: 10, draft_label: "vendor-v2", parse_status: "parsed_with_warnings", active_parse_run_id: 402 },
+      summary: { total_changes: 3, added: 1, removed: 0, modified: 2 },
+      selected_clause_change_id: null,
+      has_ai_clause_risk_analyses: true
+    };
+
+    fetch.mockImplementation((input, init = {}) => {
+      const url = String(input);
+      const method = init.method || "GET";
+
+      if (url.endsWith("/api/v1/contracts/10") && method === "GET") {
+        return Promise.resolve(
+          jsonResponse({
+            data: {
+              id: 10, project_id: 1, title: "Vendor MSA", contract_type: "MSA",
+              description: null, created_at: "2026-03-26T08:00:00Z", updated_at: "2026-03-26T09:00:00Z"
+            }
+          })
+        );
+      }
+
+      if (url.endsWith("/api/v1/contracts/10/drafts") && method === "GET") {
+        return Promise.resolve(
+          jsonResponse({
+            data: [
+              { id: 501, contract_id: 10, draft_label: "vendor-v1", file_name: "v1.docx", parse_status: "parsed", notes: null, uploaded_by_display_name: "Tester", uploaded_at: "2026-03-26T08:00:00Z", active_parse_run_id: 401 },
+              { id: 502, contract_id: 10, draft_label: "vendor-v2", file_name: "v2.docx", parse_status: "parsed_with_warnings", notes: null, uploaded_by_display_name: "Tester", uploaded_at: "2026-03-26T09:00:00Z", active_parse_run_id: 402 }
+            ]
+          })
+        );
+      }
+
+      if (url.includes("/api/v1/contracts/10/compare-runs") && method === "GET") {
+        return Promise.resolve(jsonResponse({ data: [existingCompareRun] }));
+      }
+
+      return Promise.reject(new Error(`Unhandled request: ${url} ${method}`));
+    });
+
+    renderContractDetail();
+
+    // Should show Resume Compare instead of Run Compare
+    expect(await screen.findByRole("button", { name: /resume compare/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^run compare$/i })).not.toBeInTheDocument();
+
+    // Should show the info banner
+    expect(screen.getByText(/previous comparison found/i)).toBeInTheDocument();
+
+    // Should show Recent Comparisons section
+    expect(screen.getByRole("heading", { name: /recent comparisons/i })).toBeInTheDocument();
+    expect(screen.getByText("3 changes")).toBeInTheDocument();
+    expect(screen.getByText("✦ AI")).toBeInTheDocument();
+  });
+
+  test("navigates to existing compare run when Resume Compare is clicked", async () => {
+    const existingCompareRun = {
+      id: 77,
+      compare_version: "v1",
+      compare_status: "completed",
+      started_at: "2026-03-26T09:05:00Z",
+      completed_at: "2026-03-26T09:05:05Z",
+      source_parse_run_id: 401,
+      target_parse_run_id: 402,
+      is_stale: false,
+      is_superseded: false,
+      warning_count: 0,
+      warnings: [],
+      contract: { id: 10, project_id: 1, title: "Vendor MSA", contract_type: "MSA", description: null },
+      source_draft: { id: 501, contract_id: 10, draft_label: "vendor-v1", parse_status: "parsed", active_parse_run_id: 401 },
+      target_draft: { id: 502, contract_id: 10, draft_label: "vendor-v2", parse_status: "parsed_with_warnings", active_parse_run_id: 402 },
+      summary: { total_changes: 3, added: 1, removed: 0, modified: 2 },
+      selected_clause_change_id: null,
+      has_ai_clause_risk_analyses: false
+    };
+
+    fetch.mockImplementation((input, init = {}) => {
+      const url = String(input);
+      const method = init.method || "GET";
+
+      if (url.endsWith("/api/v1/contracts/10") && method === "GET") {
+        return Promise.resolve(
+          jsonResponse({
+            data: {
+              id: 10, project_id: 1, title: "Vendor MSA", contract_type: "MSA",
+              description: null, created_at: "2026-03-26T08:00:00Z", updated_at: "2026-03-26T09:00:00Z"
+            }
+          })
+        );
+      }
+
+      if (url.endsWith("/api/v1/contracts/10/drafts") && method === "GET") {
+        return Promise.resolve(
+          jsonResponse({
+            data: [
+              { id: 501, contract_id: 10, draft_label: "vendor-v1", file_name: "v1.docx", parse_status: "parsed", notes: null, uploaded_by_display_name: "Tester", uploaded_at: "2026-03-26T08:00:00Z", active_parse_run_id: 401 },
+              { id: 502, contract_id: 10, draft_label: "vendor-v2", file_name: "v2.docx", parse_status: "parsed_with_warnings", notes: null, uploaded_by_display_name: "Tester", uploaded_at: "2026-03-26T09:00:00Z", active_parse_run_id: 402 }
+            ]
+          })
+        );
+      }
+
+      if (url.includes("/api/v1/contracts/10/compare-runs") && method === "GET") {
+        return Promise.resolve(jsonResponse({ data: [existingCompareRun] }));
+      }
+
+      return Promise.reject(new Error(`Unhandled request: ${url} ${method}`));
+    });
+
+    renderContractDetail();
+
+    fireEvent.click(await screen.findByRole("button", { name: /resume compare/i }));
+
+    // Should navigate to the existing compare run, not create a new one
+    expect(await screen.findByText("Compare workspace route")).toBeInTheDocument();
+
+    // Should NOT have made a POST to create a new compare run
+    const postCalls = fetch.mock.calls.filter(
+      ([, requestInit = {}]) => (requestInit.method || "GET") === "POST"
+    );
+    expect(postCalls).toHaveLength(0);
   });
 });

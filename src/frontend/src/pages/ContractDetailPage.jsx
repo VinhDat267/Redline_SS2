@@ -21,6 +21,7 @@ import {
   createContractCompareRun,
   createContractDraft,
   getContract,
+  listContractCompareRuns,
   listContractDrafts,
   updateContract
 } from "../lib/api";
@@ -154,6 +155,7 @@ export function ContractDetailPage() {
   const [compareError, setCompareError] = useState("");
   const [isCreatingCompare, setIsCreatingCompare] = useState(false);
   const [recentDraftId, setRecentDraftId] = useState(null);
+  const [existingCompareRuns, setExistingCompareRuns] = useState([]);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -161,6 +163,7 @@ export function ContractDetailPage() {
     async function loadContractWorkspace() {
       setIsLoading(true);
       setError("");
+      setExistingCompareRuns([]);
       try {
         const [contractPayload, draftPayload] = await Promise.all([
           getContract(token, contractId),
@@ -169,6 +172,19 @@ export function ContractDetailPage() {
         if (!isCurrent) return;
         setContract(contractPayload);
         setDrafts(draftPayload);
+        setIsLoading(false);
+
+        try {
+          const compareRunsPayload = await listContractCompareRuns(token, contractId, { latestPerPair: true, freshOnly: true });
+          if (isCurrent) {
+            setExistingCompareRuns(compareRunsPayload);
+          }
+        } catch (compareRunsLoadError) {
+          if (compareRunsLoadError instanceof ApiError && compareRunsLoadError.status === 401) { logout(); return; }
+          if (isCurrent) {
+            setExistingCompareRuns([]);
+          }
+        }
       } catch (loadError) {
         if (loadError instanceof ApiError && loadError.status === 401) { logout(); return; }
         if (isCurrent) setError(loadError.message);
@@ -246,12 +262,26 @@ export function ContractDetailPage() {
     } finally { setIsUploading(false); }
   }
 
+  // Find existing fresh compare run for the currently selected pair
+  const matchingCompareRun = existingCompareRuns.find(cr => {
+    const srcId = cr.source_version?.id ?? cr.source_draft?.id;
+    const tgtId = cr.target_version?.id ?? cr.target_draft?.id;
+    return String(srcId) === sourceDraftId && String(tgtId) === targetDraftId;
+  });
+
   async function handleCompareSubmit(event) {
     event.preventDefault(); setCompareError("");
     if (!sourceDraftId || !targetDraftId) { setCompareError("Choose both source and target drafts."); return; }
     if (sourceDraftId === targetDraftId) { setCompareError("Source and target drafts must be different."); return; }
     const readyDraftIds = new Set(drafts.filter(isCompareReadyDraft).map(d => String(d.id)));
     if (!readyDraftIds.has(sourceDraftId) || !readyDraftIds.has(targetDraftId)) { setCompareError("Selected drafts are not review-ready."); return; }
+
+    // If a fresh compare run already exists for this pair, navigate to it
+    if (matchingCompareRun) {
+      startTransition(() => { navigate(`/compare-runs/${matchingCompareRun.id}`); });
+      return;
+    }
+
     setIsCreatingCompare(true);
     try {
       const compareRun = await createContractCompareRun(token, contractId, { source_draft_id: Number(sourceDraftId), target_draft_id: Number(targetDraftId) });
@@ -457,27 +487,38 @@ export function ContractDetailPage() {
             }
           >
             {compareReady ? (
-              <form className="flex flex-col sm:flex-row sm:items-end gap-4 p-4 bg-[#F5F5F5] border border-[#E6E8EA]" style={{ borderRadius: "8px" }} onSubmit={handleCompareSubmit}>
-                <div className="flex-1">
-                  <CdFormSelect label="Source Draft" disabled={isCreatingCompare} onChange={e => setSourceDraftId(e.target.value)} value={sourceDraftId}>
-                    <option value="">Select source draft</option>
-                    {compareReadyDrafts.map(d => <option key={`s-${d.id}`} value={String(d.id)} disabled={String(d.id) === targetDraftId}>{d.version_label}</option>)}
-                  </CdFormSelect>
-                </div>
-                <div className="hidden sm:flex items-center justify-center pb-2">
-                  <ArrowRight size={20} className="text-[#848E9C]" />
-                </div>
-                <div className="flex-1">
-                  <CdFormSelect label="Target Draft" disabled={isCreatingCompare} onChange={e => setTargetDraftId(e.target.value)} value={targetDraftId}>
-                    <option value="">Select target draft</option>
-                    {compareReadyDrafts.map(d => <option key={`t-${d.id}`} value={String(d.id)} disabled={String(d.id) === sourceDraftId}>{d.version_label}</option>)}
-                  </CdFormSelect>
-                </div>
-                <button className={pillBtnCls} style={pillBtnStyle} disabled={isCreatingCompare} type="submit">
-                  {isCreatingCompare ? "Creating..." : <><GitCompareArrows size={16} /> Run Compare</>}
-                </button>
-                {compareError && <div className="w-full text-[#F6465D] text-[13px] font-semibold mt-2">{compareError}</div>}
-              </form>
+              <div className="flex flex-col gap-3">
+                <form className="flex flex-col sm:flex-row sm:items-end gap-4 p-4 bg-[#F5F5F5] border border-[#E6E8EA]" style={{ borderRadius: "8px" }} onSubmit={handleCompareSubmit}>
+                  <div className="flex-1">
+                    <CdFormSelect label="Source Draft" disabled={isCreatingCompare} onChange={e => setSourceDraftId(e.target.value)} value={sourceDraftId}>
+                      <option value="">Select source draft</option>
+                      {compareReadyDrafts.map(d => <option key={`s-${d.id}`} value={String(d.id)} disabled={String(d.id) === targetDraftId}>{d.version_label}</option>)}
+                    </CdFormSelect>
+                  </div>
+                  <div className="hidden sm:flex items-center justify-center pb-2">
+                    <ArrowRight size={20} className="text-[#848E9C]" />
+                  </div>
+                  <div className="flex-1">
+                    <CdFormSelect label="Target Draft" disabled={isCreatingCompare} onChange={e => setTargetDraftId(e.target.value)} value={targetDraftId}>
+                      <option value="">Select target draft</option>
+                      {compareReadyDrafts.map(d => <option key={`t-${d.id}`} value={String(d.id)} disabled={String(d.id) === sourceDraftId}>{d.version_label}</option>)}
+                    </CdFormSelect>
+                  </div>
+                  <button className={pillBtnCls} style={pillBtnStyle} disabled={isCreatingCompare} type="submit">
+                    {isCreatingCompare ? "Creating..." : matchingCompareRun ? <><GitCompareArrows size={16} /> Resume Compare</> : <><GitCompareArrows size={16} /> Run Compare</>}
+                  </button>
+                </form>
+                {matchingCompareRun && (
+                  <div className="flex items-center gap-3 px-4 py-3 bg-[#E8F5E9] border border-[#A5D6A7]" style={{ borderRadius: '8px' }}>
+                    <CheckCircle2 size={16} className="text-[#1B5E20] flex-shrink-0" />
+                    <div>
+                      <p className="text-[13px] font-semibold text-[#1B5E20] mb-0.5">Previous comparison found</p>
+                      <p className="text-[12px] text-[#2E7D32]">A fresh comparison already exists for this pair — your AI drafts and review progress are preserved. Click <strong>Resume Compare</strong> to continue where you left off.</p>
+                    </div>
+                  </div>
+                )}
+                {compareError && <div className="text-[#F6465D] text-[13px] font-semibold">{compareError}</div>}
+              </div>
             ) : (
               <div className="flex flex-col items-center justify-center p-10 text-center border-2 border-dashed border-[#E6E8EA]" style={{ borderRadius: "12px" }}>
                 <GitCompareArrows size={32} className="text-[#848E9C] mb-3" />
@@ -501,6 +542,48 @@ export function ContractDetailPage() {
             )}
           </CdCard>
         </div>
+
+        {/* Recent Comparisons */}
+        {existingCompareRuns.length > 0 && (
+          <div className="mt-6">
+            <CdCard title="Recent Comparisons" aside={<span className="text-[12px] font-semibold text-[#848E9C]">{existingCompareRuns.length} active</span>}>
+              <div className="flex flex-col gap-2">
+                {existingCompareRuns.map(cr => {
+                  const srcLabel = cr.source_version?.version_label ?? cr.source_draft?.draft_label ?? '?';
+                  const tgtLabel = cr.target_version?.version_label ?? cr.target_draft?.draft_label ?? '?';
+                  const totalChanges = cr.summary?.total_changes ?? 0;
+                  const hasAi = cr.has_ai_review_drafts;
+                  return (
+                    <Link
+                      key={cr.id}
+                      to={`/compare-runs/${cr.id}`}
+                      className="flex items-center justify-between p-3 bg-[#F5F5F5] border border-[#E6E8EA] no-underline text-inherit"
+                      style={{ borderRadius: '8px', transition: 'all 200ms ease' }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = '#F0B90B'; e.currentTarget.style.background = '#FFFDF5'; }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = '#E6E8EA'; e.currentTarget.style.background = '#F5F5F5'; }}
+                    >
+                      <div className="flex items-center gap-3">
+                        <GitCompareArrows size={16} className="text-[#F0B90B] flex-shrink-0" />
+                        <div>
+                          <span className="text-[13px] font-semibold text-[#1E2026]">{srcLabel}</span>
+                          <ArrowRight size={12} className="inline mx-1.5 text-[#848E9C]" />
+                          <span className="text-[13px] font-semibold text-[#1E2026]">{tgtLabel}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-semibold text-[#848E9C]">{totalChanges} changes</span>
+                        {hasAi && (
+                          <span className="px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-[#E8F5E9] border border-[#A5D6A7] text-[#1B5E20]" style={{ borderRadius: '4px' }}>✦ AI</span>
+                        )}
+                        <span className="text-[11px] font-semibold text-[#F0B90B]">Open →</span>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            </CdCard>
+          </div>
+        )}
       </main>
 
       {/* ══ Upload Draft Modal ══ */}

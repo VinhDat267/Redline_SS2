@@ -728,6 +728,10 @@ describe("DocumentDetailPage", () => {
         return Promise.resolve(jsonResponse(buildVersionListPayload(compareReadyDrafts)));
       }
 
+      if (url.includes("/api/v1/contracts/10/compare-runs") && method === "GET") {
+        return Promise.resolve(jsonResponse({ data: [] }));
+      }
+
       if (url.endsWith("/api/v1/contracts/10/compare-runs") && method === "POST") {
         return Promise.resolve(
           jsonResponse(

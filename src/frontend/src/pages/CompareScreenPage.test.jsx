@@ -481,6 +481,100 @@ describe("CompareScreenPage", () => {
     expect((await screen.findAllByText(/ai ready/i)).length).toBeGreaterThan(0);
   });
 
+  test("logs out when polling cannot refresh the selected change because the session expired", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let changeDetailRequests = 0;
+
+    fetch.mockImplementation((input, init = {}) => {
+      const url = String(input);
+      const method = init.method || "GET";
+
+      if (url.endsWith("/api/v1/compare-runs/55") && method === "GET") {
+        return Promise.resolve(
+          jsonResponse(
+            buildCompareRunPayload({
+              active_ai_batch_job: {
+                job_id: 301,
+                compare_run_id: 55,
+                status: "running",
+                requested_count: 2,
+                processed_count: 0,
+                generated_count: 0,
+                failed_count: 0,
+                force_regenerate: false,
+                active: true,
+                started_at: "2026-04-02T08:10:00Z",
+                completed_at: null,
+                error_message: null
+              }
+            })
+          )
+        );
+      }
+
+      if (url.endsWith("/api/v1/compare-runs/55/change-items") && method === "GET") {
+        return Promise.resolve(
+          jsonResponse(
+            buildQueuePayload([
+              buildQueueItem({
+                ai_generation_status: "pending",
+                has_ai_review_draft: true
+              })
+            ])
+          )
+        );
+      }
+
+      if (url.endsWith("/api/v1/change-items/900") && method === "GET") {
+        changeDetailRequests += 1;
+        if (changeDetailRequests === 1) {
+          return Promise.resolve(jsonResponse(buildChangeItemDetailPayload()));
+        }
+        return Promise.resolve(jsonResponse({ detail: "Not authenticated" }, 401));
+      }
+
+      if (url.endsWith("/api/v1/ai-batch-jobs/301") && method === "GET") {
+        return Promise.resolve(
+          jsonResponse({
+            data: {
+              job_id: 301,
+              compare_run_id: 55,
+              status: "running",
+              requested_count: 2,
+              processed_count: 1,
+              generated_count: 1,
+              failed_count: 0,
+              force_regenerate: false,
+              active: true,
+              started_at: "2026-04-02T08:10:00Z",
+              completed_at: null,
+              error_message: null
+            }
+          })
+        );
+      }
+
+      if (url.endsWith("/api/v1/auth/logout") && method === "POST") {
+        return Promise.resolve(jsonResponse({ data: { ok: true } }));
+      }
+
+      return Promise.reject(new Error(`Unhandled request: ${url} ${method}`));
+    });
+
+    renderCompareScreen();
+
+    expect(await screen.findByText(/0 \/ 2 processed/i)).toBeInTheDocument();
+
+    await vi.advanceTimersByTimeAsync(2000);
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v1/auth/logout"),
+        expect.objectContaining({ method: "POST" })
+      );
+    });
+  });
+
   test("filters and paginates the compare queue while keeping the selected item visible", async () => {
     const queueItems = [
       buildQueueItem({

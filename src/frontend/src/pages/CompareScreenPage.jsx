@@ -234,6 +234,7 @@ export function CompareScreenPage() {
 
     let isCurrent = true;
     let timeoutId;
+    let lastProcessedCount = displayedAiBatchJob.processed_count ?? 0;
 
     async function pollAiBatchJob() {
       try {
@@ -242,43 +243,68 @@ export function CompareScreenPage() {
           return;
         }
 
-        setAiBatchJob(jobPayload);
+        const jobDone = !isActiveAiBatchJob(jobPayload);
+        const currentProcessed = jobPayload.processed_count ?? 0;
+        const progressChanged = currentProcessed !== lastProcessedCount;
 
-        if (isActiveAiBatchJob(jobPayload)) {
-          timeoutId = window.setTimeout(() => {
-            void pollAiBatchJob();
-          }, 2000);
-          return;
-        }
+        if (progressChanged || jobDone) {
+          lastProcessedCount = currentProcessed;
 
-        const [compareRunPayload, queuePayload] = await Promise.all([
-          getCompareRun(token, compareRunId),
-          listCompareRunChangeItems(token, compareRunId)
-        ]);
+          // Refresh workspace data when progress changes or job completes
+          const [compareRunPayload, queuePayload] = await Promise.all([
+            getCompareRun(token, compareRunId),
+            listCompareRunChangeItems(token, compareRunId)
+          ]);
 
-        if (!isCurrent) {
-          return;
-        }
-
-        setCompareRun(compareRunPayload);
-        setQueue(queuePayload);
-        setAiBatchJob(compareRunPayload.active_ai_batch_job ?? compareRunPayload.ai_batch_summary ?? jobPayload);
-
-        if (selectedChangeId) {
-          const changeItemPayload = await getChangeItem(token, selectedChangeId);
           if (!isCurrent) {
             return;
           }
-          setSelectedChange(changeItemPayload);
+
+          // Batch all state updates together — no async gap between them
+          setCompareRun(compareRunPayload);
+          setQueue(queuePayload);
+          setAiBatchJob(
+            jobDone
+              ? (compareRunPayload.active_ai_batch_job ?? compareRunPayload.ai_batch_summary ?? jobPayload)
+              : jobPayload
+          );
+
+          // Refresh the currently selected change to show new AI draft
+          if (selectedChangeId) {
+            try {
+              const changeItemPayload = await getChangeItem(token, selectedChangeId);
+              if (!isCurrent) {
+                return;
+              }
+              setSelectedChange(changeItemPayload);
+            } catch (detailError) {
+              if (detailError instanceof ApiError && detailError.status === 401) {
+                logout();
+                return;
+              }
+              // Ignore non-auth individual change fetch errors during polling
+            }
+          }
+        } else {
+          // No progress change — just update job metadata for progress display
+          setAiBatchJob(jobPayload);
         }
 
-        if (String(jobPayload.status).toLowerCase() === "completed") {
-          setAiMessage("AI batch job completed.");
-        } else if (String(jobPayload.status).toLowerCase() === "completed_with_failures") {
-          setAiMessage("AI batch job completed with failures.");
-        } else if (String(jobPayload.status).toLowerCase() === "failed") {
-          setAiMessage("AI batch job failed.");
+        if (jobDone) {
+          const normalizedStatus = String(jobPayload.status).toLowerCase();
+          if (normalizedStatus === "completed") {
+            setAiMessage("AI batch job completed.");
+          } else if (normalizedStatus === "completed_with_failures") {
+            setAiMessage("AI batch job completed with failures.");
+          } else if (normalizedStatus === "failed") {
+            setAiMessage("AI batch job failed.");
+          }
+          return;
         }
+
+        timeoutId = window.setTimeout(() => {
+          void pollAiBatchJob();
+        }, 2000);
       } catch (pollError) {
         if (pollError instanceof ApiError && pollError.status === 401) {
           logout();
@@ -301,7 +327,7 @@ export function CompareScreenPage() {
         window.clearTimeout(timeoutId);
       }
     };
-  }, [compareRunId, displayedAiBatchJob?.job_id, displayedAiBatchJob?.status, logout, selectedChangeId, token]);
+  }, [compareRunId, displayedAiBatchJob?.job_id, logout, selectedChangeId, token]);
 
   useEffect(() => {
     let isCurrent = true;
@@ -540,14 +566,14 @@ export function CompareScreenPage() {
               );
             })}
           </div>
-          <div style={{ display: 'flex', gap: '5px' }}>
+          <div style={{ display: 'flex', gap: '5px', overflow: 'hidden' }}>
             {[
               { k: 'changeType', v: changeTypeFilter, opts: [['all', 'All Types'], ['added', 'Added'], ['modified', 'Modified'], ['removed', 'Removed']] },
               { k: 'reviewStatus', v: reviewStatusFilter, opts: [['all', 'All Review'], ['open', 'Open'], ['in_review', 'In Review'], ['resolved', 'Resolved']] },
               { k: 'aiStatus', v: aiStatusFilter, opts: [['all', 'All AI'], ['not_requested', 'No AI'], ['pending', 'Generating'], ['generated', 'AI Ready'], ['failed', 'Failed']] },
             ].map(({ k, v, opts }) => (
               <select key={k} aria-label={k === 'reviewStatus' ? 'Review status' : k === 'aiStatus' ? 'AI status' : 'Change type'} value={v} onChange={e => updateQueueParams({ [k]: e.target.value, page: null })}
-                style={{ flex: 1, padding: '3px 5px', borderRadius: '5px', border: '1px solid #E6E8EA', background: '#F4F5F7', color: '#474D57', fontSize: '10px', outline: 'none' }}>
+                style={{ flex: 1, minWidth: 0, padding: '3px 5px', borderRadius: '5px', border: '1px solid #E6E8EA', background: '#F4F5F7', color: '#474D57', fontSize: '10px', outline: 'none', boxSizing: 'border-box' }}>
                 {opts.map(([val, lbl]) => <option key={val} value={val}>{lbl}</option>)}
               </select>
             ))}
@@ -815,18 +841,30 @@ export function CompareScreenPage() {
               </div>
             );
           })() : (
-            <div style={{ borderRadius: '10px', border: '1px dashed #E6E8EA', padding: '24px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', textAlign: 'center' }}>
-              <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#F4F5F7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Sparkles size={16} style={{ color: '#C0C6CF' }} />
-              </div>
-              <p style={{ fontSize: '12px', color: '#848E9C' }}>
-                {selectedChange ? 'No AI draft for this change yet.' : 'Select a change to see AI analysis.'}
-              </p>
-              {selectedChange && (
-                <button type="button" disabled={isGeneratingAiDrafts} onClick={handleGenerateAiDrafts}
-                  style={{ padding: '5px 14px', borderRadius: '6px', background: '#F0B90B', color: '#1E2026', border: 'none', fontSize: '11px', fontWeight: 700, cursor: 'pointer', marginTop: '4px' }}>
-                  Generate AI Draft
-                </button>
+            <div style={{ borderRadius: '10px', border: `1px dashed ${isGeneratingAiDrafts && selectedChange ? '#F0B90B66' : '#E6E8EA'}`, padding: '24px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', textAlign: 'center', background: isGeneratingAiDrafts && selectedChange ? '#FFFDF5' : 'transparent', transition: 'all 300ms ease' }}>
+              {isGeneratingAiDrafts && selectedChange ? (
+                <>
+                  <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#FFF8E6', border: '1px solid #F0B90B44', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ width: '16px', height: '16px', borderRadius: '50%', border: '2.5px solid rgba(240,185,11,0.25)', borderTopColor: '#F0B90B', animation: 'cwSpin 0.8s linear infinite' }} />
+                  </div>
+                  <p style={{ fontSize: '12px', color: '#B07D0A', fontWeight: 600 }}>Analyzing this change…</p>
+                  <p style={{ fontSize: '10px', color: '#848E9C' }}>AI draft will appear here when ready</p>
+                </>
+              ) : (
+                <>
+                  <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#F4F5F7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Sparkles size={16} style={{ color: '#C0C6CF' }} />
+                  </div>
+                  <p style={{ fontSize: '12px', color: '#848E9C' }}>
+                    {selectedChange ? 'No AI draft for this change yet.' : 'Select a change to see AI analysis.'}
+                  </p>
+                  {selectedChange && (
+                    <button type="button" disabled={isGeneratingAiDrafts} onClick={handleGenerateAiDrafts}
+                      style={{ padding: '5px 14px', borderRadius: '6px', background: '#F0B90B', color: '#1E2026', border: 'none', fontSize: '11px', fontWeight: 700, cursor: 'pointer', marginTop: '4px' }}>
+                      Generate AI Draft
+                    </button>
+                  )}
+                </>
               )}
             </div>
           )}
@@ -839,7 +877,12 @@ export function CompareScreenPage() {
             {/* AI progress bar */}
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                <span style={{ fontSize: '11px', color: '#474D57', fontWeight: 600 }}>AI Generation</span>
+                <span style={{ fontSize: '11px', color: '#474D57', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  AI Generation
+                  {isGeneratingAiDrafts && (
+                    <span style={{ width: '10px', height: '10px', borderRadius: '50%', border: '2px solid rgba(240,185,11,0.25)', borderTopColor: '#F0B90B', animation: 'cwSpin 0.8s linear infinite', display: 'inline-block' }} />
+                  )}
+                </span>
                 <span style={{ fontSize: '11px', color: '#848E9C' }}>{aiGenerationSummary.generated}/{aiGenerationSummary.total}</span>
               </div>
               <div style={{ height: '6px', borderRadius: '99px', background: '#E6E8EA', overflow: 'hidden' }}>

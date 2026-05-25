@@ -14,7 +14,6 @@ import {
   UploadCloud,
   X
 } from "lucide-react";
-
 import { useAuth } from "../auth/AuthContext";
 import {
   ApiError,
@@ -26,23 +25,19 @@ import {
   updateContract
 } from "../lib/api";
 import { formatDateTime } from "../lib/formatters";
-
 /* ─── Pure helper functions ─── */
 function hasParsedStatus(draft) {
   return ["parsed", "parsed_with_warnings"].includes(draft.parse_status?.toLowerCase());
 }
-
 function isCompareReadyDraft(draft) {
   return hasParsedStatus(draft) && Boolean(draft.active_parse_run_id);
 }
-
 function getDraftStatusTone(draft) {
   const parseStatus = draft.parse_status?.toLowerCase();
   if (parseStatus === "parsed") return "bg-[#E8F5E9] border border-[#A5D6A7] text-[#1B5E20]";
   if (parseStatus === "parsed_with_warnings") return "bg-[#FFF8E1] border border-[#FFE082] text-[#FF8F00]";
   return "bg-[#F5F5F5] border border-[#E6E8EA] text-[#848E9C]";
 }
-
 function getDraftQuality(draft) {
   const parseStatus = draft.parse_status?.toLowerCase();
   if (parseStatus === "parsed") return { label: "Pass", tone: "teal", icon: CheckCircle2 };
@@ -50,7 +45,6 @@ function getDraftQuality(draft) {
   if (parseStatus === "failed") return { label: "Blocked", tone: "error", icon: AlertTriangle };
   return { label: "Pending", tone: "slate", icon: FileText };
 }
-
 function getLatestWorkspaceTimestamp(contract, drafts) {
   const timestamps = [contract?.updated_at, ...drafts.map((d) => d.uploaded_at)].filter(Boolean);
   if (timestamps.length === 0) return "Not available";
@@ -58,7 +52,6 @@ function getLatestWorkspaceTimestamp(contract, drafts) {
     timestamps.reduce((a, b) => (new Date(b).getTime() > new Date(a).getTime() ? b : a))
   );
 }
-
 /* ─── Module-level components (prevent focus-loss on re-render) ─── */
 function CdCard({ title, aside, children }) {
   return (
@@ -73,7 +66,6 @@ function CdCard({ title, aside, children }) {
     </div>
   );
 }
-
 function CdFormInput({ label, ...props }) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -89,7 +81,6 @@ function CdFormInput({ label, ...props }) {
     </div>
   );
 }
-
 function CdFormTextarea({ label, ...props }) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -105,7 +96,6 @@ function CdFormTextarea({ label, ...props }) {
     </div>
   );
 }
-
 function CdFormSelect({ label, children, ...props }) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -121,18 +111,15 @@ function CdFormSelect({ label, children, ...props }) {
     </div>
   );
 }
-
 /* ─── Constants ─── */
 const EMPTY_CONTRACT_FORM = { title: "", document_type: "", description: "" };
 const SUPPORTED_DRAFT_FILE_RE = /\.(docx|pdf)$/i;
 const SUPPORTED_DRAFT_FILE_ACCEPT = ".docx,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf";
-
 const pillBtnCls = "flex items-center gap-2 bg-[#F0B90B] text-[#1E2026] px-5 py-2 font-semibold text-[14px] border-none cursor-pointer disabled:opacity-50";
 const pillBtnStyle = { borderRadius: "50px", boxShadow: "rgb(153,153,153) 0px 2px 10px -3px", transition: "all 200ms ease" };
 const formBtnPrimary = "flex items-center justify-center gap-1.5 bg-[#F0B90B] text-[#1E2026] px-5 py-2 font-semibold text-[14px] border-none cursor-pointer disabled:opacity-50";
 const formBtnSecondary = "flex items-center justify-center gap-1.5 bg-white border border-[#E6E8EA] text-[#32313A] px-5 py-2 font-semibold text-[14px] cursor-pointer";
 const formBtnStyle = { borderRadius: "6px", transition: "all 200ms ease" };
-
 export function ContractDetailPage() {
   const { logout, token } = useAuth();
   const { contractId } = useParams();
@@ -157,7 +144,6 @@ export function ContractDetailPage() {
   const [recentDraftId, setRecentDraftId] = useState(null);
   const [existingCompareRuns, setExistingCompareRuns] = useState([]);
   const fileInputRef = useRef(null);
-
   useEffect(() => {
     let isCurrent = true;
     async function loadContractWorkspace() {
@@ -173,7 +159,6 @@ export function ContractDetailPage() {
         setContract(contractPayload);
         setDrafts(draftPayload);
         setIsLoading(false);
-
         try {
           const compareRunsPayload = await listContractCompareRuns(token, contractId, { latestPerPair: true, freshOnly: true });
           if (isCurrent) {
@@ -195,35 +180,29 @@ export function ContractDetailPage() {
     void loadContractWorkspace();
     return () => { isCurrent = false; };
   }, [contractId, logout, token]);
-
   useEffect(() => {
     if (!contract) return;
     setContractForm({ title: contract.title, document_type: contract.document_type || "", description: contract.description || "" });
   }, [contract]);
-
   useEffect(() => {
     const readyDrafts = drafts.filter(isCompareReadyDraft);
     if (readyDrafts.length < 2) { setSourceDraftId(""); setTargetDraftId(""); return; }
     setSourceDraftId(v => (v && readyDrafts.some(d => String(d.id) === v)) ? v : String(readyDrafts[0].id));
     setTargetDraftId(v => (v && readyDrafts.some(d => String(d.id) === v)) ? v : String(readyDrafts[1]?.id ?? readyDrafts[0].id));
   }, [drafts]);
-
   async function reloadContract() {
     try { const p = await getContract(token, contractId); setContract(p); setError(""); return true; }
     catch (e) { if (e instanceof ApiError && e.status === 401) { logout(); return false; } setError(e.message); return false; }
   }
-
   async function reloadDrafts() {
     try { const p = await listContractDrafts(token, contractId); setDrafts(p); setError(""); return true; }
     catch (e) { if (e instanceof ApiError && e.status === 401) { logout(); return false; } setError(e.message); return false; }
   }
-
   function closeModal() {
     setActiveModal(null);
     setUploadError("");
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
-
   async function handleContractSubmit(event) {
     event.preventDefault();
     const normalizedTitle = contractForm.title.trim();
@@ -240,7 +219,6 @@ export function ContractDetailPage() {
       setError(saveError.message);
     } finally { setIsSavingContract(false); }
   }
-
   async function handleUploadSubmit(event) {
     event.preventDefault(); setUploadError(""); setFeedback("");
     const normalizedLabel = uploadDraftLabel.trim();
@@ -261,27 +239,23 @@ export function ContractDetailPage() {
       setUploadError(uploadRequestError.message);
     } finally { setIsUploading(false); }
   }
-
   // Find existing fresh compare run for the currently selected pair
   const matchingCompareRun = existingCompareRuns.find(cr => {
     const srcId = cr.source_version?.id ?? cr.source_draft?.id;
     const tgtId = cr.target_version?.id ?? cr.target_draft?.id;
     return String(srcId) === sourceDraftId && String(tgtId) === targetDraftId;
   });
-
   async function handleCompareSubmit(event) {
     event.preventDefault(); setCompareError("");
     if (!sourceDraftId || !targetDraftId) { setCompareError("Choose both source and target drafts."); return; }
     if (sourceDraftId === targetDraftId) { setCompareError("Source and target drafts must be different."); return; }
     const readyDraftIds = new Set(drafts.filter(isCompareReadyDraft).map(d => String(d.id)));
     if (!readyDraftIds.has(sourceDraftId) || !readyDraftIds.has(targetDraftId)) { setCompareError("Selected drafts are not review-ready."); return; }
-
     // If a fresh compare run already exists for this pair, navigate to it
     if (matchingCompareRun) {
       startTransition(() => { navigate(`/compare-runs/${matchingCompareRun.id}`); });
       return;
     }
-
     setIsCreatingCompare(true);
     try {
       const compareRun = await createContractCompareRun(token, contractId, { source_draft_id: Number(sourceDraftId), target_draft_id: Number(targetDraftId) });
@@ -291,20 +265,17 @@ export function ContractDetailPage() {
       setCompareError(compareRequestError.message);
     } finally { setIsCreatingCompare(false); }
   }
-
   const parsedDrafts = drafts.filter(hasParsedStatus);
   const compareReadyDrafts = drafts.filter(isCompareReadyDraft);
   const compareReady = compareReadyDrafts.length >= 2;
   const projectPath = contract ? `/projects/${contract.project_id}` : "/dashboard";
   const projectName = contract?.project_name || "Project";
-
   return (
     <>
       <main className="max-w-[1200px] mx-auto px-8 py-8">
         {/* Feedback */}
         {error && <div className="mb-5 p-3.5 bg-white border border-[#F6465D] text-[14px] text-[#F6465D] font-semibold" style={{ borderRadius: "8px" }}>{error}</div>}
         {feedback && <div className="mb-5 p-3.5 bg-white border border-[#0ECB81] text-[14px] text-[#0ECB81] font-semibold" style={{ borderRadius: "8px" }}>{feedback}</div>}
-
         {/* Page header */}
         <div className="flex items-start justify-between mb-6">
           <div>
@@ -350,7 +321,6 @@ export function ContractDetailPage() {
             </button>
           </div>
         </div>
-
         {/* Stats row */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
           {[
@@ -370,7 +340,6 @@ export function ContractDetailPage() {
             </div>
           ))}
         </div>
-
         {/* Draft History */}
         <CdCard
           title="Draft History"
@@ -475,7 +444,6 @@ export function ContractDetailPage() {
             </div>
           )}
         </CdCard>
-
         {/* Compare Setup */}
         <div className="mt-6">
           <CdCard
@@ -542,7 +510,6 @@ export function ContractDetailPage() {
             )}
           </CdCard>
         </div>
-
         {/* Recent Comparisons */}
         {existingCompareRuns.length > 0 && (
           <div className="mt-6">
@@ -585,7 +552,6 @@ export function ContractDetailPage() {
           </div>
         )}
       </main>
-
       {/* ══ Upload Draft Modal ══ */}
       {activeModal === "upload" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(30,32,38,0.4)", backdropFilter: "blur(4px)" }} onClick={() => { if (!isUploading) closeModal(); }}>
@@ -625,7 +591,6 @@ export function ContractDetailPage() {
           <style>{`@keyframes cdModalIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }`}</style>
         </div>
       )}
-
       {/* ══ Edit Contract Modal ══ */}
       {activeModal === "contract" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(30,32,38,0.4)", backdropFilter: "blur(4px)" }} onClick={() => { if (!isSavingContract) closeModal(); }}>

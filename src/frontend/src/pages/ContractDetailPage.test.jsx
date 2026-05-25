@@ -1,10 +1,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-
 import { AuthProvider } from "../auth/AuthContext";
 import { ContractDetailPage } from "./ContractDetailPage";
-
 function jsonResponse(payload, status = 200) {
   return {
     ok: status >= 200 && status < 300,
@@ -12,7 +10,6 @@ function jsonResponse(payload, status = 200) {
     json: async () => payload
   };
 }
-
 const session = {
   token: "token-123",
   user: {
@@ -22,7 +19,6 @@ const session = {
     is_active: true
   }
 };
-
 function renderContractDetail(path = "/contracts/10") {
   return render(
     <AuthProvider initialSession={session}>
@@ -37,23 +33,19 @@ function renderContractDetail(path = "/contracts/10") {
     </AuthProvider>
   );
 }
-
 describe("ContractDetailPage", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn());
     window.localStorage.clear();
   });
-
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
   });
-
   test("renders contract workspace framing and draft readiness", async () => {
     fetch.mockImplementation((input, init = {}) => {
       const url = String(input);
       const method = init.method || "GET";
-
       if (url.endsWith("/api/v1/contracts/10") && method === "GET") {
         return Promise.resolve(
           jsonResponse({
@@ -69,7 +61,6 @@ describe("ContractDetailPage", () => {
           })
         );
       }
-
       if (url.endsWith("/api/v1/contracts/10/drafts") && method === "GET") {
         return Promise.resolve(
           jsonResponse({
@@ -100,16 +91,12 @@ describe("ContractDetailPage", () => {
           })
         );
       }
-
       if (url.includes("/api/v1/contracts/10/compare-runs") && method === "GET") {
         return Promise.resolve(jsonResponse({ data: [] }));
       }
-
       return Promise.reject(new Error(`Unhandled request: ${url} ${method}`));
     });
-
     renderContractDetail();
-
     expect(await screen.findByRole("heading", { name: /vendor master services agreement/i })).toBeInTheDocument();
     /* The kicker label "Contract Workspace" is rendered as small uppercase text, not a heading */
     expect(screen.getByText("Compare ready")).toBeInTheDocument();
@@ -120,12 +107,10 @@ describe("ContractDetailPage", () => {
     expect(screen.getByRole("heading", { name: /compare setup/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /run compare/i })).toBeInTheDocument();
   });
-
   test("keeps contract workspace usable when recent comparisons fail to load", async () => {
     fetch.mockImplementation((input, init = {}) => {
       const url = String(input);
       const method = init.method || "GET";
-
       if (url.endsWith("/api/v1/contracts/10") && method === "GET") {
         return Promise.resolve(
           jsonResponse({
@@ -141,7 +126,6 @@ describe("ContractDetailPage", () => {
           })
         );
       }
-
       if (url.endsWith("/api/v1/contracts/10/drafts") && method === "GET") {
         return Promise.resolve(
           jsonResponse({
@@ -172,27 +156,21 @@ describe("ContractDetailPage", () => {
           })
         );
       }
-
       if (url.includes("/api/v1/contracts/10/compare-runs") && method === "GET") {
         return Promise.reject(new Error("recent comparisons unavailable"));
       }
-
       return Promise.reject(new Error(`Unhandled request: ${url} ${method}`));
     });
-
     renderContractDetail();
-
     expect(await screen.findByRole("heading", { name: /vendor master services agreement/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /draft history/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /run compare/i })).toBeInTheDocument();
     expect(screen.queryByText(/recent comparisons unavailable/i)).not.toBeInTheDocument();
   });
-
   test("opens parser workspace through the contract facade route", async () => {
     fetch.mockImplementation((input, init = {}) => {
       const url = String(input);
       const method = init.method || "GET";
-
       if (url.endsWith("/api/v1/contracts/10") && method === "GET") {
         return Promise.resolve(
           jsonResponse({
@@ -208,7 +186,6 @@ describe("ContractDetailPage", () => {
           })
         );
       }
-
       if (url.endsWith("/api/v1/contracts/10/drafts") && method === "GET") {
         return Promise.resolve(
           jsonResponse({
@@ -228,22 +205,16 @@ describe("ContractDetailPage", () => {
           })
         );
       }
-
       if (url.includes("/api/v1/contracts/10/compare-runs") && method === "GET") {
         return Promise.resolve(jsonResponse({ data: [] }));
       }
-
       return Promise.reject(new Error(`Unhandled request: ${url} ${method}`));
     });
-
     renderContractDetail();
-
     fireEvent.click(await screen.findByRole("button", { name: /open parser workspace for vendor-v1/i }));
-
     expect(await screen.findByText("Contract parser route")).toBeInTheDocument();
     expect(screen.queryByText("Legacy document parser route")).not.toBeInTheDocument();
   });
-
   test("uploads a PDF contract draft and refreshes draft inventory", async () => {
     const existingDrafts = [];
     const uploadedDraft = {
@@ -259,11 +230,9 @@ describe("ContractDetailPage", () => {
       active_parse_run_id: null
     };
     const refreshedDrafts = [uploadedDraft];
-
     fetch.mockImplementation((input, init = {}) => {
       const url = String(input);
       const method = init.method || "GET";
-
       if (url.endsWith("/api/v1/contracts/10") && method === "GET") {
         return Promise.resolve(
           jsonResponse({
@@ -279,7 +248,6 @@ describe("ContractDetailPage", () => {
           })
         );
       }
-
       if (url.endsWith("/api/v1/contracts/10/drafts") && method === "GET") {
         const payload = fetch.mock.calls.filter(
           ([requestUrl, requestInit = {}]) =>
@@ -290,23 +258,17 @@ describe("ContractDetailPage", () => {
           : existingDrafts;
         return Promise.resolve(jsonResponse({ data: payload }));
       }
-
       if (url.endsWith("/api/v1/contracts/10/drafts") && method === "POST") {
         return Promise.resolve(jsonResponse({ data: uploadedDraft }, 201));
       }
-
       if (url.includes("/api/v1/contracts/10/compare-runs") && method === "GET") {
         return Promise.resolve(jsonResponse({ data: [] }));
       }
-
       return Promise.reject(new Error(`Unhandled request: ${url} ${method}`));
     });
-
     renderContractDetail();
-
     expect(await screen.findByRole("heading", { name: /vendor master services agreement/i })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /upload draft/i }));
-
     expect(await screen.findByRole("dialog", { name: /upload contract draft/i })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/draft label/i), {
       target: { value: "scan-v1" }
@@ -321,11 +283,9 @@ describe("ContractDetailPage", () => {
     const uploadSubmitButton = screen.getAllByRole("button", { name: /upload draft/i })
       .find((button) => button.type === "submit");
     fireEvent.click(uploadSubmitButton);
-
     expect(await screen.findByText(/contract draft uploaded/i)).toBeInTheDocument();
     expect(await screen.findByText("scan-v1")).toBeInTheDocument();
     expect(screen.getByText("vendor-scan.pdf")).toBeInTheDocument();
-
     await waitFor(() => {
       const uploadCall = fetch.mock.calls.find(
         ([requestUrl, requestInit = {}]) =>
@@ -340,7 +300,6 @@ describe("ContractDetailPage", () => {
       expect(requestInit.body.get("file")).toBe(file);
     });
   });
-
   test("shows Resume Compare when a fresh compare run already exists for the selected pair", async () => {
     const existingCompareRun = {
       id: 77,
@@ -361,11 +320,9 @@ describe("ContractDetailPage", () => {
       selected_clause_change_id: null,
       has_ai_clause_risk_analyses: true
     };
-
     fetch.mockImplementation((input, init = {}) => {
       const url = String(input);
       const method = init.method || "GET";
-
       if (url.endsWith("/api/v1/contracts/10") && method === "GET") {
         return Promise.resolve(
           jsonResponse({
@@ -376,7 +333,6 @@ describe("ContractDetailPage", () => {
           })
         );
       }
-
       if (url.endsWith("/api/v1/contracts/10/drafts") && method === "GET") {
         return Promise.resolve(
           jsonResponse({
@@ -387,29 +343,22 @@ describe("ContractDetailPage", () => {
           })
         );
       }
-
       if (url.includes("/api/v1/contracts/10/compare-runs") && method === "GET") {
         return Promise.resolve(jsonResponse({ data: [existingCompareRun] }));
       }
-
       return Promise.reject(new Error(`Unhandled request: ${url} ${method}`));
     });
-
     renderContractDetail();
-
     // Should show Resume Compare instead of Run Compare
     expect(await screen.findByRole("button", { name: /resume compare/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^run compare$/i })).not.toBeInTheDocument();
-
     // Should show the info banner
     expect(screen.getByText(/previous comparison found/i)).toBeInTheDocument();
-
     // Should show Recent Comparisons section
     expect(screen.getByRole("heading", { name: /recent comparisons/i })).toBeInTheDocument();
     expect(screen.getByText("3 changes")).toBeInTheDocument();
     expect(screen.getByText("✦ AI")).toBeInTheDocument();
   });
-
   test("navigates to existing compare run when Resume Compare is clicked", async () => {
     const existingCompareRun = {
       id: 77,
@@ -430,11 +379,9 @@ describe("ContractDetailPage", () => {
       selected_clause_change_id: null,
       has_ai_clause_risk_analyses: false
     };
-
     fetch.mockImplementation((input, init = {}) => {
       const url = String(input);
       const method = init.method || "GET";
-
       if (url.endsWith("/api/v1/contracts/10") && method === "GET") {
         return Promise.resolve(
           jsonResponse({
@@ -445,7 +392,6 @@ describe("ContractDetailPage", () => {
           })
         );
       }
-
       if (url.endsWith("/api/v1/contracts/10/drafts") && method === "GET") {
         return Promise.resolve(
           jsonResponse({
@@ -456,21 +402,15 @@ describe("ContractDetailPage", () => {
           })
         );
       }
-
       if (url.includes("/api/v1/contracts/10/compare-runs") && method === "GET") {
         return Promise.resolve(jsonResponse({ data: [existingCompareRun] }));
       }
-
       return Promise.reject(new Error(`Unhandled request: ${url} ${method}`));
     });
-
     renderContractDetail();
-
     fireEvent.click(await screen.findByRole("button", { name: /resume compare/i }));
-
     // Should navigate to the existing compare run, not create a new one
     expect(await screen.findByText("Compare workspace route")).toBeInTheDocument();
-
     // Should NOT have made a POST to create a new compare run
     const postCalls = fetch.mock.calls.filter(
       ([, requestInit = {}]) => (requestInit.method || "GET") === "POST"

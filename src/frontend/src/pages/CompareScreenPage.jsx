@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Eye, FileText, GitMerge, LogOut, Sparkles, FolderDown, ArrowUpToLine, FileDiff, Flag, List, CircleDashed, Clock, CheckCircle2, Bot, Activity, XCircle, FileCode, Edit, Code, Database, Info, GitCommit, FileWarning, Calendar, Hash } from "lucide-react";
 import { InlineDiff } from "../components/InlineDiff";
-
 import { useAuth } from "../auth/AuthContext";
 import { Sidebar } from "../components/ScreenFrame";
 import {
@@ -32,41 +31,33 @@ import {
   summarizeReviewCounts
 } from "../lib/compareWorkspace";
 import { formatDateTime } from "../lib/formatters";
-
 // AI draft items are now rendered directly via structured layout
-
 function parseJsonField(value) {
   if (!value) {
     return null;
   }
-
   if (typeof value === "object") {
     return value;
   }
-
   try {
     return JSON.parse(value);
   } catch {
     return null;
   }
 }
-
 function formatWarningCount(count) {
   return `${count} warning${count === 1 ? "" : "s"}`;
 }
-
 function formatParseStatus(status) {
   if (!status) return "Unknown";
   return status
     .replace(/_/g, " ")
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
-
 function buildStructuredDiffItems(structuredDiff) {
   if (!structuredDiff || !Array.isArray(structuredDiff.changed_columns)) {
     return [];
   }
-
   return structuredDiff.changed_columns.map((column) => {
     const label = column.header_text || column.column_key || "Field";
     const oldValue = column.old_value || "empty";
@@ -74,35 +65,27 @@ function buildStructuredDiffItems(structuredDiff) {
     return `${label}: ${oldValue} -> ${newValue}`;
   });
 }
-
 function isActiveAiBatchJob(job) {
   const normalizedStatus = String(job?.status ?? "").toLowerCase();
   return normalizedStatus === "queued" || normalizedStatus === "running";
 }
-
 function buildAiBatchProgress(job) {
   if (!job) {
     return null;
   }
-
   return `${job.processed_count} / ${job.requested_count} processed`;
 }
-
 const QUEUE_PAGE_SIZE = 4;
-
 function formatItemCount(count) {
   return `${count} item${count === 1 ? "" : "s"}`;
 }
-
 function normalizeQueueSearch(value) {
   return String(value ?? "").trim().toLowerCase();
 }
-
 function matchesQueueSearch(item, search) {
   if (!search) {
     return true;
   }
-
   return [
     item.section_title,
     item.surface_key,
@@ -113,15 +96,12 @@ function matchesQueueSearch(item, search) {
     .filter(Boolean)
     .some((value) => String(value).toLowerCase().includes(search));
 }
-
 function clampPage(value, totalPages) {
   if (!Number.isInteger(value) || value < 1) {
     return 1;
   }
-
   return Math.min(value, Math.max(totalPages, 1));
 }
-
 export function CompareScreenPage() {
   const { logout, token } = useAuth();
   const { compareRunId } = useParams();
@@ -134,7 +114,6 @@ export function CompareScreenPage() {
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [error, setError] = useState("");
   const [aiMessage, setAiMessage] = useState("");
-
   const requestedChangeId = searchParams.get("change");
   const queueSearch = searchParams.get("search") ?? "";
   const changeTypeFilter = searchParams.get("changeType") ?? "all";
@@ -145,19 +124,15 @@ export function CompareScreenPage() {
     if (!matchesQueueSearch(item, normalizedSearch)) {
       return false;
     }
-
     if (changeTypeFilter !== "all" && item.change_type !== changeTypeFilter) {
       return false;
     }
-
     if (reviewStatusFilter !== "all" && item.review_status !== reviewStatusFilter) {
       return false;
     }
-
     if (aiStatusFilter !== "all" && item.ai_generation_status !== aiStatusFilter) {
       return false;
     }
-
     return true;
   });
   const selectedChangeId = resolveSelectedChangeId(compareRun, filteredQueue, requestedChangeId);
@@ -182,25 +157,20 @@ export function CompareScreenPage() {
     );
   const pageStartIndex = (currentPage - 1) * QUEUE_PAGE_SIZE;
   const paginatedQueue = filteredQueue.slice(pageStartIndex, pageStartIndex + QUEUE_PAGE_SIZE);
-
   useEffect(() => {
     let isCurrent = true;
-
     async function loadCompareWorkspace() {
       setIsWorkspaceLoading(true);
       setError("");
       setAiMessage("");
-
       try {
         const [compareRunPayload, queuePayload] = await Promise.all([
           getCompareRun(token, compareRunId),
           listCompareRunChangeItems(token, compareRunId)
         ]);
-
         if (!isCurrent) {
           return;
         }
-
         setCompareRun(compareRunPayload);
         setQueue(queuePayload);
         setAiBatchJob(compareRunPayload.active_ai_batch_job ?? compareRunPayload.ai_batch_summary ?? null);
@@ -209,7 +179,6 @@ export function CompareScreenPage() {
           logout();
           return;
         }
-
         if (isCurrent) {
           setError(loadError.message);
         }
@@ -219,47 +188,37 @@ export function CompareScreenPage() {
         }
       }
     }
-
     void loadCompareWorkspace();
-
     return () => {
       isCurrent = false;
     };
   }, [compareRunId, logout, token]);
-
   useEffect(() => {
     if (!displayedAiBatchJob || !isActiveAiBatchJob(displayedAiBatchJob)) {
       return undefined;
     }
-
     let isCurrent = true;
     let timeoutId;
     let lastProcessedCount = displayedAiBatchJob.processed_count ?? 0;
-
     async function pollAiBatchJob() {
       try {
         const jobPayload = await getAiBatchJob(token, displayedAiBatchJob.job_id);
         if (!isCurrent) {
           return;
         }
-
         const jobDone = !isActiveAiBatchJob(jobPayload);
         const currentProcessed = jobPayload.processed_count ?? 0;
         const progressChanged = currentProcessed !== lastProcessedCount;
-
         if (progressChanged || jobDone) {
           lastProcessedCount = currentProcessed;
-
           // Refresh workspace data when progress changes or job completes
           const [compareRunPayload, queuePayload] = await Promise.all([
             getCompareRun(token, compareRunId),
             listCompareRunChangeItems(token, compareRunId)
           ]);
-
           if (!isCurrent) {
             return;
           }
-
           // Batch all state updates together — no async gap between them
           setCompareRun(compareRunPayload);
           setQueue(queuePayload);
@@ -268,7 +227,6 @@ export function CompareScreenPage() {
               ? (compareRunPayload.active_ai_batch_job ?? compareRunPayload.ai_batch_summary ?? jobPayload)
               : jobPayload
           );
-
           // Refresh the currently selected change to show new AI draft
           if (selectedChangeId) {
             try {
@@ -289,7 +247,6 @@ export function CompareScreenPage() {
           // No progress change — just update job metadata for progress display
           setAiBatchJob(jobPayload);
         }
-
         if (jobDone) {
           const normalizedStatus = String(jobPayload.status).toLowerCase();
           if (normalizedStatus === "completed") {
@@ -301,7 +258,6 @@ export function CompareScreenPage() {
           }
           return;
         }
-
         timeoutId = window.setTimeout(() => {
           void pollAiBatchJob();
         }, 2000);
@@ -310,17 +266,14 @@ export function CompareScreenPage() {
           logout();
           return;
         }
-
         if (isCurrent) {
           setError(pollError.message);
         }
       }
     }
-
     timeoutId = window.setTimeout(() => {
       void pollAiBatchJob();
     }, 2000);
-
     return () => {
       isCurrent = false;
       if (timeoutId) {
@@ -328,31 +281,25 @@ export function CompareScreenPage() {
       }
     };
   }, [compareRunId, displayedAiBatchJob?.job_id, logout, selectedChangeId, token]);
-
   useEffect(() => {
     let isCurrent = true;
-
     async function loadSelectedChange() {
       if (!selectedChangeId) {
         setSelectedChange(null);
         return;
       }
-
       setIsDetailLoading(true);
-
       try {
         const payload = await getChangeItem(token, selectedChangeId);
         if (!isCurrent) {
           return;
         }
-
         setSelectedChange(payload);
       } catch (loadError) {
         if (loadError instanceof ApiError && loadError.status === 401) {
           logout();
           return;
         }
-
         if (isCurrent) {
           setError(loadError.message);
           setSelectedChange(null);
@@ -363,22 +310,17 @@ export function CompareScreenPage() {
         }
       }
     }
-
     void loadSelectedChange();
-
     return () => {
       isCurrent = false;
     };
   }, [logout, selectedChangeId, token]);
-
   async function handleGenerateAiDrafts() {
     if (!compareRun) {
       return;
     }
-
     setError("");
     setAiMessage("");
-
     try {
       const jobPayload = await generateCompareRunAiDrafts(token, compareRun.id, { force_regenerate: false });
       setAiBatchJob(jobPayload);
@@ -387,26 +329,20 @@ export function CompareScreenPage() {
         logout();
         return;
       }
-
       setError(generationError.message);
     }
   }
-
   function updateQueueParams(updates) {
     const nextParams = new URLSearchParams(searchParams);
-
     Object.entries(updates).forEach(([key, value]) => {
       if (value === null || value === undefined || value === "" || value === "all") {
         nextParams.delete(key);
         return;
       }
-
       nextParams.set(key, String(value));
     });
-
     setSearchParams(nextParams);
   }
-
   const stats = [
     {
       label: "Source Version",
@@ -429,7 +365,6 @@ export function CompareScreenPage() {
       icon: Flag
     }
   ];
-
   const compareWarnings = Array.isArray(compareRun?.warnings) ? compareRun.warnings : [];
   const compareStatusSummary = compareRun
     ? `${formatParseStatus(compareRun.compare_status)} with ${formatWarningCount(compareRun.warning_count ?? 0)}`
@@ -445,12 +380,10 @@ export function CompareScreenPage() {
     selectedChange?.impacted_tests?.map(
       (item) => `${item.test_case_code} - ${item.title}${item.priority ? ` (${item.priority})` : ""}`
     ) ?? [];
-
   const reviewPath = buildCompareRunPath(compareRunId, "/review", selectedChangeId);
   const impactPath = buildCompareRunPath(compareRunId, "/impact", selectedChangeId);
   const summaryPath = buildCompareRunPath(compareRunId, "/summary", selectedChangeId);
   const currentChangeIndex = filteredQueue.findIndex(item => item.id === selectedChangeId);
-
   // Keyboard J/K navigation
   useEffect(() => {
     function onKey(e) {
@@ -470,10 +403,8 @@ export function CompareScreenPage() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [filteredQueue, selectedChangeId, setSearchParams]);
-
   return (
     <div style={{ display: 'flex', overflow: 'hidden', width: '100%', height: 'calc(100vh - 64px)', background: '#F4F5F7', color: '#1E2026', fontFamily: 'Inter, sans-serif' }}>
-
       {/* ── Global animation + diff token override styles ──────── */}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
@@ -495,10 +426,8 @@ export function CompareScreenPage() {
         .cw-q-btn:hover > .cw-q-inner { background:#F4F5F7!important; }
         .cw-nav-link:hover { background:#F4F5F7!important; color:#1E2026!important; }
       `}</style>
-
       {/* ═══ LEFT: Change Queue 260px ═══════════════════════════════ */}
       <section style={{ width: '260px', flexShrink: 0, display: 'flex', flexDirection: 'column', height: '100%', background: '#fff', borderRight: '1px solid #E6E8EA' }}>
-
         {/* Progress Ring Header */}
         <div style={{ padding: '14px 16px', borderBottom: '1px solid #E6E8EA', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -540,7 +469,6 @@ export function CompareScreenPage() {
             </div>
           </div>
         </div>
-
         {/* Search + type chips + filters */}
         <div style={{ padding: '10px 12px', borderBottom: '1px solid #E6E8EA', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '7px' }}>
           <input type="search" aria-label="Search queue" value={queueSearch}
@@ -579,14 +507,12 @@ export function CompareScreenPage() {
             ))}
           </div>
         </div>
-
         {/* Item count */}
         {(normalizedSearch || changeTypeFilter !== 'all' || reviewStatusFilter !== 'all' || aiStatusFilter !== 'all') && (
           <div style={{ padding: '4px 12px', flexShrink: 0 }}>
             <span style={{ fontSize: '10px', color: '#848E9C', fontWeight: 600 }}>{formatItemCount(filteredQueue.length)}</span>
           </div>
         )}
-
         {/* Timeline Queue */}
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {isWorkspaceLoading ? (
@@ -631,7 +557,6 @@ export function CompareScreenPage() {
             );
           })}
         </div>
-
         {/* Pagination */}
         {filteredQueue.length > QUEUE_PAGE_SIZE && (
           <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 14px', borderTop: '1px solid #E6E8EA' }}>
@@ -649,10 +574,8 @@ export function CompareScreenPage() {
           </div>
         )}
       </section>
-
       {/* ═══ CENTER: Diff Viewer ═══════════════════════════════════ */}
       <section aria-label="Clause delta" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#F4F5F7' }}>
-
         {/* Version comparison toolbar */}
         <div style={{ flexShrink: 0, height: '52px', background: '#fff', borderBottom: '1px solid #E6E8EA', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px', gap: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1, overflow: 'hidden' }}>
@@ -701,7 +624,6 @@ export function CompareScreenPage() {
             </button>
           </div>
         </div>
-
         {/* Banners */}
         {(error || aiMessage) && (
           <div style={{ flexShrink: 0, padding: '8px 20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -709,7 +631,6 @@ export function CompareScreenPage() {
             {aiMessage && <div style={{ padding: '8px 14px', borderRadius: '8px', background: '#EBF9F4', border: '1px solid #2EBD8533', color: '#16714E', fontSize: '12px' }}>{aiMessage}</div>}
           </div>
         )}
-
         {/* Main diff content */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '28px 32px' }}>
           {isDetailLoading ? (
@@ -736,12 +657,10 @@ export function CompareScreenPage() {
                   {buildChangeHeadline(selectedChange)}
                 </h2>
               </div>
-
               {/* InlineDiff */}
               <div style={{ borderRadius: '12px', border: '1px solid #E6E8EA', background: '#fff', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
                 <InlineDiff oldText={selectedChange.old_content} newText={selectedChange.new_content} />
               </div>
-
               {/* Structured diff */}
               {structuredDiffItems.length > 0 && (
                 <div style={{ padding: '16px', borderRadius: '10px', border: '1px solid #E6E8EA', background: '#fff' }}>
@@ -756,7 +675,6 @@ export function CompareScreenPage() {
                   </div>
                 </div>
               )}
-
               {/* Context */}
               {changeContext && (
                 <div style={{ padding: '14px 16px', borderRadius: '10px', border: '1px solid #E6E8EA', background: '#FAFAFA' }}>
@@ -787,10 +705,8 @@ export function CompareScreenPage() {
           )}
         </div>
       </section>
-
       {/* ═══ RIGHT: AI Command Center 300px ═══════════════════════ */}
       <aside style={{ width: '300px', flexShrink: 0, display: 'flex', flexDirection: 'column', height: '100%', background: '#fff', borderLeft: '1px solid #E6E8EA', overflowY: 'auto' }}>
-
         {/* Header */}
         <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '8px', padding: '0 16px', height: '52px', borderBottom: '1px solid #E6E8EA' }}>
           <div style={{ width: '24px', height: '24px', borderRadius: '6px', background: '#FFF8E6', border: '1px solid #F0B90B44', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -798,7 +714,6 @@ export function CompareScreenPage() {
           </div>
           <h3 style={{ fontSize: '11px', fontWeight: 700, color: '#848E9C', textTransform: 'uppercase', letterSpacing: '.06em', margin: 0 }}>AI Review</h3>
         </div>
-
         {/* AI Draft */}
         <div style={{ padding: '14px', borderBottom: '1px solid #E6E8EA' }}>
           {selectedChange?.ai_review_draft ? (() => {
@@ -869,7 +784,6 @@ export function CompareScreenPage() {
             </div>
           )}
         </div>
-
         {/* Run Health */}
         <div style={{ padding: '14px', borderBottom: '1px solid #E6E8EA' }}>
           <div style={{ padding: '12px 14px', borderRadius: '10px', border: '1px solid #E6E8EA', background: '#FAFAFA', display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -903,7 +817,6 @@ export function CompareScreenPage() {
             ))}
           </div>
         </div>
-
         {/* Quick Navigate */}
         <div style={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <p style={{ fontSize: '10px', fontWeight: 700, color: '#848E9C', textTransform: 'uppercase', letterSpacing: '.06em' }}>Quick Navigate</p>
@@ -918,9 +831,7 @@ export function CompareScreenPage() {
             </Link>
           )) : <p style={{ fontSize: '12px', color: '#848E9C' }}>Select a change first.</p>}
         </div>
-
       </aside>
     </div>
   );
 }
-

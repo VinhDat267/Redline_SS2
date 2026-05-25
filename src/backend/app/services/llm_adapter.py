@@ -795,7 +795,7 @@ class LLMAdapter:
         prompt_payload = self._to_json_safe(payload)
         prompt_body = json.dumps(prompt_payload, ensure_ascii=True, sort_keys=True, indent=2)
         return (
-            f"{self._build_summary_system_prompt()}\\n"
+            f"{self._build_summary_system_prompt()}\n"
             "Use the compare/review context below and respond with a single JSON object.\n"
             f"{prompt_body}"
         )

@@ -85,6 +85,69 @@ def _create_contract_chat_session(client, auth_headers) -> dict[str, int]:
     }
 
 
+def test_contract_chat_session_rejects_failed_reparse_with_previous_active_parse(
+    client,
+    auth_headers,
+    session_factory,
+):
+    setup = _create_contract_chat_session(client, auth_headers)
+
+    with session_factory() as session:
+        draft = session.get(DocumentVersion, setup["draft_id"])
+        previous_parse_run_id = draft.active_parse_run_id
+        assert previous_parse_run_id is not None
+        draft.parse_status = "failed"
+        draft.active_parse_run_id = previous_parse_run_id
+        session.add(draft)
+        session.commit()
+
+    response = client.post(
+        f"/api/v1/contracts/{setup['contract_id']}/chat/sessions",
+        json={"draft_id": setup["draft_id"], "title": "Failed reparse Q&A"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Contract draft must be parsed successfully before starting chat"
+
+
+def test_existing_contract_chat_session_rejects_questions_after_failed_reparse(
+    client,
+    auth_headers,
+    session_factory,
+):
+    setup = _create_contract_chat_session(client, auth_headers)
+
+    with session_factory() as session:
+        draft = session.get(DocumentVersion, setup["draft_id"])
+        previous_parse_run_id = draft.active_parse_run_id
+        assert previous_parse_run_id is not None
+        draft.parse_status = "failed"
+        draft.active_parse_run_id = previous_parse_run_id
+        session.add(draft)
+        session.commit()
+
+    message_response = client.post(
+        f"/api/v1/contracts/{setup['contract_id']}/chat/sessions/{setup['session_id']}/messages",
+        json={"query": "What is the liability cap?"},
+        headers=auth_headers,
+    )
+    assert message_response.status_code == 422
+    assert message_response.json()["detail"] == "Contract draft must be parsed successfully before asking questions"
+
+    attempt_response = client.post(
+        f"/api/v1/contracts/{setup['contract_id']}/chat/sessions/{setup['session_id']}/attempts",
+        json={
+            "draft_id": setup["draft_id"],
+            "query": "What is the liability cap?",
+            "client_request_id": "failed-reparse-attempt-001",
+        },
+        headers=auth_headers,
+    )
+    assert attempt_response.status_code == 422
+    assert attempt_response.json()["detail"] == "Contract draft must be parsed successfully before asking questions"
+
+
 def _create_contract_compare_chat_setup(client, auth_headers) -> dict[str, int]:
     project_response = client.post(
         "/api/v1/projects",
@@ -476,6 +539,34 @@ def test_contract_compare_run_reports_stale_after_reparse(client, auth_headers):
     assert stale_compare_run["id"] == compare_run_id
     assert stale_compare_run["is_stale"] is True
     assert stale_compare_run["target_parse_run_id"] != stale_compare_run["target_draft"]["active_parse_run_id"]
+
+
+def test_contract_compare_run_reports_stale_after_failed_reparse_keeps_previous_active_parse(
+    client,
+    auth_headers,
+    session_factory,
+):
+    setup = _create_contract_compare_chat_setup(client, auth_headers)
+    contract_id = setup["contract_id"]
+    target_draft_id = setup["target_draft_id"]
+    compare_run_id = setup["compare_run_id"]
+
+    with session_factory() as session:
+        target_draft = session.get(DocumentVersion, target_draft_id)
+        previous_parse_run_id = target_draft.active_parse_run_id
+        assert previous_parse_run_id is not None
+        target_draft.parse_status = "failed"
+        target_draft.active_parse_run_id = previous_parse_run_id
+        session.add(target_draft)
+        session.commit()
+
+    stale_response = client.get(f"/api/v1/contracts/{contract_id}/compare-runs", headers=auth_headers)
+    assert stale_response.status_code == 200
+    stale_compare_run = stale_response.json()["data"][0]
+    assert stale_compare_run["id"] == compare_run_id
+    assert stale_compare_run["is_stale"] is True
+    assert stale_compare_run["target_parse_run_id"] == stale_compare_run["target_draft"]["active_parse_run_id"]
+    assert stale_compare_run["target_draft"]["parse_status"] == "failed"
 
 
 def test_contract_compare_chat_rejects_stale_compare_run(client, auth_headers):
@@ -1782,7 +1873,7 @@ def test_contract_chat_attempt_create_respects_streaming_kill_switch(client, aut
     )
 
     assert response.status_code == 503
-    assert response.json()["detail"] == "Contract chat streaming is disabled"
+    assert response.json()["detail"] == "Chat streaming is not available at the moment. Please try again later."
 
 
 def test_contract_chat_rejects_oversized_query_and_request_id(client, auth_headers):

@@ -39,10 +39,61 @@ function formatErrorDetail(detailItem) {
     return "";
   }
 }
+/**
+ * Maps raw backend error detail strings to polished, user-facing messages.
+ * Any message not listed here passes through unchanged.
+ */
+const FRIENDLY_ERRORS = {
+  // Auth & session
+  "Authentication required": "Please sign in to continue.",
+  "Your session has expired. Please sign in again.": "Your session has expired. Please sign in again.",
+  "CSRF token is required": "Your session has expired. Please sign in again.",
+  "Invalid CSRF token": "Your session has expired. Please sign in again.",
+  "Access token has been revoked": "Your session has expired. Please sign in again.",
+  "Internal Server Error": "A server error occurred while processing your request. Please try again later.",
+
+  // Not found - resources
+  "Project not found": "The requested project could not be found.",
+  "Document not found": "The requested document could not be found.",
+  "Document version not found": "The requested document version could not be found.",
+  "Requirement not found": "The requested obligation could not be found.",
+  "Test case not found": "The requested compliance check could not be found.",
+  "Compare run not found": "The requested comparison could not be found.",
+  "Change item not found": "The requested change item could not be found.",
+  "Chat session not found": "This chat session could not be found. It may have been deleted.",
+  "Chat attempt not found": "This chat message could not be found.",
+  "Contract draft not found": "The requested contract draft could not be found.",
+  "Project member not found": "The requested team member could not be found.",
+  "User not found": "The specified user could not be found.",
+  "Project invitation not found": "This invitation could not be found or has expired.",
+  "Mapping not found": "This mapping could not be found. It may have already been removed.",
+  "AI batch job not found": "The requested AI job could not be found.",
+  "Assignee user not found": "The specified assignee could not be found.",
+  "Comment author not found": "The comment author could not be found.",
+  "Superseded attempt not found": "The referenced message could not be found.",
+
+  // Conflict
+  "Mapping already exists": "This mapping already exists.",
+  "Version already exists": "A version with this label already exists. Please choose a different name.",
+  "Member already exists": "This user is already a member of the project.",
+  "Pending invitation already exists": "An invitation has already been sent to this user.",
+
+  // Permission
+  "Project owner access required": "You do not have permission to perform this action. Owner access is required.",
+  "Document does not belong to project": "This document does not belong to the current project.",
+
+  // Streaming
+  "Contract chat streaming is disabled": "Chat streaming is not available at the moment. Please try again later.",
+  "Attempt draft must match chat session draft": "This message is no longer valid for the current session.",
+};
+
+export function humanizeError(raw) {
+  return FRIENDLY_ERRORS[raw] || raw;
+}
 
 function extractErrorMessage(payload) {
   if (typeof payload?.detail === "string" && payload.detail.trim()) {
-    return payload.detail;
+    return humanizeError(payload.detail);
   }
 
   if (Array.isArray(payload?.detail)) {
@@ -66,10 +117,10 @@ function extractErrorMessage(payload) {
       return fallbackMessage;
     }
   } catch {
-    return "Request failed";
+    return "An unexpected error occurred. Please try again.";
   }
 
-  return "Request failed";
+  return "An unexpected error occurred. Please try again.";
 }
 
 function buildHeaders(token, headers = {}, method = "GET") {
@@ -141,7 +192,12 @@ async function apiRequest(path, { method = "GET", token = null, body, headers = 
     requestInit.body = JSON.stringify(body);
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, requestInit);
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, requestInit);
+  } catch (err) {
+    throw new ApiError("Unable to connect to the server. Please check your network connection and try again.", 0, err);
+  }
   const payload = response.status === 204 ? null : await response.json().catch(() => ({}));
 
   if (!response.ok) {
@@ -154,12 +210,17 @@ async function apiRequest(path, { method = "GET", token = null, body, headers = 
 
 async function apiFormRequest(path, { method = "POST", token = null, formData, headers = {} } = {}) {
   const requestHeaders = buildHeaders(token, headers, method);
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method,
-    headers: requestHeaders,
-    body: formData,
-    credentials: "include"
-  });
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      method,
+      headers: requestHeaders,
+      body: formData,
+      credentials: "include"
+    });
+  } catch (err) {
+    throw new ApiError("Unable to connect to the server. Please check your network connection and try again.", 0, err);
+  }
   const payload = response.status === 204 ? null : await response.json().catch(() => ({}));
 
   if (!response.ok) {

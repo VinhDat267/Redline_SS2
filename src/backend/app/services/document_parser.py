@@ -1233,6 +1233,24 @@ def _iter_container_items(container: object) -> Iterator[Paragraph | Table]:
             yield Table(child, container)
 
 
+def _collect_textbox_texts(element) -> list[str]:
+    textbox_texts: list[str] = []
+    txbx_tag = f"{{{_WORD_NS}}}txbxContent"
+    textbox_tag = f"{{{_VML_NS}}}textbox"
+    t_tag = f"{{{_WORD_NS}}}t"
+    for descendant in element.iter():
+        if descendant.tag in {txbx_tag, textbox_tag}:
+            t_texts = []
+            for t_desc in descendant.iter(t_tag):
+                if t_desc.text:
+                    t_texts.append(t_desc.text)
+            if t_texts:
+                textbox_text = "".join(t_texts)
+                if textbox_text not in textbox_texts:
+                    textbox_texts.append(textbox_text)
+    return textbox_texts
+
+
 def _extract_paragraph_raw_content(
     paragraph: Paragraph,
     *,
@@ -1266,6 +1284,12 @@ def _extract_paragraph_raw_content(
 
     if complex_field_state.inside_field and complex_field_state.result_segments:
         raw_segments.append("".join(complex_field_state.result_segments))
+
+    # Support textbox text inline recovery
+    textbox_texts = _collect_textbox_texts(paragraph._p)
+    for tb_text in textbox_texts:
+        if tb_text.strip():
+            raw_segments.append(f" [Sidebar: {tb_text.strip()}]")
 
     return "".join(raw_segments), warnings
 

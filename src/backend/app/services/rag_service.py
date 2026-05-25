@@ -18,6 +18,7 @@ from app.models import Document, DocumentBlock, DocumentVersion
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9$]+")
 DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
+_PARSED_DRAFT_STATUSES = {"parsed", "parsed_with_warnings"}
 
 
 class EmbeddingProviderError(RuntimeError):
@@ -364,6 +365,8 @@ def resolve_contract_draft_or_404(
         draft = session.get(DocumentVersion, draft_id)
         if draft is None or draft.document_id != contract_id:
             raise ValueError("Contract draft not found")
+        if draft.parse_status not in _PARSED_DRAFT_STATUSES or draft.active_parse_run_id is None:
+            raise ValueError("Contract draft must be parsed successfully before retrieval")
         return draft
 
     draft = session.scalar(
@@ -371,6 +374,7 @@ def resolve_contract_draft_or_404(
         .where(
             DocumentVersion.document_id == contract_id,
             DocumentVersion.active_parse_run_id.is_not(None),
+            DocumentVersion.parse_status.in_(_PARSED_DRAFT_STATUSES),
         )
         .order_by(DocumentVersion.id.desc())
     )

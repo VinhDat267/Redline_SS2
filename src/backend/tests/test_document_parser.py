@@ -591,7 +591,8 @@ def test_parse_document_version_records_quality_diagnostics_as_warnings(
     assert parsed_version.parse_status == "parsed_with_warnings"
     assert parse_run.status == "parsed_with_warnings"
     assert parse_run.warning_count >= 1
-    assert [block.block_type for block in blocks] == ["heading", "paragraph"]
+    assert [block.block_type for block in blocks] == ["heading", "paragraph", "paragraph"]
+    assert "Text box side letter" in blocks[2].normalized_content
 
     summary = json.loads(parse_run.summary_json or "{}")
     assert summary["coverage"]["policy_result"] == "warn"

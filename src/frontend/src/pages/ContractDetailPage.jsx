@@ -25,7 +25,12 @@ import {
   updateContract
 } from "../lib/api";
 import { formatDateTime } from "../lib/formatters";
+import { Toast } from "../components/Toast";
 /* ─── Pure helper functions ─── */
+function truncateLabel(label, maxLen = 40) {
+  if (!label || label.length <= maxLen) return label ?? '';
+  return label.slice(0, maxLen) + '…';
+}
 function hasParsedStatus(draft) {
   return ["parsed", "parsed_with_warnings"].includes(draft.parse_status?.toLowerCase());
 }
@@ -115,6 +120,7 @@ function CdFormSelect({ label, children, ...props }) {
 const EMPTY_CONTRACT_FORM = { title: "", document_type: "", description: "" };
 const SUPPORTED_DRAFT_FILE_RE = /\.(docx|pdf)$/i;
 const SUPPORTED_DRAFT_FILE_ACCEPT = ".docx,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf";
+const DRAFT_LABEL_MAX_LENGTH = 100;
 const pillBtnCls = "flex items-center gap-2 bg-[#F0B90B] text-[#1E2026] px-5 py-2 font-semibold text-[14px] border-none cursor-pointer disabled:opacity-50";
 const pillBtnStyle = { borderRadius: "50px", boxShadow: "rgb(153,153,153) 0px 2px 10px -3px", transition: "all 200ms ease" };
 const formBtnPrimary = "flex items-center justify-center gap-1.5 bg-[#F0B90B] text-[#1E2026] px-5 py-2 font-semibold text-[14px] border-none cursor-pointer disabled:opacity-50";
@@ -223,6 +229,7 @@ export function ContractDetailPage() {
     event.preventDefault(); setUploadError(""); setFeedback("");
     const normalizedLabel = uploadDraftLabel.trim();
     if (!normalizedLabel) { setUploadError("Draft label is required."); return; }
+    if (normalizedLabel.length > DRAFT_LABEL_MAX_LENGTH) { setUploadError(`Draft label must be at most ${DRAFT_LABEL_MAX_LENGTH} characters (currently ${normalizedLabel.length}).`); return; }
     if (!uploadFile || !SUPPORTED_DRAFT_FILE_RE.test(uploadFile.name)) { setUploadError("Please choose a .docx or .pdf file."); return; }
     setIsUploading(true);
     try {
@@ -273,9 +280,7 @@ export function ContractDetailPage() {
   return (
     <>
       <main className="max-w-[1200px] mx-auto px-8 py-8">
-        {/* Feedback */}
-        {error && <div className="mb-5 p-3.5 bg-white border border-[#F6465D] text-[14px] text-[#F6465D] font-semibold" style={{ borderRadius: "8px" }}>{error}</div>}
-        {feedback && <div className="mb-5 p-3.5 bg-white border border-[#0ECB81] text-[14px] text-[#0ECB81] font-semibold" style={{ borderRadius: "8px" }}>{feedback}</div>}
+
         {/* Page header */}
         <div className="flex items-start justify-between mb-6">
           <div>
@@ -395,11 +400,11 @@ export function ContractDetailPage() {
                       <tr key={draft.id} className="border-b border-[#E6E8EA] last:border-b-0" style={{ transition: "background 200ms ease" }} onMouseEnter={e => e.currentTarget.style.background = "#F5F5F5"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                         <td className="py-3 px-3 first:pl-0">
                           <div className="flex items-center gap-2">
-                            <span className="text-[13px] font-semibold text-[#1E2026]" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>{draft.version_label}</span>
+                            <span className="text-[13px] font-semibold text-[#1E2026]" title={draft.version_label} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block", maxWidth: "200px" }}>{draft.version_label}</span>
                             {recentDraftId === draft.id && <span className="px-1.5 py-0.5 bg-[rgba(240,185,11,0.1)] border border-[rgba(240,185,11,0.2)] text-[#F0B90B] text-[10px] uppercase font-bold tracking-wider flex-shrink-0" style={{ borderRadius: "4px" }}>New</span>}
                           </div>
                         </td>
-                        <td className="py-3 px-3 text-[12px] font-medium text-[#474D57]" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{draft.file_name}</td>
+                        <td className="py-3 px-3 text-[12px] font-medium text-[#474D57]" title={draft.file_name} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "200px" }}>{draft.file_name}</td>
                         <td className="py-3 px-3">
                           <span className={`px-2 py-0.5 text-[11px] uppercase tracking-wider font-semibold ${getDraftStatusTone(draft)}`} style={{ borderRadius: "4px" }}>{draft.parse_status}</span>
                         </td>
@@ -460,7 +465,7 @@ export function ContractDetailPage() {
                   <div className="flex-1">
                     <CdFormSelect label="Source Draft" disabled={isCreatingCompare} onChange={e => setSourceDraftId(e.target.value)} value={sourceDraftId}>
                       <option value="">Select source draft</option>
-                      {compareReadyDrafts.map(d => <option key={`s-${d.id}`} value={String(d.id)} disabled={String(d.id) === targetDraftId}>{d.version_label}</option>)}
+                      {compareReadyDrafts.map(d => <option key={`s-${d.id}`} value={String(d.id)} disabled={String(d.id) === targetDraftId}>{truncateLabel(d.version_label, 45)}</option>)}
                     </CdFormSelect>
                   </div>
                   <div className="hidden sm:flex items-center justify-center pb-2">
@@ -469,7 +474,7 @@ export function ContractDetailPage() {
                   <div className="flex-1">
                     <CdFormSelect label="Target Draft" disabled={isCreatingCompare} onChange={e => setTargetDraftId(e.target.value)} value={targetDraftId}>
                       <option value="">Select target draft</option>
-                      {compareReadyDrafts.map(d => <option key={`t-${d.id}`} value={String(d.id)} disabled={String(d.id) === sourceDraftId}>{d.version_label}</option>)}
+                      {compareReadyDrafts.map(d => <option key={`t-${d.id}`} value={String(d.id)} disabled={String(d.id) === sourceDraftId}>{truncateLabel(d.version_label, 45)}</option>)}
                     </CdFormSelect>
                   </div>
                   <button className={pillBtnCls} style={pillBtnStyle} disabled={isCreatingCompare} type="submit">
@@ -532,9 +537,9 @@ export function ContractDetailPage() {
                       <div className="flex items-center gap-3">
                         <GitCompareArrows size={16} className="text-[#F0B90B] flex-shrink-0" />
                         <div>
-                          <span className="text-[13px] font-semibold text-[#1E2026]">{srcLabel}</span>
+                          <span className="text-[13px] font-semibold text-[#1E2026]" title={srcLabel}>{truncateLabel(srcLabel, 30)}</span>
                           <ArrowRight size={12} className="inline mx-1.5 text-[#848E9C]" />
-                          <span className="text-[13px] font-semibold text-[#1E2026]">{tgtLabel}</span>
+                          <span className="text-[13px] font-semibold text-[#1E2026]" title={tgtLabel}>{truncateLabel(tgtLabel, 30)}</span>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -567,7 +572,14 @@ export function ContractDetailPage() {
               </div>
             </div>
             <form className="px-6 pb-6 pt-5 space-y-4" onSubmit={handleUploadSubmit}>
-              <CdFormInput label="Draft Label" onChange={e => setUploadDraftLabel(e.target.value)} placeholder="vendor-markup-v2" type="text" value={uploadDraftLabel} />
+              <div className="flex flex-col gap-1.5">
+                <CdFormInput label="Draft Label" maxLength={DRAFT_LABEL_MAX_LENGTH} onChange={e => setUploadDraftLabel(e.target.value)} placeholder="vendor-markup-v2" type="text" value={uploadDraftLabel} />
+                {uploadDraftLabel.length > DRAFT_LABEL_MAX_LENGTH - 20 && (
+                  <span className="text-[11px] font-semibold" style={{ color: uploadDraftLabel.length > DRAFT_LABEL_MAX_LENGTH ? '#F6465D' : '#848E9C' }}>
+                    {uploadDraftLabel.length}/{DRAFT_LABEL_MAX_LENGTH} characters
+                  </span>
+                )}
+              </div>
               <CdFormTextarea label="Notes" onChange={e => setUploadNotes(e.target.value)} placeholder="Optional context for this draft" rows={3} value={uploadNotes} />
               <div className="flex flex-col gap-1.5">
                 <label className="text-[12px] font-semibold text-[#848E9C] uppercase tracking-wider">DOCX or PDF File</label>
@@ -576,7 +588,14 @@ export function ContractDetailPage() {
                   accept={SUPPORTED_DRAFT_FILE_ACCEPT}
                   className="bg-[#F5F5F5] border border-[#E6E8EA] text-[#848E9C] text-[13px] px-3 py-2 file:mr-4 file:py-1.5 file:px-4 file:border-0 file:text-[12px] file:font-semibold file:bg-[#F0B90B] file:text-[#1E2026] file:cursor-pointer cursor-pointer"
                   style={{ borderRadius: "8px", outline: "none" }}
-                  onChange={e => setUploadFile(e.target.files?.[0] ?? null)}
+                  onChange={e => {
+                    const file = e.target.files?.[0] ?? null;
+                    setUploadFile(file);
+                    if (file && !uploadDraftLabel.trim()) {
+                      const baseName = file.name.replace(/\.(docx|pdf)$/i, "");
+                      setUploadDraftLabel(baseName.length > DRAFT_LABEL_MAX_LENGTH ? baseName.slice(0, DRAFT_LABEL_MAX_LENGTH) : baseName);
+                    }
+                  }}
                   ref={fileInputRef}
                   type="file"
                 />
@@ -617,6 +636,9 @@ export function ContractDetailPage() {
           </div>
         </div>
       )}
+      {/* Toast notifications — bottom-right, auto-dismiss */}
+      {error && <Toast message={error} type="error" onClose={() => setError("")} />}
+      {feedback && <Toast message={feedback} type="success" onClose={() => setFeedback("")} />}
     </>
   );
 }

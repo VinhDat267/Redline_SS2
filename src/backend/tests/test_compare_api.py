@@ -516,3 +516,42 @@ def test_compare_routes_require_project_membership(client, auth_headers, registe
         headers=outsider["headers"],
     )
     assert outsider_queue_response.status_code == 404
+
+
+def test_compare_run_capping_and_prioritization(client, auth_headers, monkeypatch):
+    from app.core.config import settings
+    # Force max compare change items to 2 via setting override
+    monkeypatch.setattr(settings, "compare_max_change_items", 2)
+
+    compare_run, queue = _create_compare_run(
+        client,
+        auth_headers,
+        source_payload=_build_compare_docx(
+            body_paragraphs=[
+                ("I like apples.", None),
+                ("I like bananas.", None),
+            ]
+        ),
+        target_payload=_build_compare_docx(
+            body_paragraphs=[
+                ("I like apples and pears.", None), # modified
+                ("I like bananas.", None),
+                ("I like grapes.", None), # added
+                ("I like oranges.", None), # added
+            ]
+        ),
+        project_name="Compare Capping Project",
+        document_title="Compare Capping Document",
+    )
+
+    # General Assertions
+    assert compare_run["compare_status"] == "completed_with_warnings"
+    assert compare_run["warning_count"] >= 1
+    # Although 3 changes occurred (1 modified, 2 added), only 2 are persisted due to cap = 2
+    assert len(queue) == 2
+
+    # Priority Verification: Modified must come first
+    change_types = [item["change_type"] for item in queue]
+    assert "modified" in change_types
+    # Verify exact count mapping is preserved
+    assert change_types[0] == "modified"

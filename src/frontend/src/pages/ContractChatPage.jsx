@@ -5,6 +5,7 @@ import {
   Plus, RotateCcw, ScrollText, Send, ShieldCheck, Sparkles, Square,
   UserCircle, Zap, BookOpen, History
 } from "lucide-react";
+import { Toast } from "../components/Toast";
 
 import { useAuth } from "../auth/AuthContext";
 import { Sidebar } from "../components/ScreenFrame";
@@ -135,10 +136,10 @@ const PROMPT_EXAMPLES = [
 ];
 
 const COMPARE_PROMPT_EXAMPLES = [
-  { icon: "?", text: "What changed in the liability cap?" },
-  { icon: "+/-", text: "Which obligations were added or removed?" },
-  { icon: "AI", text: "Summarize the key negotiation changes" },
-  { icon: "!", text: "Which changes should legal review first?" },
+  { icon: "🔄", text: "What changed in the liability cap?" },
+  { icon: "➕", text: "Which obligations were added or removed?" },
+  { icon: "✨", text: "Summarize the key negotiation changes" },
+  { icon: "🚨", text: "Which changes should legal review first?" },
 ];
 
 export function ContractChatPage() {
@@ -222,7 +223,7 @@ export function ContractChatPage() {
   const parsedDrafts = useMemo(() => drafts.filter(hasParsedStatus), [drafts]);
   const selectedDraft = parsedDrafts.find(d => String(d.id) === selectedDraftId) ?? null;
   const completedCompareRuns = useMemo(() => compareRuns.filter(isCompletedCompareRun), [compareRuns]);
-  const freshCompletedCompareRuns = useMemo(() => completedCompareRuns.filter(r => !r.is_stale), [completedCompareRuns]);
+  const freshCompletedCompareRuns = useMemo(() => completedCompareRuns.filter(isFreshCompletedCompareRun), [completedCompareRuns]);
   const latestCompareRuns = useMemo(() => latestCompareRunsByPair(freshCompletedCompareRuns), [freshCompletedCompareRuns]);
   const selectedHistoricalCompareRun = completedCompareRuns.find(r => String(r.id) === selectedCompareRunId) ?? null;
   const selectableCompareRuns = useMemo(() => {
@@ -425,7 +426,7 @@ export function ContractChatPage() {
   const curCol = streamStatusColor[streamingAnswer?.status] ?? "#F0B90B";
 
   return (
-    <div style={{ display: "flex", overflow: "hidden", width: "100%", height: "calc(100vh - 64px)", background: "#F6F7F9", color: "#1E2026", fontFamily: "Inter,sans-serif", position: "relative" }}>
+    <div style={{ display: "flex", overflow: "hidden", width: "100%", height: "calc(100vh - 64px)", background: "#F5F5F5", color: "#1E2026", fontFamily: "Inter,sans-serif", position: "relative" }}>
 
       {/* ── Styles ─────────────────────────────────────────────── */}
       <style>{`
@@ -595,7 +596,7 @@ export function ContractChatPage() {
               {contract?.title ?? "Contract Q&A"}
             </h1>
             {activeDraftId && (
-              <span style={{ fontSize: "9px", fontWeight: 700, padding: "2px 7px", borderRadius: "4px", background: "#EFF6FF", color: "#0369A1", border: "1px solid #0EA5E944", flexShrink: 1, maxWidth: "260px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              <span style={{ fontSize: "9px", fontWeight: 700, padding: "2px 7px", borderRadius: "4px", background: "#E8F7FD", color: "#1EAEDB", border: "1px solid #1EAEDB44", flexShrink: 1, maxWidth: "260px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {selectedScope === "compare" ? `Compare: ${activeScopeLabel}` : activeScopeLabel}
               </span>
             )}
@@ -603,7 +604,7 @@ export function ContractChatPage() {
 
           {/* Capability badges */}
           <div style={{ display: "flex", gap: "5px", flexShrink: 0 }}>
-            {[["⚡", "RAG", "#FFF8E6", "#B07D0A"], ["🧠", "Memory", "#EFF6FF", "#0369A1"], ["📌", "Citations", "#EBF9F4", "#16714E"]].map(([ic, lbl, bg, col]) => (
+            {[["⚡", "RAG", "#FFF8E6", "#B07D0A"], ["🧠", "Memory", "#E8F7FD", "#1EAEDB"], ["📌", "Citations", "#EBF9F4", "#16714E"]].map(([ic, lbl, bg, col]) => (
               <span key={lbl} style={{ fontSize: "9px", fontWeight: 700, padding: "2px 7px", borderRadius: "4px", background: bg, color: col, border: `1px solid ${col}33` }}>{ic} {lbl}</span>
             ))}
           </div>
@@ -614,7 +615,7 @@ export function ContractChatPage() {
         </div>
 
         {/* Error */}
-        {error && <div style={{ flexShrink: 0, padding: "8px 20px", background: "#FFF1F0", borderBottom: "1px solid #F6465D33", fontSize: "12px", color: "#C03050" }}>⚠ {error}</div>}
+        {error && <Toast message={error} type="error" onClose={() => setError("")} />}
 
         {/* Messages */}
         <div style={{ flex: 1, overflowY: "auto", padding: "20px 32px", display: "flex", flexDirection: "column", gap: "16px" }}>
@@ -711,7 +712,7 @@ export function ContractChatPage() {
                         </span>
                         {msg === retryable && (
                           <button type="button" disabled={isSending}
-                            style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 700, color: "#0369A1", background: "none", border: "none", cursor: "pointer", padding: "0" }}
+                            style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 700, color: "#1EAEDB", background: "none", border: "none", cursor: "pointer", padding: "0" }}
                             onClick={() => void handleRetry(msg)}>
                             <RotateCcw size={11} /> Retry answer
                           </button>
@@ -834,7 +835,7 @@ export function ContractChatPage() {
               : selectedDraft ? `${selectedDraft.version_label} / ${formatDateTime(selectedDraft.uploaded_at)}` : "Choose a parsed draft to begin."}
           </div>
           <Link to={`/contracts/${contractId}`}
-            style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 700, color: "#0369A1", textDecoration: "none" }}>
+            style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 700, color: "#1EAEDB", textDecoration: "none" }}>
             <FileText size={11} /> Open contract workspace
           </Link>
         </div>

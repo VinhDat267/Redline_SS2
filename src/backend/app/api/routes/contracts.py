@@ -44,7 +44,7 @@ def _ensure_contract_chat_streaming_enabled() -> None:
     if not settings.contract_chat_streaming_enabled:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Contract chat streaming is disabled",
+            detail="Chat streaming is not available at the moment. Please try again later.",
         )
 
 
@@ -372,7 +372,7 @@ def list_chat_messages(
     contract = project_access_service.ensure_document_access_or_404(database, contract_id, current_user.id)
     chat_session = contract_chat_service.get_chat_session_or_404(database, chat_session_id)
     if chat_session.contract_id != contract.id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat session not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="This chat session could not be found. It may have been deleted.")
     messages = contract_chat_service.list_chat_messages(database, chat_session_id)
     return {
         "data": [
@@ -435,7 +435,7 @@ def get_contract_chat_attempt(
     chat_session = contract_chat_service.get_chat_session_or_404(database, chat_session_id)
     attempt = contract_chat_attempt_service.get_attempt_or_404(database, attempt_id)
     if chat_session.contract_id != contract.id or attempt.session_id != chat_session.id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat attempt not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="This chat message could not be found.")
     return {
         "data": ChatAttemptRead.model_validate(
             contract_chat_attempt_service.serialize_attempt(attempt)
@@ -480,7 +480,7 @@ def stream_contract_chat_attempt(
     chat_session = contract_chat_service.get_chat_session_or_404(database, chat_session_id)
     attempt = contract_chat_attempt_service.get_attempt_or_404(database, attempt_id)
     if chat_session.contract_id != contract.id or attempt.session_id != chat_session.id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat attempt not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="This chat message could not be found.")
     contract_chat_attempt_service.ensure_attempt_can_stream(attempt)
     return StreamingResponse(
         contract_chat_stream_service.stream_attempt(

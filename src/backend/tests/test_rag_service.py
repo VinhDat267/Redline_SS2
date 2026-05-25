@@ -6,7 +6,7 @@ from docx import Document as DocxDocument
 from sqlalchemy import select
 
 from app.core.config import settings
-from app.models import DocumentBlock
+from app.models import DocumentBlock, DocumentVersion
 from app.services import rag_service
 
 
@@ -76,6 +76,72 @@ def test_parse_generates_embeddings_for_document_blocks(client, auth_headers, se
     assert all(block.embedding_vector_json for block in blocks)
     assert all(block.embedding_vector for block in blocks)
     assert all(block.embedding_provider for block in blocks)
+
+
+def test_retrieval_rejects_failed_reparse_with_previous_active_parse(
+    client,
+    auth_headers,
+    session_factory,
+):
+    project_response = client.post(
+        "/api/v1/projects",
+        json={"name": "RAG Failed Draft", "description": "Failed reparse guard"},
+        headers=auth_headers,
+    )
+    project_id = project_response.json()["data"]["id"]
+
+    document_response = client.post(
+        f"/api/v1/projects/{project_id}/documents",
+        json={
+            "title": "Failed Draft Contract",
+            "document_type": "CONTRACT",
+            "description": "Draft should not feed retrieval after failed reparse",
+        },
+        headers=auth_headers,
+    )
+    document_id = document_response.json()["data"]["id"]
+
+    version_response = client.post(
+        f"/api/v1/documents/{document_id}/versions",
+        files={
+            "file": (
+                "failed-draft.docx",
+                _build_docx(
+                    [
+                        ("Liability", "Heading 1"),
+                        ("The liability cap is limited to $500,000.", None),
+                    ]
+                ),
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
+        data={"version_label": "v1.0"},
+        headers=auth_headers,
+    )
+    version_id = version_response.json()["data"]["id"]
+
+    parse_response = client.post(f"/api/v1/document-versions/{version_id}/parse", headers=auth_headers)
+    assert parse_response.status_code == 200
+
+    with session_factory() as session:
+        version = session.get(DocumentVersion, version_id)
+        assert version.active_parse_run_id is not None
+        version.parse_status = "failed"
+        session.add(version)
+        session.commit()
+
+        try:
+            rag_service.retrieve_similar_blocks(
+                session,
+                document_id=document_id,
+                draft_id=version_id,
+                query="What is the liability cap?",
+                limit=2,
+            )
+        except ValueError as exc:
+            assert str(exc) == "Contract draft must be parsed successfully before retrieval"
+        else:
+            raise AssertionError("failed draft should not be used for retrieval")
 
 
 def test_openai_compatible_embedding_provider_returns_configured_vector(monkeypatch):

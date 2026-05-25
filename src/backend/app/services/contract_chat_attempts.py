@@ -13,6 +13,7 @@ from app.services import contracts as contract_service
 
 ACTIVE_ATTEMPT_STATUSES = set(ACTIVE_CHAT_ATTEMPT_STATUSES)
 TERMINAL_ATTEMPT_STATUSES = {"done", "cancelled", "error"}
+_PARSED_DRAFT_STATUSES = {"parsed", "parsed_with_warnings"}
 
 
 def create_attempt(
@@ -216,6 +217,11 @@ def _ensure_attempt_scope(
     contract_service.ensure_contract_draft_belongs_to_contract(contract, draft)
     if chat_session.draft_id != draft.id:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Attempt draft must match chat session draft")
+    if draft.parse_status not in _PARSED_DRAFT_STATUSES or draft.active_parse_run_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Contract draft must be parsed successfully before asking questions",
+        )
 
 
 def _ensure_attempt_belongs_to_scope(

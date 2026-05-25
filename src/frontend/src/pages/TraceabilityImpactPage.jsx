@@ -14,6 +14,7 @@ import {
   Sparkles,
   ChevronRight
 } from "lucide-react";
+import { Toast } from "../components/Toast";
 import { diffWords } from "diff";
 
 import { useAuth } from "../auth/AuthContext";
@@ -91,6 +92,15 @@ export function TraceabilityImpactPage() {
     return () => { isCurrent = false; };
   }, [compareRunId, logout, searchParams, token]);
 
+  const handleMutationError = (error, fallbackMessage) => {
+    if (error instanceof ApiError && error.status === 401) {
+      logout();
+      return true;
+    }
+    setError(error instanceof ApiError ? error.message : fallbackMessage);
+    return false;
+  };
+
   const handleLinkRequirement = async () => {
     if (!selectedReqId || !changeItem) return;
     const linkedReqId = selectedReqId;
@@ -100,7 +110,7 @@ export function TraceabilityImpactPage() {
       setChangeItem(updated);
       setAiSuggestions(prev => prev.filter(s => String(s.requirement_id) !== String(linkedReqId)));
       setSelectedReqId("");
-    } catch (e) { setError(e instanceof ApiError ? e.message : "Failed to link"); }
+    } catch (e) { handleMutationError(e, "Unable to link this obligation. Please try again."); }
     finally { setIsLinking(false); }
   };
 
@@ -114,7 +124,7 @@ export function TraceabilityImpactPage() {
         setSelectedMappingReqId("");
         setSelectedMappingTcId("");
       }
-    } catch (e) { setError(e instanceof ApiError ? e.message : "Failed to unlink"); }
+    } catch (e) { handleMutationError(e, "Unable to unlink this obligation. Please try again."); }
     finally { setUnlinkingId(null); }
   };
 
@@ -129,7 +139,10 @@ export function TraceabilityImpactPage() {
       setAiSuggestions(fresh);
       if (fresh.length === 0 && !result.error_message) setError("AI found no new obligation matches above 30% confidence.");
       if (result.error_message) setError(`AI error: ${result.error_message}`);
-    } catch (e) { setError(e instanceof ApiError ? e.message : "AI suggestion failed"); setShowSuggestions(false); }
+    } catch (e) {
+      const didLogout = handleMutationError(e, "Unable to suggest links right now. Please try again.");
+      if (!didLogout) setShowSuggestions(false);
+    }
     finally { setIsSuggesting(false); }
   };
 
@@ -148,7 +161,7 @@ export function TraceabilityImpactPage() {
       );
       setChangeItem(updated);
       setAiSuggestions(prev => prev.filter(s => s.requirement_id !== suggestion.requirement_id));
-    } catch (e) { setError(e instanceof ApiError ? e.message : "Failed to accept suggestion"); }
+    } catch (e) { handleMutationError(e, "Unable to accept this suggestion. Please try again."); }
     finally { setAcceptingReqId(null); }
   };
 
@@ -163,7 +176,7 @@ export function TraceabilityImpactPage() {
       await createRequirementTestCaseMapping(token, selectedMappingReqId, selectedMappingTcId);
       if (changeItem) { const r = await getChangeItem(token, changeItem.id); setChangeItem(r); }
       setSelectedMappingTcId("");
-    } catch (e) { setError(e instanceof ApiError ? e.message : "Failed to create mapping"); }
+    } catch (e) { handleMutationError(e, "Unable to create this mapping. Please try again."); }
     finally { setIsMappingCreating(false); }
   };
 
@@ -172,7 +185,7 @@ export function TraceabilityImpactPage() {
     try {
       await deleteRequirementTestCaseMapping(token, reqId, tcId);
       if (changeItem) { const r = await getChangeItem(token, changeItem.id); setChangeItem(r); }
-    } catch (e) { setError(e instanceof ApiError ? e.message : "Failed to delete"); }
+    } catch (e) { handleMutationError(e, "Unable to delete this mapping. Please try again."); }
     finally { setMappingDeletingKey(null); }
   };
 
@@ -201,7 +214,7 @@ export function TraceabilityImpactPage() {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", overflow: "hidden", width: "100%", height: "calc(100vh - 64px)", background: "#F6F7F9", color: "#1E2026", fontFamily: "Inter, sans-serif", position: "relative" }}>
+    <div style={{ display: "flex", flexDirection: "column", overflow: "hidden", width: "100%", height: "calc(100vh - 64px)", background: "#F5F5F5", color: "#1E2026", fontFamily: "Inter, sans-serif", position: "relative" }}>
 
       {/* ── Global Styles ─────────────────────────────────────── */}
       <style>{`
@@ -267,7 +280,7 @@ export function TraceabilityImpactPage() {
         <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
           {[
             [linkedRequirementCount, "Obligations", "#F0B90B22", "#B07D0A", Database],
-            [impactedTestCount, "Checks", "#0EA5E922", "#0369A1", GitCommit],
+            [impactedTestCount, "Checks", "#1EAEDB22", "#0369A1", GitCommit],
           ].map(([n, lbl, bg, col, Icon]) => (
             <div key={lbl} style={{ display: "flex", alignItems: "center", gap: "5px", padding: "4px 12px", borderRadius: "20px", background: bg, border: `1px solid ${col}44` }}>
               <Icon size={12} style={{ color: col }} />
@@ -288,12 +301,8 @@ export function TraceabilityImpactPage() {
         </Link>
       </div>
 
-      {/* ── ERROR BANNER ──────────────────────────────────────── */}
-      {error && (
-        <div style={{ flexShrink: 0, padding: "8px 20px", background: "#FFF1F0", borderBottom: "1px solid #F6465D33", fontSize: "12px", color: "#C03050" }}>
-          ⚠ {error}
-        </div>
-      )}
+      {/* ── ERROR / FEEDBACK — Toast notifications ────────────── */}
+      {error && <Toast message={error} type="error" onClose={() => setError("")} />}
 
       {/* ── MAIN 3-PANEL ─────────────────────────────────────── */}
       <div style={{ flex: 1, display: "flex", overflow: "hidden", padding: "16px", gap: "12px" }}>
@@ -332,7 +341,7 @@ export function TraceabilityImpactPage() {
               <div style={{ flexShrink: 0, padding: "8px 12px", borderBottom: "1px solid #F6465D22", background: "#FFF5F5" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "5px", marginBottom: "5px" }}>
                   <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#F6465D", flexShrink: 0, display: "block" }} />
-                  <span className="ti-label" style={{ color: "#C03050" }}>Original · {compareRun?.source_version?.version_label ?? "v1"}</span>
+                  <span className="ti-label" title={compareRun?.source_version?.version_label ?? 'v1'} style={{ color: "#C03050", maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-block' }}>Original · {compareRun?.source_version?.version_label ?? "v1"}</span>
                 </div>
                 <div className="ti-diff-old" style={{ fontFamily: "JetBrains Mono,monospace", fontSize: "11px", lineHeight: 1.7, color: "#2B2F36", whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: "90px", overflowY: "auto" }}>
                   {diffParts.length === 0
@@ -349,7 +358,7 @@ export function TraceabilityImpactPage() {
               <div style={{ flex: 1, overflowY: "auto", padding: "8px 12px", background: "#F8FFFC" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "5px", marginBottom: "5px" }}>
                   <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#2EBD85", flexShrink: 0, display: "block" }} />
-                  <span className="ti-label" style={{ color: "#16714E" }}>Revised · {compareRun?.target_version?.version_label ?? "v2"}</span>
+                  <span className="ti-label" title={compareRun?.target_version?.version_label ?? 'v2'} style={{ color: "#16714E", maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-block' }}>Revised · {compareRun?.target_version?.version_label ?? "v2"}</span>
                 </div>
                 <div className="ti-diff-new" style={{ fontFamily: "JetBrains Mono,monospace", fontSize: "11px", lineHeight: 1.7, color: "#2B2F36", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
                   {diffParts.length === 0
@@ -380,7 +389,7 @@ export function TraceabilityImpactPage() {
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <span style={{ fontSize: "10px", fontWeight: 700, padding: "2px 9px", borderRadius: "20px", background: "#FFF8E6", color: "#B07D0A", border: "1px solid #F0B90B44" }}>{linkedRequirementCount} obligations</span>
               <ArrowRight size={12} style={{ color: "#C0C6CF" }} />
-              <span style={{ fontSize: "10px", fontWeight: 700, padding: "2px 9px", borderRadius: "20px", background: "#EFF6FF", color: "#0369A1", border: "1px solid #0EA5E944" }}>{impactedTestCount} checks</span>
+              <span style={{ fontSize: "10px", fontWeight: 700, padding: "2px 9px", borderRadius: "20px", background: "#EFF6FF", color: "#0369A1", border: "1px solid #1EAEDB44" }}>{impactedTestCount} checks</span>
               {changeItem && (
                 <button
                   type="button"
@@ -490,7 +499,7 @@ export function TraceabilityImpactPage() {
                       {req.mapped_test_cases?.length > 0 && (
                         <div style={{ marginTop: "3px", display: "flex", gap: "3px", flexWrap: "wrap" }}>
                           {req.mapped_test_cases.map(tc => (
-                            <span key={tc.test_case_id} style={{ fontSize: "9px", fontWeight: 600, padding: "1px 5px", borderRadius: "4px", background: "#EFF6FF", color: "#0369A1", border: "1px solid #0EA5E922" }}>
+                            <span key={tc.test_case_id} style={{ fontSize: "9px", fontWeight: 600, padding: "1px 5px", borderRadius: "4px", background: "#EFF6FF", color: "#0369A1", border: "1px solid #1EAEDB22" }}>
                               {tc.test_case_code}
                             </span>
                           ))}
@@ -508,34 +517,39 @@ export function TraceabilityImpactPage() {
                     </button>
                   </div>
                 )) : (
-                  <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "8px", padding: "24px", border: "1px dashed #E6E8EA", borderRadius: "8px" }}>
-                    <Database size={24} style={{ color: "#E6E8EA" }} />
-                    <p style={{ fontSize: "11px", color: "#C0C6CF", textAlign: "center" }}>No obligations linked yet.<br />Use the console on the right →</p>
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "12px", padding: "32px 24px", border: "1px dashed #E6E8EA", borderRadius: "10px", background: "#FAFAFA" }}>
+                    <div style={{ width: "48px", height: "48px", borderRadius: "12px", background: "#FFF8E6", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <Database size={24} style={{ color: "#F0B90B" }} />
+                    </div>
+                    <p style={{ fontSize: "13px", fontWeight: 600, color: "#848E9C", textAlign: "center", lineHeight: 1.5, margin: 0 }}>No obligations linked yet</p>
+                    <p style={{ fontSize: "11px", color: "#C0C6CF", textAlign: "center", margin: 0 }}>Use the Action Console on the right to link your first obligation.</p>
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Arrow */}
-            <div className="ti-chain-arrow" style={{ width: "28px" }}>
-              <div style={{ flex: 1, width: "2px", background: "linear-gradient(to bottom, #E6E8EA 0%, #F0B90B44 100%)", borderRadius: "1px" }} />
-              <ArrowRight size={16} style={{ color: "#F0B90B" }} />
-              <div style={{ flex: 1, width: "2px", background: "linear-gradient(to bottom, #F0B90B44 0%, #0EA5E944 100%)", borderRadius: "1px" }} />
-              <ArrowRight size={16} style={{ color: "#0EA5E9" }} />
-              <div style={{ flex: 1, width: "2px", background: "linear-gradient(to bottom, #0EA5E944 0%, #E6E8EA 100%)", borderRadius: "1px" }} />
-            </div>
+            {/* Arrow — hidden when both sides are empty */}
+            {(linkedReqs.length > 0 || impactedTestCount > 0) && (
+              <div className="ti-chain-arrow" style={{ width: "28px" }}>
+                <div style={{ flex: 1, width: "2px", background: "linear-gradient(to bottom, #E6E8EA 0%, #F0B90B44 100%)", borderRadius: "1px" }} />
+                <ArrowRight size={16} style={{ color: "#F0B90B" }} />
+                <div style={{ flex: 1, width: "2px", background: "linear-gradient(to bottom, #F0B90B44 0%, #1EAEDB44 100%)", borderRadius: "1px" }} />
+                <ArrowRight size={16} style={{ color: "#1EAEDB" }} />
+                <div style={{ flex: 1, width: "2px", background: "linear-gradient(to bottom, #1EAEDB44 0%, #E6E8EA 100%)", borderRadius: "1px" }} />
+              </div>
+            )}
 
             {/* Test Checks column */}
             <div className="ti-node">
               <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "10px" }}>
-                <TestTubeDiagonal size={13} style={{ color: "#0EA5E9" }} />
+                <TestTubeDiagonal size={13} style={{ color: "#1EAEDB" }} />
                 <span className="ti-label">Impacted Checks</span>
-                <span style={{ marginLeft: "auto", fontSize: "10px", fontWeight: 700, background: "#EFF6FF", color: "#0369A1", padding: "1px 7px", borderRadius: "20px", border: "1px solid #0EA5E944" }}>{impactedTestCount}</span>
+                <span style={{ marginLeft: "auto", fontSize: "10px", fontWeight: 700, background: "#EFF6FF", color: "#0369A1", padding: "1px 7px", borderRadius: "20px", border: "1px solid #1EAEDB44" }}>{impactedTestCount}</span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "6px", flex: 1 }}>
                 {changeItem?.impacted_tests?.length ? changeItem.impacted_tests.map(tc => (
                   <div key={tc.test_case_id} className="ti-req-row" style={{ cursor: "default", flexShrink: 0 }}>
-                    <TestTubeDiagonal size={12} style={{ color: "#0EA5E9", flexShrink: 0 }} />
+                    <TestTubeDiagonal size={12} style={{ color: "#1EAEDB", flexShrink: 0 }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: "10px", fontWeight: 700, color: "#0369A1" }}>{tc.test_case_code}</div>
                       <div style={{ fontSize: "11px", color: "#474D57", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tc.title}</div>
@@ -545,9 +559,12 @@ export function TraceabilityImpactPage() {
                     </span>
                   </div>
                 )) : (
-                  <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "8px", padding: "24px", border: "1px dashed #E6E8EA", borderRadius: "8px" }}>
-                    <TestTubeDiagonal size={24} style={{ color: "#E6E8EA" }} />
-                    <p style={{ fontSize: "11px", color: "#C0C6CF", textAlign: "center" }}>No impacted checks yet.<br />Link obligations first.</p>
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "12px", padding: "32px 24px", border: "1px dashed #E6E8EA", borderRadius: "10px", background: "#FAFAFA" }}>
+                    <div style={{ width: "48px", height: "48px", borderRadius: "12px", background: "#EFF6FF", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <TestTubeDiagonal size={24} style={{ color: "#1EAEDB" }} />
+                    </div>
+                    <p style={{ fontSize: "13px", fontWeight: 600, color: "#848E9C", textAlign: "center", lineHeight: 1.5, margin: 0 }}>No impacted checks yet</p>
+                    <p style={{ fontSize: "11px", color: "#C0C6CF", textAlign: "center", margin: 0 }}>Link obligations first — checks will appear automatically.</p>
                   </div>
                 )}
               </div>
@@ -587,7 +604,7 @@ export function TraceabilityImpactPage() {
           {/* Mapping Console card */}
           <div className="ti-card" style={{ flexShrink: 0, padding: "14px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "7px", marginBottom: "12px" }}>
-              <GitCommit size={13} style={{ color: "#0EA5E9" }} />
+              <GitCommit size={13} style={{ color: "#1EAEDB" }} />
               <h2 style={{ fontSize: "11px", fontWeight: 700, color: "#1E2026", margin: 0 }}>Mapping Console</h2>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
@@ -652,8 +669,8 @@ export function TraceabilityImpactPage() {
                           return (
                             <div key={key} className="ti-tc-row" style={{ minHeight: "28px" }}>
                               <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0, flex: 1 }}>
-                                <TestTubeDiagonal size={11} style={{ color: "#0EA5E9", flexShrink: 0 }} />
-                                <span style={{ fontSize: "10px", fontWeight: 700, color: "#0EA5E9", marginRight: "4px" }}>{tc.test_case_code}</span>
+                                <TestTubeDiagonal size={11} style={{ color: "#1EAEDB", flexShrink: 0 }} />
+                                <span style={{ fontSize: "10px", fontWeight: 700, color: "#1EAEDB", marginRight: "4px" }}>{tc.test_case_code}</span>
                                 <span style={{ fontSize: "10px", color: "#474D57", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tc.title}</span>
                               </div>
                               <button type="button" className="ti-del-btn"

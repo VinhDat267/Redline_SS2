@@ -204,11 +204,18 @@ def _list_document_compare_runs(
 
 
 def is_compare_run_stale(compare_run: CompareRun) -> bool:
-    source_active_parse_run_id = compare_run.source_version.active_parse_run_id if compare_run.source_version else None
-    target_active_parse_run_id = compare_run.target_version.active_parse_run_id if compare_run.target_version else None
+    return not (
+        _is_compare_version_current(compare_run.source_version, compare_run.source_parse_run_id)
+        and _is_compare_version_current(compare_run.target_version, compare_run.target_parse_run_id)
+    )
+
+
+def _is_compare_version_current(version: DocumentVersion | None, parse_run_id: int | None) -> bool:
     return (
-        compare_run.source_parse_run_id != source_active_parse_run_id
-        or compare_run.target_parse_run_id != target_active_parse_run_id
+        version is not None
+        and version.parse_status in _PARSED_STATUSES
+        and version.active_parse_run_id is not None
+        and version.active_parse_run_id == parse_run_id
     )
 
 
@@ -326,6 +333,8 @@ def _build_change_items(
     session: Session,
     compare_run: CompareRun,
 ) -> tuple[list[ChangeItem], list[str]]:
+    from app.core.config import settings
+
     source_blocks = _load_blocks_for_parse_run(session, compare_run.source_parse_run_id)
     target_blocks = _load_blocks_for_parse_run(session, compare_run.target_parse_run_id)
     source_tables = _load_tables_for_parse_run(session, compare_run.source_parse_run_id)
@@ -339,6 +348,19 @@ def _build_change_items(
     table_change_items, table_warnings = _compare_tables(compare_run, source_tables, target_tables)
     change_items.extend(table_change_items)
     warnings.extend(table_warnings)
+
+    # ── Cap change items to prevent huge AI generation queues ──
+    max_items = settings.compare_max_change_items
+    if max_items > 0 and len(change_items) > max_items:
+        original_count = len(change_items)
+        # Priority: modified > added > removed (modifications are most useful for review)
+        type_priority = {"modified": 0, "added": 1, "removed": 2}
+        change_items.sort(key=lambda ci: type_priority.get(ci.change_type, 3))
+        change_items = change_items[:max_items]
+        warnings.append(
+            f"Compare generated {original_count} changes, truncated to {max_items}. "
+            f"Increase REDLINE_COMPARE_MAX_CHANGE_ITEMS to raise this limit."
+        )
 
     return change_items, sorted(set(warnings))
 
@@ -820,7 +842,7 @@ def _build_change_item(
         summary = f"Added {context_block.block_type} in {context_block.surface.surface_type}"
 
     return ChangeItem(
-        compare_run=compare_run,
+        compare_run_id=compare_run.id,
         source_version_id=compare_run.source_version_id,
         target_version_id=compare_run.target_version_id,
         source_block_id=source_block.id if source_block is not None else None,

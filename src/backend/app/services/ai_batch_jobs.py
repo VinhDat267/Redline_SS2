@@ -5,6 +5,7 @@ from datetime import timedelta
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import settings
@@ -37,11 +38,7 @@ def create_compare_run_ai_batch_job(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Compare run not found")
     compare_service.ensure_compare_run_is_current(session, compare_run)
 
-    existing_job = session.scalar(
-        select(AIBatchJob)
-        .where(AIBatchJob.compare_run_id == compare_run_id, AIBatchJob.status.in_(ACTIVE_JOB_STATUSES))
-        .order_by(AIBatchJob.id.desc())
-    )
+    existing_job = _get_active_ai_batch_job(session, compare_run_id)
     if existing_job is not None:
         return _serialize_job(existing_job, active=True)
 
@@ -51,6 +48,14 @@ def create_compare_run_ai_batch_job(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Compare run does not contain change items for AI generation",
         )
+
+    # ── Cap batch job items even if the CompareRun is huge ──
+    max_items = settings.compare_max_change_items
+    if max_items > 0 and len(selected_change_items) > max_items:
+        # Priority: modified > added > removed
+        type_priority = {"modified": 0, "added": 1, "removed": 2}
+        selected_change_items.sort(key=lambda ci: type_priority.get(ci.change_type, 3))
+        selected_change_items = selected_change_items[:max_items]
 
     job = AIBatchJob(
         compare_run_id=compare_run_id,
@@ -65,7 +70,14 @@ def create_compare_run_ai_batch_job(
         requested_by_user_id=actor_user_id,
     )
     session.add(job)
-    session.flush()
+    try:
+        session.flush()
+    except IntegrityError:
+        session.rollback()
+        winning_job = _get_active_ai_batch_job(session, compare_run_id)
+        if winning_job is not None:
+            return _serialize_job(winning_job, active=True)
+        raise
 
     for change_item in selected_change_items:
         session.add(
@@ -117,11 +129,7 @@ def list_ai_batch_job_items(session: Session, job_id: int) -> list[dict[str, obj
 
 
 def get_active_ai_batch_job_summary(session: Session, compare_run_id: int) -> dict[str, object] | None:
-    job = session.scalar(
-        select(AIBatchJob)
-        .where(AIBatchJob.compare_run_id == compare_run_id, AIBatchJob.status.in_(ACTIVE_JOB_STATUSES))
-        .order_by(AIBatchJob.id.desc())
-    )
+    job = _get_active_ai_batch_job(session, compare_run_id)
     if job is None:
         return None
     return _serialize_job(job, active=True)
@@ -455,3 +463,11 @@ def _serialize_job(job: AIBatchJob, *, active: bool) -> dict[str, object]:
         "completed_at": job.completed_at,
         "error_message": job.error_message,
     }
+
+
+def _get_active_ai_batch_job(session: Session, compare_run_id: int) -> AIBatchJob | None:
+    return session.scalar(
+        select(AIBatchJob)
+        .where(AIBatchJob.compare_run_id == compare_run_id, AIBatchJob.status.in_(ACTIVE_JOB_STATUSES))
+        .order_by(AIBatchJob.id.desc())
+    )

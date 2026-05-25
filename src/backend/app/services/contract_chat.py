@@ -25,6 +25,7 @@ _CHAT_MEMORY_HISTORY_LIMIT = 12
 _CHAT_LLM_HISTORY_LIMIT = 8
 _CHAT_CONTEXT_MIN_SCORE = 1.0
 _SEMANTIC_SCORE_WEIGHT = 2.0
+_PARSED_DRAFT_STATUSES = {"parsed", "parsed_with_warnings"}
 _STOP_WORDS = {
     "a",
     "an",
@@ -123,10 +124,10 @@ def create_chat_session(
     created_by_user_id: int,
     title: str | None,
 ) -> ChatSession:
-    if draft.active_parse_run_id is None:
+    if draft.parse_status not in _PARSED_DRAFT_STATUSES or draft.active_parse_run_id is None:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Contract draft must be parsed before starting chat",
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Contract draft must be parsed successfully before starting chat",
         )
     if compare_run is not None:
         _ensure_compare_run_belongs_to_contract(contract, compare_run)
@@ -150,6 +151,15 @@ def create_chat_session(
     return chat_session
 
 
+def ensure_chat_session_draft_is_parsed(session: Session, chat_session: ChatSession) -> None:
+    draft = chat_session.draft or session.get(DocumentVersion, chat_session.draft_id)
+    if draft is None or draft.parse_status not in _PARSED_DRAFT_STATUSES or draft.active_parse_run_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Contract draft must be parsed successfully before asking questions",
+        )
+
+
 def get_chat_session_or_404(session: Session, chat_session_id: int) -> ChatSession:
     chat_session = session.scalar(
         select(ChatSession)
@@ -168,6 +178,9 @@ def create_chat_exchange(
     chat_session: ChatSession,
     query: str,
 ) -> dict[str, object]:
+    _ensure_chat_session_belongs_to_contract(contract, chat_session)
+    ensure_chat_session_draft_is_parsed(session, chat_session)
+    ensure_chat_session_compare_run_is_current(session, chat_session)
     answer = generate_chat_answer(
         session,
         contract=contract,
@@ -198,6 +211,7 @@ def generate_chat_answer(
 ) -> ContractChatAnswer:
     _raise_if_cancelled(should_cancel)
     _ensure_chat_session_belongs_to_contract(contract, chat_session)
+    ensure_chat_session_draft_is_parsed(session, chat_session)
     ensure_chat_session_compare_run_is_current(session, chat_session)
 
     memory_answer = _build_session_memory_answer(

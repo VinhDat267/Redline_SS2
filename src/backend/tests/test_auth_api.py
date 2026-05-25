@@ -24,7 +24,7 @@ def test_register_login_and_session_flow(client):
 
     missing_csrf_response = client.patch("/api/v1/auth/me", json={"display_name": "No CSRF"})
     assert missing_csrf_response.status_code == 403
-    assert missing_csrf_response.json()["detail"] == "CSRF token is required"
+    assert missing_csrf_response.json()["detail"] == "Your session has expired. Please sign in again."
 
     csrf_profile_response = client.patch(
         "/api/v1/auth/me",
@@ -91,7 +91,7 @@ def test_malformed_bearer_token_returns_unauthorized(app):
     response = safe_client.get("/api/v1/auth/me", headers={"Authorization": "Bearer abc.a"})
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "Invalid access token"
+    assert response.json()["detail"] == "Your session has expired. Please sign in again."
 
 
 def test_password_change_revokes_existing_session_token(client):
@@ -122,7 +122,7 @@ def test_password_change_revokes_existing_session_token(client):
     )
 
     assert revoked_response.status_code == 401
-    assert revoked_response.json()["detail"] == "Access token has been revoked"
+    assert revoked_response.json()["detail"] == "Your session has expired. Please sign in again."
 
     login_response = client.post(
         "/api/v1/auth/login",

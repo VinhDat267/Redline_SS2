@@ -42,7 +42,7 @@ def get_current_user(
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(exc),
+            detail="Your session has expired. Please sign in again.",
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
 
@@ -57,15 +57,15 @@ def get_current_user(
     if user.token_version != token_claims.token_version:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Access token has been revoked",
+            detail="Your session has expired. Please sign in again.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
     if token_source == "cookie" and request.method.upper() not in {"GET", "HEAD", "OPTIONS"}:
         csrf_header = request.headers.get(AUTH_CSRF_HEADER_NAME)
         if not csrf_header:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF token is required")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Your session has expired. Please sign in again.")
         if not token_claims.csrf_token or not hmac.compare_digest(csrf_header, token_claims.csrf_token):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid CSRF token")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Your session has expired. Please sign in again.")
 
     return user

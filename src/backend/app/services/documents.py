@@ -85,10 +85,30 @@ def create_document_version(
     actor_user_id: int | None,
     upload_file: UploadFile,
 ) -> DocumentVersion:
+    VERSION_LABEL_MAX_LENGTH = 100
+    FILE_NAME_MAX_LENGTH = 255
+
     get_document_or_404(session, document_id)
 
     if actor_user_id is not None and session.get(User, actor_user_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    normalized_label = version_label.strip()
+    if not normalized_label:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Draft label is required",
+        )
+    if len(normalized_label) > VERSION_LABEL_MAX_LENGTH:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Draft label must be at most {VERSION_LABEL_MAX_LENGTH} characters (currently {len(normalized_label)})",
+        )
+    version_label = normalized_label
+
+    original_name_raw = Path(upload_file.filename or "document-version.docx").name
+    if len(original_name_raw) > FILE_NAME_MAX_LENGTH:
+        original_name_raw = original_name_raw[:FILE_NAME_MAX_LENGTH]
 
     existing_version = session.scalar(
         select(DocumentVersion).where(
@@ -99,7 +119,7 @@ def create_document_version(
     if existing_version is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Version already exists")
 
-    original_name = Path(upload_file.filename or "document-version.docx").name
+    original_name = original_name_raw
     file_suffix = (Path(original_name).suffix or ".docx").lower()
     if file_suffix not in {".docx", ".pdf"}:
         raise HTTPException(

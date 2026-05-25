@@ -136,6 +136,53 @@ def test_create_batch_job_reuses_active_job(client, auth_headers, session_factor
     assert all(item.status == "queued" for item in items)
 
 
+def test_create_batch_job_recovers_when_active_job_wins_concurrent_race(
+    client,
+    auth_headers,
+    session_factory,
+    monkeypatch,
+):
+    compare_run_id = _create_compare_run(client, auth_headers)
+
+    from app.services import ai_batch_jobs as ai_batch_job_service
+
+    winning_job: dict[str, object] = {}
+
+    with session_factory() as racing_session:
+        original_flush = racing_session.flush
+        flush_calls = 0
+
+        def flush_after_competing_job(*args, **kwargs):
+            nonlocal flush_calls, winning_job
+            flush_calls += 1
+            if flush_calls == 1:
+                with session_factory() as competing_session:
+                    winning_job = ai_batch_job_service.create_compare_run_ai_batch_job(
+                        competing_session,
+                        compare_run_id=compare_run_id,
+                        actor_user_id=1,
+                        force_regenerate=False,
+                    )
+                    competing_session.commit()
+            return original_flush(*args, **kwargs)
+
+        monkeypatch.setattr(racing_session, "flush", flush_after_competing_job)
+
+        recovered_job = ai_batch_job_service.create_compare_run_ai_batch_job(
+            racing_session,
+            compare_run_id=compare_run_id,
+            actor_user_id=1,
+            force_regenerate=False,
+        )
+
+    assert recovered_job["job_id"] == winning_job["job_id"]
+    assert recovered_job["active"] is True
+
+    with session_factory() as session:
+        jobs = list(session.scalars(select(AIBatchJob).where(AIBatchJob.compare_run_id == compare_run_id)))
+    assert len(jobs) == 1
+
+
 def test_process_next_batch_job_updates_drafts_and_job_counts(
     client,
     auth_headers,

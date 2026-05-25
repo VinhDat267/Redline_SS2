@@ -546,6 +546,42 @@ describe("ReviewPanelPage", () => {
         ai_generation_status: "not_requested",
         has_ai_review_draft: false,
         sort_key: "0000:000001:00000006"
+      }),
+      buildQueueItem({
+        id: 906,
+        change_type: "added",
+        review_status: "open",
+        section_title: "Encryption",
+        old_content: "",
+        new_content: "All data at rest must be encrypted with AES-256.",
+        summary: "Added encryption requirement",
+        ai_generation_status: "generated",
+        has_ai_review_draft: true,
+        sort_key: "0000:000001:00000007"
+      }),
+      buildQueueItem({
+        id: 907,
+        change_type: "modified",
+        review_status: "in_review",
+        section_title: "Backup",
+        old_content: "Backups every 24 hours.",
+        new_content: "Backups every 12 hours.",
+        summary: "Modified backup frequency",
+        ai_generation_status: "generated",
+        has_ai_review_draft: true,
+        sort_key: "0000:000001:00000008"
+      }),
+      buildQueueItem({
+        id: 908,
+        change_type: "added",
+        review_status: "open",
+        section_title: "Sessions 2",
+        old_content: "",
+        new_content: "Force logout after password change.",
+        summary: "Added session timeout policy 2",
+        ai_generation_status: "generated",
+        has_ai_review_draft: true,
+        sort_key: "0000:000001:00000009"
       })
     ];
 
@@ -582,10 +618,10 @@ describe("ReviewPanelPage", () => {
       if (url.endsWith("/api/v1/compare-runs/55") && method === "GET") {
         const payload = buildCompareRunPayload();
         payload.data.summary.total_changes = queueItems.length;
-        payload.data.summary.added = 2;
+        payload.data.summary.added = 4;
         payload.data.summary.removed = 1;
-        payload.data.summary.modified = 3;
-        payload.data.selected_change_item_id = 904;
+        payload.data.summary.modified = 4;
+        payload.data.selected_change_item_id = 908;
         return Promise.resolve(jsonResponse(payload));
       }
 
@@ -605,13 +641,14 @@ describe("ReviewPanelPage", () => {
       return Promise.reject(new Error(`Unhandled request: ${url} ${method}`));
     });
 
-    renderReviewPanel("/compare-runs/55/review?change=904");
+    renderReviewPanel("/compare-runs/55/review?change=908");
 
     const queueSection = (await screen.findByRole("heading", { name: /clause changes/i })).closest("section");
     expect(queueSection).not.toBeNull();
     expect(within(queueSection).getByLabelText(/search clause changes/i)).toBeInTheDocument();
+    /* With 9 items and page size 8 → 2 pages; item 908 is on page 2 */
     expect(within(queueSection).getByText(/page 2 of 2/i)).toBeInTheDocument();
-    expect(within(queueSection).getByRole("button", { name: /added session timeout policy/i })).toBeInTheDocument();
+    expect(within(queueSection).getByRole("button", { name: /added session timeout policy 2/i })).toBeInTheDocument();
     expect(within(queueSection).queryByRole("button", { name: /modified paragraph in body/i })).not.toBeInTheDocument();
 
     fireEvent.click(within(queueSection).getByRole("button", { name: /previous page/i }));

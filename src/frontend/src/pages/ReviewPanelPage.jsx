@@ -1,7 +1,8 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ArrowRight, MessageSquare, Save, Sparkles, Flag, FileCode, Database, GitCommit, UserCircle, CheckCircle2, Clock, CircleDashed, RefreshCw, FileDiff } from "lucide-react";
 import { diffWords } from "diff";
+import { Toast } from "../components/Toast";
 
 import { useAuth } from "../auth/AuthContext";
 import { DataTable } from "../components/ScreenFrame";
@@ -32,7 +33,7 @@ import { formatDateTime } from "../lib/formatters";
 
 // Function removed because we render AI fields individually in the UI
 
-const REVIEW_QUEUE_PAGE_SIZE = 4;
+const REVIEW_QUEUE_PAGE_SIZE = 8;
 
 function buildAssigneeOptions(user, changeItem, projectMembers = []) {
   const options = new Map();
@@ -155,6 +156,12 @@ export function ReviewPanelPage() {
     return true;
   });
   const selectedChangeId = resolveSelectedChangeId(compareRun, filteredQueue, requestedChangeId);
+  const selectedChangeIdRef = useRef(null);
+  const selectedChangeReady = Boolean(
+    changeItem
+    && selectedChangeId
+    && String(changeItem.id) === String(selectedChangeId)
+  );
   const selectedQueueIndex = filteredQueue.findIndex((item) => item.id === selectedChangeId);
   const totalPages = Math.max(1, Math.ceil(filteredQueue.length / REVIEW_QUEUE_PAGE_SIZE));
   const requestedPage = Number.parseInt(searchParams.get("page") ?? "", 10);
@@ -213,6 +220,14 @@ export function ReviewPanelPage() {
   }, [compareRunId, logout, token]);
 
   useEffect(() => {
+    selectedChangeIdRef.current = selectedChangeId ? String(selectedChangeId) : null;
+  }, [selectedChangeId]);
+
+  function isStillSelectedChange(changeId) {
+    return selectedChangeIdRef.current === String(changeId);
+  }
+
+  useEffect(() => {
     let isCurrent = true;
 
     async function loadSelectedChange() {
@@ -221,8 +236,15 @@ export function ReviewPanelPage() {
         setReviewStatus("open");
         setAssigneeUserId("");
         setReviewSummary("");
+        setCommentDraft("");
         return;
       }
+
+      setChangeItem(null);
+      setReviewStatus("open");
+      setAssigneeUserId("");
+      setReviewSummary("");
+      setCommentDraft("");
 
       try {
         const changeItemPayload = await getChangeItem(token, selectedChangeId);
@@ -271,10 +293,11 @@ export function ReviewPanelPage() {
   }
 
   async function handleSaveReview() {
-    if (!changeItem) {
+    if (!selectedChangeReady) {
       return;
     }
 
+    const activeChangeId = changeItem.id;
     setIsSavingReview(true);
     setError("");
     setReviewMessage("");
@@ -288,7 +311,6 @@ export function ReviewPanelPage() {
         summary: reviewSummary.trim() || null
       });
 
-      setChangeItem(payload);
       setQueue((currentQueue) =>
         currentQueue.map((item) =>
           item.id === payload.id
@@ -300,10 +322,13 @@ export function ReviewPanelPage() {
             : item
         )
       );
-      setReviewStatus(payload.review_status);
-      setAssigneeUserId(payload.assignee_user_id ? String(payload.assignee_user_id) : "");
-      setReviewSummary(payload.summary ?? "");
-      setReviewMessage("Review saved successfully.");
+      if (isStillSelectedChange(activeChangeId)) {
+        setChangeItem(payload);
+        setReviewStatus(payload.review_status);
+        setAssigneeUserId(payload.assignee_user_id ? String(payload.assignee_user_id) : "");
+        setReviewSummary(payload.summary ?? "");
+        setReviewMessage("Review saved successfully.");
+      }
     } catch (saveError) {
       if (saveError instanceof ApiError && saveError.status === 401) {
         logout();
@@ -317,10 +342,11 @@ export function ReviewPanelPage() {
   }
 
   async function handleAddComment() {
-    if (!changeItem) {
+    if (!selectedChangeReady) {
       return;
     }
 
+    const activeChangeId = changeItem.id;
     const nextComment = commentDraft.trim();
     if (!nextComment) {
       setError("Review comment is required.");
@@ -338,8 +364,12 @@ export function ReviewPanelPage() {
         content: nextComment
       });
 
+      if (!isStillSelectedChange(activeChangeId)) {
+        return;
+      }
+
       setChangeItem((currentValue) => {
-        if (!currentValue) {
+        if (!currentValue || String(currentValue.id) !== String(activeChangeId)) {
           return currentValue;
         }
 
@@ -363,10 +393,11 @@ export function ReviewPanelPage() {
   }
 
   async function handleRegenerateAiDraft() {
-    if (!changeItem) {
+    if (!selectedChangeReady) {
       return;
     }
 
+    const activeChangeId = changeItem.id;
     setIsRegeneratingAiDraft(true);
     setError("");
     setReviewMessage("");
@@ -378,8 +409,12 @@ export function ReviewPanelPage() {
         force_regenerate: true
       });
 
+      if (!isStillSelectedChange(activeChangeId)) {
+        return;
+      }
+
       setChangeItem((currentValue) => {
-        if (!currentValue) {
+        if (!currentValue || String(currentValue.id) !== String(activeChangeId)) {
           return currentValue;
         }
 
@@ -435,8 +470,35 @@ export function ReviewPanelPage() {
   const oldTokens = diffParts.filter(p => !p.added);
   const newTokens = diffParts.filter(p => !p.removed);
 
+  /* ── Keyboard shortcuts ── */
+  useEffect(() => {
+    function handleKeyDown(e) {
+      const tag = document.activeElement?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+      if (e.key === 'j' || e.key === 'J') {
+        if (prevChange) updateQueueParams({ change: String(prevChange.id) });
+      } else if (e.key === 'k' || e.key === 'K') {
+        if (nextChange) updateQueueParams({ change: String(nextChange.id) });
+      } else if (e.key === '1') {
+        setReviewStatus('open');
+      } else if (e.key === '2') {
+        setReviewStatus('in_review');
+      } else if (e.key === '3') {
+        setReviewStatus('resolved');
+      } else if (e.key === 'q' || e.key === 'Q') {
+        setQueueOpen(o => !o);
+      } else if (e.key === 's' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        handleSaveReview();
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [prevChange, nextChange]);
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', width: '100%', height: 'calc(100vh - 64px)', background: '#FFFFFF', color: '#1E2026', fontFamily: 'Inter, sans-serif', position: 'relative' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', width: '100%', height: 'calc(100vh - 64px)', background: '#F5F5F5', color: '#1E2026', fontFamily: 'Inter, sans-serif', position: 'relative' }}>
 
       {/* ─── Global Styles ───────────────────────────────────────── */}
       <style>{`
@@ -586,7 +648,7 @@ export function ReviewPanelPage() {
               <div style={{ flexShrink: 0, height: '36px', display: 'flex', alignItems: 'center', padding: '0 24px', background: '#FFF1F0', borderBottom: '1px solid #F6465D22', gap: '8px' }}>
                 <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: '#F6465D', flexShrink: 0 }} />
                 <span style={{ fontSize: '10px', fontWeight: 700, color: '#C03050', textTransform: 'uppercase', letterSpacing: '.07em' }}>Original</span>
-                <span style={{ fontSize: '10px', color: '#C03050', opacity: .7, marginLeft: '4px' }}>{compareRun?.source_version?.version_label ?? 'v1'}</span>
+                <span title={compareRun?.source_version?.version_label ?? 'v1'} style={{ fontSize: '10px', color: '#C03050', opacity: .7, marginLeft: '4px', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-block', verticalAlign: 'middle' }}>{compareRun?.source_version?.version_label ?? 'v1'}</span>
               </div>
               <div className="jv-half-body">
                 {diffParts.length === 0
@@ -605,7 +667,7 @@ export function ReviewPanelPage() {
               <div style={{ flexShrink: 0, height: '36px', display: 'flex', alignItems: 'center', padding: '0 24px', background: '#EBF9F4', borderBottom: '1px solid #2EBD8522', gap: '8px' }}>
                 <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: '#2EBD85', flexShrink: 0 }} />
                 <span style={{ fontSize: '10px', fontWeight: 700, color: '#16714E', textTransform: 'uppercase', letterSpacing: '.07em' }}>Revised</span>
-                <span style={{ fontSize: '10px', color: '#16714E', opacity: .7, marginLeft: '4px' }}>{compareRun?.target_version?.version_label ?? 'v2'}</span>
+                <span title={compareRun?.target_version?.version_label ?? 'v2'} style={{ fontSize: '10px', color: '#16714E', opacity: .7, marginLeft: '4px', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-block', verticalAlign: 'middle' }}>{compareRun?.target_version?.version_label ?? 'v2'}</span>
                 {changeItem.ai_review_draft && (() => {
                   const risk = (changeItem.ai_review_draft.risk_level || '').toLowerCase();
                   const cfg = { high: ['#FFF1F0', '#C03050'], medium: ['#FFF8E6', '#B07D0A'], low: ['#EBF9F4', '#16714E'] };
@@ -656,11 +718,27 @@ export function ReviewPanelPage() {
                       AI error: {changeItem.ai_review_draft.error_message}
                     </p>
                   )}
+                  {/* Action: Apply AI explanation as review summary */}
+                  <button type="button"
+                    onClick={() => { setReviewSummary(changeItem.ai_review_draft.explanation); setReviewMessage('AI insight applied as review note.'); }}
+                    style={{ marginTop: '8px', width: '100%', padding: '5px 0', borderRadius: '6px', border: '1px solid #F0B90B44', background: '#FFF8E6', color: '#B07D0A', fontSize: '10px', fontWeight: 700, cursor: 'pointer', transition: 'all 150ms' }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#F0B90B22'}
+                    onMouseLeave={e => e.currentTarget.style.background = '#FFF8E6'}>
+                    ✦ Apply as Review Note
+                  </button>
                 </div>
                 {changeItem.ai_review_draft.draft_comment && (
                   <div style={{ padding: '10px 14px', borderBottom: '1px solid #E6E8EA' }}>
                     <p style={{ fontSize: '9px', fontWeight: 700, color: '#2EBD85', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '5px' }}>✦ Suggested Redline</p>
                     <p style={{ fontSize: '11px', color: '#474D57', fontFamily: 'JetBrains Mono, monospace', lineHeight: 1.7 }}>{changeItem.ai_review_draft.draft_comment}</p>
+                    {/* Action: Post AI draft as comment */}
+                    <button type="button"
+                      onClick={() => { setCommentDraft(changeItem.ai_review_draft.draft_comment); setCommentsOpen(true); }}
+                      style={{ marginTop: '6px', width: '100%', padding: '5px 0', borderRadius: '6px', border: '1px solid #2EBD8544', background: '#EBF9F4', color: '#16714E', fontSize: '10px', fontWeight: 700, cursor: 'pointer', transition: 'all 150ms' }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#2EBD8522'}
+                      onMouseLeave={e => e.currentTarget.style.background = '#EBF9F4'}>
+                      💬 Use as Comment Draft
+                    </button>
                   </div>
                 )}
                 {changeItem.ai_review_draft.suggested_checks && (
@@ -689,7 +767,7 @@ export function ReviewPanelPage() {
       </div>
 
       {/* ─── BOTTOM DECISION BAR ─────────────────────────────────── */}
-      {changeItem && (
+      {selectedChangeReady && (
         <section role="region" aria-label="Human review command" style={{ flexShrink: 0, height: '72px', borderTop: '2px solid #E6E8EA', background: '#fff', display: 'flex', alignItems: 'center', padding: '0 20px', gap: '14px', zIndex: 10, boxShadow: '0 -4px 20px rgba(0,0,0,0.06)' }}>
 
           {/* Status quick chips */}
@@ -737,11 +815,10 @@ export function ReviewPanelPage() {
           <div style={{ width: '1px', height: '32px', background: '#E6E8EA', flexShrink: 0 }} />
 
           {/* Banners */}
-          {(error || reviewMessage) && (
-            <span style={{ fontSize: '11px', color: error ? '#C03050' : '#16714E', flexShrink: 0, maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {error || reviewMessage}
-            </span>
-          )}
+          {error && <Toast message={error} type="error" onClose={() => setError("")} />}
+          {reviewMessage && <Toast message={reviewMessage} type="success" onClose={() => setReviewMessage("")} />}
+          {commentMessage && <Toast message={commentMessage} type="success" onClose={() => setCommentMessage("")} />}
+          {aiMessage && <Toast message={aiMessage} type="success" onClose={() => setAiMessage("")} />}
 
           {/* Comments toggle */}
           <button type="button" aria-label="Toggle comments" onClick={() => setCommentsOpen(o => !o)}
@@ -750,20 +827,20 @@ export function ReviewPanelPage() {
           </button>
 
           {/* AI Review */}
-          <button type="button" disabled={isRegeneratingAiDraft || !changeItem} onClick={handleRegenerateAiDraft}
+          <button type="button" disabled={isRegeneratingAiDraft || !selectedChangeReady} onClick={handleRegenerateAiDraft}
             onMouseEnter={e => { if (!e.currentTarget.disabled) { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(240,185,11,0.35)'; } }}
             onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 2px 6px rgba(240,185,11,0.2)'; }}
-            style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 14px', borderRadius: '7px', background: '#F4F5F7', color: '#474D57', border: '1px solid #E6E8EA', fontSize: '12px', fontWeight: 700, cursor: isRegeneratingAiDraft || !changeItem ? 'not-allowed' : 'pointer', opacity: isRegeneratingAiDraft || !changeItem ? 0.5 : 1, transition: 'all 150ms', flexShrink: 0 }}>
+            style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 14px', borderRadius: '7px', background: '#F4F5F7', color: '#474D57', border: '1px solid #E6E8EA', fontSize: '12px', fontWeight: 700, cursor: isRegeneratingAiDraft || !selectedChangeReady ? 'not-allowed' : 'pointer', opacity: isRegeneratingAiDraft || !selectedChangeReady ? 0.5 : 1, transition: 'all 150ms', flexShrink: 0 }}>
             {isRegeneratingAiDraft
               ? <><div style={{ width: '11px', height: '11px', borderRadius: '50%', border: '2px solid rgba(71,77,87,0.3)', borderTopColor: '#474D57', animation: 'rwSpin 0.8s linear infinite' }} /> Generating…</>
               : <><Sparkles size={13} /> {changeItem?.ai_review_draft ? 'Refresh AI' : 'AI Review'}</>}
           </button>
 
           {/* Save */}
-          <button type="button" disabled={isSavingReview} onClick={handleSaveReview}
+          <button type="button" disabled={isSavingReview || !selectedChangeReady} onClick={handleSaveReview}
             onMouseEnter={e => { if (!e.currentTarget.disabled) { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(240,185,11,0.4)'; } }}
             onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 2px 6px rgba(240,185,11,0.2)'; }}
-            style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 20px', borderRadius: '8px', background: '#F0B90B', color: '#1E2026', border: 'none', fontSize: '13px', fontWeight: 700, cursor: isSavingReview ? 'not-allowed' : 'pointer', opacity: isSavingReview ? 0.6 : 1, boxShadow: '0 2px 6px rgba(240,185,11,0.2)', transition: 'all 150ms', flexShrink: 0 }}>
+            style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 20px', borderRadius: '8px', background: '#F0B90B', color: '#1E2026', border: 'none', fontSize: '13px', fontWeight: 700, cursor: isSavingReview || !selectedChangeReady ? 'not-allowed' : 'pointer', opacity: isSavingReview || !selectedChangeReady ? 0.6 : 1, boxShadow: '0 2px 6px rgba(240,185,11,0.2)', transition: 'all 150ms', flexShrink: 0 }}>
             {isSavingReview
               ? <><div style={{ width: '12px', height: '12px', borderRadius: '50%', border: '2px solid rgba(30,32,38,0.2)', borderTopColor: '#1E2026', animation: 'rwSpin 0.8s linear infinite' }} /> Saving…</>
               : <><Save size={14} /> Save</>}
@@ -772,8 +849,8 @@ export function ReviewPanelPage() {
       )}
 
       {/* ─── COMMENTS SLIDE-UP DRAWER ───────────────────────────── */}
-      {commentsOpen && changeItem && (
-        <div className="rw-fade-up" style={{ position: 'absolute', bottom: changeItem ? '72px' : '0', right: 0, width: '340px', maxHeight: '420px', background: '#fff', borderLeft: '1px solid #E6E8EA', borderTop: '1px solid #E6E8EA', borderRadius: '12px 0 0 0', display: 'flex', flexDirection: 'column', zIndex: 20, boxShadow: '-4px -4px 20px rgba(0,0,0,0.08)' }}>
+      {commentsOpen && selectedChangeReady && (
+        <div className="rw-fade-up" style={{ position: 'absolute', bottom: selectedChangeReady ? '72px' : '0', right: 0, width: '340px', maxHeight: '420px', background: '#fff', borderLeft: '1px solid #E6E8EA', borderTop: '1px solid #E6E8EA', borderRadius: '12px 0 0 0', display: 'flex', flexDirection: 'column', zIndex: 20, boxShadow: '-4px -4px 20px rgba(0,0,0,0.08)' }}>
           {/* Drawer header */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid #E6E8EA' }}>
             <span style={{ fontSize: '11px', fontWeight: 700, color: '#848E9C', textTransform: 'uppercase', letterSpacing: '.06em' }}>💬 Comments {changeItem.comments?.length > 0 ? `(${changeItem.comments.length})` : ''}</span>
@@ -809,8 +886,8 @@ export function ReviewPanelPage() {
               style={{ flex: 1, padding: '6px 10px', borderRadius: '6px', border: '1px solid #E6E8EA', background: '#F4F5F7', color: '#1E2026', fontSize: '12px', outline: 'none' }}
               onFocus={e => e.target.style.borderColor = '#F0B90B'}
               onBlur={e => e.target.style.borderColor = '#E6E8EA'} />
-            <button type="button" disabled={isSubmittingComment} onClick={handleAddComment}
-              style={{ padding: '6px 12px', borderRadius: '6px', background: '#F0B90B', color: '#1E2026', border: 'none', fontSize: '12px', fontWeight: 700, cursor: isSubmittingComment ? 'not-allowed' : 'pointer', opacity: isSubmittingComment ? 0.6 : 1 }}>
+            <button type="button" disabled={isSubmittingComment || !selectedChangeReady} onClick={handleAddComment}
+              style={{ padding: '6px 12px', borderRadius: '6px', background: '#F0B90B', color: '#1E2026', border: 'none', fontSize: '12px', fontWeight: 700, cursor: isSubmittingComment || !selectedChangeReady ? 'not-allowed' : 'pointer', opacity: isSubmittingComment || !selectedChangeReady ? 0.6 : 1 }}>
               {isSubmittingComment ? '…' : 'Post'}
             </button>
           </div>

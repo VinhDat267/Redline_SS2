@@ -177,7 +177,7 @@ function VersionCard({ version, isActive, onParse, onSelect, isParsing }) {
   return (
     <div className={`parser-version-card ${isActive ? "parser-version-card-active" : ""}`}>
       <div className="parser-version-card-topline">
-        <p className="parser-version-title">{version.version_label}</p>
+        <p className="parser-version-title" title={version.version_label} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{version.version_label}</p>
         <span className={`workspace-chip ${statusTone}`}>{version.parse_status}</span>
       </div>
       <p className="parser-version-meta">{version.file_name}</p>
@@ -1326,8 +1326,8 @@ export function ParserWorkspacePage() {
             <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#848E9C' }}>Versions</span>
             <div className="flex items-center gap-2">
               {selectedVersion && (
-                <span className="text-[10px] font-bold px-1.5 py-0.5" style={{ borderRadius: '4px', background: '#FFF8E6', color: '#B07D0A' }}>
-                  {selectedVersion.version_label.split(' ').slice(-1)[0]}
+                <span className="text-[10px] font-bold px-1.5 py-0.5" title={selectedVersion.version_label} style={{ borderRadius: '4px', background: '#FFF8E6', color: '#B07D0A', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-block' }}>
+                  {selectedVersion.version_label.length > 20 ? selectedVersion.version_label.slice(0, 20) + '…' : selectedVersion.version_label}
                 </span>
               )}
               <ChevronDown size={13} style={{ color: '#848E9C', transform: sidebarOpen.versions ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 200ms ease' }} />
@@ -1361,7 +1361,7 @@ export function ParserWorkspacePage() {
                     >
                       <div className="flex items-center gap-2 min-w-0">
                         <FileText size={13} style={{ color: isActive ? '#B07D0A' : '#848E9C', flexShrink: 0 }} />
-                        <span className="text-[12px] font-medium truncate" style={{ color: isActive ? '#1E2026' : '#474D57' }}>
+                        <span className="text-[12px] font-medium truncate" title={version.version_label} style={{ color: isActive ? '#1E2026' : '#474D57', maxWidth: '140px', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {version.version_label}
                         </span>
                       </div>

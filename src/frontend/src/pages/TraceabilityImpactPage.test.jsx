@@ -580,6 +580,56 @@ describe("TraceabilityImpactPage", () => {
     });
   });
 
+  test("logs out when a traceability mutation returns unauthorized", async () => {
+    fetch.mockImplementation((input, init = {}) => {
+      const url = String(input);
+      const method = init.method || "GET";
+
+      if (url.endsWith("/api/v1/compare-runs/55")) {
+        return Promise.resolve(jsonResponse(buildCompareRunPayload()));
+      }
+
+      if (url.endsWith("/api/v1/compare-runs/55/change-items")) {
+        return Promise.resolve(jsonResponse(buildQueuePayload()));
+      }
+
+      if (url.endsWith("/api/v1/change-items/900") && method === "GET") {
+        return Promise.resolve(jsonResponse(buildChangeItemPayload()));
+      }
+
+      if (url.endsWith("/api/v1/projects/1/requirements")) {
+        return Promise.resolve(jsonResponse(buildRequirementsPayload()));
+      }
+
+      if (url.endsWith("/api/v1/projects/1/test-cases")) {
+        return Promise.resolve(jsonResponse(buildTestCasesPayload()));
+      }
+
+      if (url.endsWith("/api/v1/change-items/900/requirement-links") && method === "POST") {
+        return Promise.resolve(jsonResponse({ detail: "Your session has expired. Please sign in again." }, 401));
+      }
+
+      if (url.endsWith("/api/v1/auth/logout") && method === "POST") {
+        return Promise.resolve(jsonResponse({ data: { ok: true } }));
+      }
+
+      return Promise.reject(new Error(`Unhandled request: ${url} ${method}`));
+    });
+
+    renderImpactPage();
+
+    const [linkObligationSelect] = await screen.findAllByRole("combobox");
+    fireEvent.change(linkObligationSelect, { target: { value: "701" } });
+    fireEvent.click(screen.getByRole("button", { name: /^link obligation$/i }));
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringMatching(/\/api\/v1\/auth\/logout$/),
+        expect.objectContaining({ method: "POST" })
+      );
+    });
+  });
+
   test("clears stale mapping selections after unlinking the selected obligation", async () => {
     const initialPayload = buildChangeItemPayload({
       linked_requirements: [

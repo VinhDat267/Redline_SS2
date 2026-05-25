@@ -264,7 +264,7 @@ cd src/backend
 .\.venv\Scripts\python -m pytest tests -q
 ```
 
-Expected baseline: `285 passed`.
+Expected baseline: `291 passed`.
 
 ### Frontend
 
@@ -275,7 +275,7 @@ npm run build
 npm audit
 ```
 
-Expected baseline: `117 passed`, build succeeds, `0 vulnerabilities`.
+Expected baseline: `140 passed`, build succeeds, `0 vulnerabilities`.
 
 ## Backend Test File Map
 

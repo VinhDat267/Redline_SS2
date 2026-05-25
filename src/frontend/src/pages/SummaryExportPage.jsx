@@ -57,13 +57,6 @@ export function SummaryExportPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isExportingDocx, setIsExportingDocx] = useState(false);
 
-  const handleExportDocx = async () => {
-    setIsExportingDocx(true); setError("");
-    try { await exportCompareRunDocx(token, compareRunId, editableText.trim() || null); }
-    catch (e) { if (e instanceof ApiError && e.status === 401) { logout(); return; } setError(e.message); }
-    finally { setIsExportingDocx(false); }
-  };
-
   const handleGenerateSummary = async () => {
     setIsGenerating(true); setError("");
     try {
@@ -98,6 +91,7 @@ export function SummaryExportPage() {
   const summaryWordCount = countWords(editableText);
   const hasSummaryDraft = editableText.trim().length > 0;
   const readyToExport = reviewCounts.open === 0 && reviewCounts.inReview === 0;
+  const canExportDocx = readyToExport && hasSummaryDraft && !isExportingDocx;
   const activeReviewCount = reviewCounts.open + reviewCounts.inReview;
   const totalChanges = compareRun?.summary?.total_changes ?? queue.length;
   const resolvedPct = totalChanges > 0 ? Math.round((reviewCounts.resolved / totalChanges) * 100) : 0;
@@ -105,6 +99,17 @@ export function SummaryExportPage() {
   const reviewPath = buildCompareRunPath(compareRunId, "/review", selectedChangeId);
   const impactPath = buildCompareRunPath(compareRunId, "/impact", selectedChangeId);
   const comparePath = buildCompareRunPath(compareRunId, "", selectedChangeId);
+
+  const handleExportDocx = async () => {
+    if (!canExportDocx) {
+      return;
+    }
+
+    setIsExportingDocx(true); setError("");
+    try { await exportCompareRunDocx(token, compareRunId, editableText.trim()); }
+    catch (e) { if (e instanceof ApiError && e.status === 401) { logout(); return; } setError(e.message); }
+    finally { setIsExportingDocx(false); }
+  };
 
   /* word-level diff for focus panel */
   const diffParts = useMemo(() => {
@@ -115,7 +120,7 @@ export function SummaryExportPage() {
   }, [highlightedItem?.id, highlightedItem?.old_content, highlightedItem?.new_content]);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", overflow: "hidden", width: "100%", height: "calc(100vh - 64px)", background: "#F6F7F9", color: "#1E2026", fontFamily: "Inter, sans-serif", position: "relative" }}>
+    <div style={{ display: "flex", flexDirection: "column", overflow: "hidden", width: "100%", height: "calc(100vh - 64px)", background: "#F5F5F5", color: "#1E2026", fontFamily: "Inter, sans-serif", position: "relative" }}>
 
       {/* ── Styles ─────────────────────────────────────────────── */}
       <style>{`
@@ -189,8 +194,8 @@ export function SummaryExportPage() {
             disabled={!hasSummaryDraft} onClick={() => hasSummaryDraft && exportMarkdownDraft(editableText, compareRun?.id ?? compareRunId)}>
             <Download size={13} /> Markdown
           </button>
-          <button type="button" disabled={isExportingDocx} onClick={handleExportDocx}
-            style={{ display: "flex", alignItems: "center", gap: "5px", padding: "6px 16px", borderRadius: "7px", background: "#F0B90B", color: "#1E2026", border: "none", fontSize: "12px", fontWeight: 700, cursor: isExportingDocx ? "not-allowed" : "pointer", opacity: isExportingDocx ? .6 : 1, boxShadow: "0 2px 6px rgba(240,185,11,0.25)", transition: "all 150ms", flexShrink: 0 }}
+          <button type="button" disabled={!canExportDocx} onClick={handleExportDocx}
+            style={{ display: "flex", alignItems: "center", gap: "5px", padding: "6px 16px", borderRadius: "7px", background: "#F0B90B", color: "#1E2026", border: "none", fontSize: "12px", fontWeight: 700, cursor: !canExportDocx ? "not-allowed" : "pointer", opacity: !canExportDocx ? .6 : 1, boxShadow: "0 2px 6px rgba(240,185,11,0.25)", transition: "all 150ms", flexShrink: 0 }}
             onMouseEnter={e => { if (!e.currentTarget.disabled) { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 4px 12px rgba(240,185,11,0.4)"; } }}
             onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.boxShadow = "0 2px 6px rgba(240,185,11,0.25)"; }}>
             {isExportingDocx ? <><div className="se-spinner" /> Exporting…</> : <><FileDown size={13} /> Export DOCX</>}
@@ -286,7 +291,7 @@ export function SummaryExportPage() {
 
             <div style={{ flex: 1, overflowY: "auto", padding: "16px" }}>
               {hasSummaryDraft ? (
-                <textarea className="se-textarea" style={{ minHeight: "100%" }} value={editableText} onChange={e => setEditableText(e.target.value)} />
+                <textarea aria-label="Executive summary draft" className="se-textarea" style={{ minHeight: "100%" }} value={editableText} onChange={e => setEditableText(e.target.value)} />
               ) : (
                 <div style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "12px", textAlign: "center" }}>
                   <div style={{ width: "48px", height: "48px", borderRadius: "12px", background: "#F4F5F7", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -425,7 +430,7 @@ export function SummaryExportPage() {
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "7px", marginBottom: "12px" }}>
-              <button type="button" className="se-btn-primary" disabled={isExportingDocx} onClick={handleExportDocx}>
+              <button type="button" className="se-btn-primary" disabled={!canExportDocx} onClick={handleExportDocx}>
                 {isExportingDocx ? <><div className="se-spinner" /> Exporting…</> : <><FileDown size={13} /> Export DOCX</>}
               </button>
               <button type="button" className="se-btn-secondary" disabled={!hasSummaryDraft}

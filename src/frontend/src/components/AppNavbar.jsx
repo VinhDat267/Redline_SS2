@@ -389,7 +389,10 @@ export function AppNavbar() {
                 title="Clear active project"
                 className="flex items-center justify-center w-4 h-4 bg-transparent border-none text-[#848E9C] cursor-pointer hover:text-[#F6465D] ml-0.5"
                 style={{ padding: 0 }}
-                onClick={clearActiveProject}
+                onClick={() => {
+                  clearActiveProject();
+                  navigate("/dashboard");
+                }}
               >
                 <X size={11} />
               </button>

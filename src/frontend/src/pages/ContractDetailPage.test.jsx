@@ -417,4 +417,46 @@ describe("ContractDetailPage", () => {
     );
     expect(postCalls).toHaveLength(0);
   });
+  test("renders friendly status labels in the Draft History table", async () => {
+    fetch.mockImplementation((input, init = {}) => {
+      const url = String(input);
+      const method = init.method || "GET";
+      if (url.endsWith("/api/v1/contracts/10") && method === "GET") {
+        return Promise.resolve(
+          jsonResponse({
+            data: {
+              id: 10, project_id: 1, title: "Status Label Test Contract",
+              contract_type: "MSA", description: null,
+              created_at: "2026-03-26T08:00:00Z", updated_at: "2026-03-26T09:00:00Z"
+            }
+          })
+        );
+      }
+      if (url.endsWith("/api/v1/contracts/10/drafts") && method === "GET") {
+        return Promise.resolve(
+          jsonResponse({
+            data: [
+              { id: 601, contract_id: 10, draft_label: "draft-parsed", file_name: "a.docx", parse_status: "parsed", notes: null, uploaded_by_display_name: "Tester", uploaded_at: "2026-03-26T08:00:00Z", active_parse_run_id: 601 },
+              { id: 602, contract_id: 10, draft_label: "draft-warned", file_name: "b.docx", parse_status: "parsed_with_warnings", notes: null, uploaded_by_display_name: "Tester", uploaded_at: "2026-03-26T08:01:00Z", active_parse_run_id: 602 },
+              { id: 603, contract_id: 10, draft_label: "draft-failed", file_name: "c.docx", parse_status: "failed", notes: null, uploaded_by_display_name: "Tester", uploaded_at: "2026-03-26T08:02:00Z", active_parse_run_id: null },
+              { id: 604, contract_id: 10, draft_label: "draft-pending", file_name: "d.docx", parse_status: "pending", notes: null, uploaded_by_display_name: "Tester", uploaded_at: "2026-03-26T08:03:00Z", active_parse_run_id: null }
+            ]
+          })
+        );
+      }
+      if (url.includes("/api/v1/contracts/10/compare-runs") && method === "GET") {
+        return Promise.resolve(jsonResponse({ data: [] }));
+      }
+      return Promise.reject(new Error(`Unhandled: ${url} ${method}`));
+    });
+    renderContractDetail();
+    await screen.findByRole("heading", { name: /draft history/i });
+    // Should show friendly labels not raw parse_status strings
+    expect(screen.getByText("Parsed")).toBeInTheDocument();
+    expect(screen.getByText(/parsed ⚠/i)).toBeInTheDocument();
+    expect(screen.getByText("Failed")).toBeInTheDocument();
+    expect(screen.getByText("Pending")).toBeInTheDocument();
+    // Should NOT render raw snake_case status strings
+    expect(screen.queryByText("parsed_with_warnings")).not.toBeInTheDocument();
+  });
 });

@@ -43,6 +43,14 @@ function getDraftStatusTone(draft) {
   if (parseStatus === "parsed_with_warnings") return "bg-[#FFF8E1] border border-[#FFE082] text-[#FF8F00]";
   return "bg-[#F5F5F5] border border-[#E6E8EA] text-[#848E9C]";
 }
+function getDraftStatusLabel(draft) {
+  const parseStatus = draft.parse_status?.toLowerCase();
+  if (parseStatus === "parsed") return "Parsed";
+  if (parseStatus === "parsed_with_warnings") return "Parsed ⚠";
+  if (parseStatus === "failed") return "Failed";
+  if (parseStatus === "parsing") return "Parsing…";
+  return draft.parse_status || "Pending";
+}
 function getDraftQuality(draft) {
   const parseStatus = draft.parse_status?.toLowerCase();
   if (parseStatus === "parsed") return { label: "Pass", tone: "teal", icon: CheckCircle2 };
@@ -376,12 +384,12 @@ export function ContractDetailPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-left" style={{ borderCollapse: "collapse", tableLayout: "fixed" }}>
                 <colgroup>
-                  <col style={{ width: "22%" }} />
-                  <col style={{ width: "26%" }} />
-                  <col style={{ width: "11%" }} />
-                  <col style={{ width: "11%" }} />
                   <col style={{ width: "18%" }} />
-                  <col style={{ width: "8%" }} />
+                  <col style={{ width: "22%" }} />
+                  <col style={{ width: "14%" }} />
+                  <col style={{ width: "10%" }} />
+                  <col style={{ width: "20%" }} />
+                  <col style={{ width: "12%" }} />
                   <col style={{ width: "4%" }} />
                 </colgroup>
                 <thead>
@@ -406,7 +414,7 @@ export function ContractDetailPage() {
                         </td>
                         <td className="py-3 px-3 text-[12px] font-medium text-[#474D57]" title={draft.file_name} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "200px" }}>{draft.file_name}</td>
                         <td className="py-3 px-3">
-                          <span className={`px-2 py-0.5 text-[11px] uppercase tracking-wider font-semibold ${getDraftStatusTone(draft)}`} style={{ borderRadius: "4px" }}>{draft.parse_status}</span>
+                          <span className={`inline-block max-w-full px-2 py-0.5 text-[11px] uppercase tracking-wider font-semibold ${getDraftStatusTone(draft)}`} style={{ borderRadius: "4px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={draft.parse_status}>{getDraftStatusLabel(draft)}</span>
                         </td>
                         <td className="py-3 px-3">
                           <span className={`inline-flex items-center gap-1 px-2 py-0.5 border text-[11px] uppercase tracking-wider font-semibold ${qualityColor}`} style={{ borderRadius: "4px" }}>

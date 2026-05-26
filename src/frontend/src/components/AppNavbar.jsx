@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   FolderOpen, FileText, ScanSearch, GitCompare, ClipboardCheck,
-  MessageSquare, BarChart3, LogOut, Settings, X, ChevronDown,
+  MessageSquare, BarChart3, LogOut, Settings, X, ChevronDown, Bell, Check,
 } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import { useActiveProject } from "../context/ActiveProjectContext";
@@ -205,8 +205,145 @@ function ProfileDropdown({ displayName, email, initial, avatarUrl, onLogout }) {
   );
 }
 
+/* ─── Notification Bell ─── */
+function NotificationBell({ invitations, onAccept }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [accepting, setAccepting] = useState(null);
+  const ref = useRef(null);
+  const count = invitations.length;
+
+  const close = useCallback(() => setIsOpen(false), []);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    function handleClickOutside(e) {
+      if (ref.current && !ref.current.contains(e.target)) close();
+    }
+    function handleEscape(e) {
+      if (e.key === "Escape") close();
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [isOpen, close]);
+
+  async function handleAccept(inv) {
+    setAccepting(inv.id);
+    try {
+      await onAccept(inv.id);
+    } finally {
+      setAccepting(null);
+    }
+  }
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        aria-label={`Notifications — ${count} pending invitation${count !== 1 ? "s" : ""}`}
+        className="relative flex items-center justify-center w-9 h-9 border border-[#E6E8EA] bg-white cursor-pointer"
+        style={{
+          borderRadius: "50%",
+          transition: "all 200ms ease",
+          border: isOpen ? "1px solid #F0B90B" : "1px solid #E6E8EA",
+          background: isOpen ? "#FFF8E6" : "#FFFFFF",
+        }}
+        onClick={() => setIsOpen(prev => !prev)}
+        onMouseEnter={e => { if (!isOpen) { e.currentTarget.style.borderColor = "#F0B90B"; e.currentTarget.style.background = "#FFF8E6"; } }}
+        onMouseLeave={e => { if (!isOpen) { e.currentTarget.style.borderColor = "#E6E8EA"; e.currentTarget.style.background = "#FFFFFF"; } }}
+      >
+        <Bell size={16} className="text-[#474D57]" />
+        {count > 0 && (
+          <span
+            className="absolute -top-1 -right-1 flex items-center justify-center text-white text-[9px] font-bold bg-[#F6465D] min-w-[16px] h-4 px-0.5"
+            style={{ borderRadius: "50px", lineHeight: 1 }}
+          >
+            {count > 9 ? "9+" : count}
+          </span>
+        )}
+      </button>
+
+      {/* Dropdown */}
+      {isOpen && (
+        <div
+          className="absolute right-0 mt-2 w-[320px] bg-white border border-[#E6E8EA] overflow-hidden"
+          style={{
+            borderRadius: "12px",
+            boxShadow: "0 8px 30px rgba(0,0,0,0.10), 0 2px 8px rgba(0,0,0,0.05)",
+            animation: "profileDropdownIn 150ms ease-out",
+          }}
+        >
+          {/* Header */}
+          <div className="px-4 py-3 border-b border-[#F0F0F0] flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Bell size={14} className="text-[#F0B90B]" />
+              <span className="text-[13px] font-semibold text-[#1E2026]">Project Invitations</span>
+            </div>
+            {count > 0 && (
+              <span className="px-2 py-0.5 bg-[#F6465D]/10 text-[#F6465D] text-[11px] font-bold" style={{ borderRadius: "50px" }}>
+                {count} pending
+              </span>
+            )}
+          </div>
+
+          {/* List */}
+          {count === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <Bell size={24} className="text-[#C0C6CF] mb-2" />
+              <p className="text-[13px] font-medium text-[#848E9C]">No pending invitations</p>
+            </div>
+          ) : (
+            <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+              {invitations.map(inv => (
+                <li key={inv.id} className="px-4 py-3 border-b border-[#F5F5F5] last:border-b-0">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-2.5 min-w-0">
+                      <div
+                        className="w-8 h-8 flex items-center justify-center text-[12px] font-bold text-[#B07D00] flex-shrink-0 mt-0.5"
+                        style={{ borderRadius: "50%", background: "rgba(240,185,11,0.12)" }}
+                      >
+                        {(inv.project_name || "P")[0]?.toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[13px] font-semibold text-[#1E2026] truncate">{inv.project_name || `Project #${inv.project_id}`}</p>
+                        <p className="text-[11px] text-[#848E9C] mt-0.5">
+                          Invited by <span className="font-semibold">{inv.invited_by_display_name || "Someone"}</span>
+                          {inv.role ? ` · ${inv.role}` : ""}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      aria-label={`Accept invitation to ${inv.project_name}`}
+                      disabled={accepting === inv.id}
+                      onClick={() => handleAccept(inv)}
+                      className="flex items-center gap-1 px-2.5 py-1 bg-[#F0B90B] border-none text-[#1E2026] text-[11px] font-bold cursor-pointer disabled:opacity-50 flex-shrink-0"
+                      style={{ borderRadius: "6px", transition: "background 150ms ease" }}
+                      onMouseEnter={e => { if (accepting !== inv.id) e.currentTarget.style.background = "#E0AB0A"; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = "#F0B90B"; }}
+                    >
+                      {accepting === inv.id ? (
+                        "…"
+                      ) : (
+                        <><Check size={11} /> Accept</>
+                      )}
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AppNavbar() {
-  const { user, logout } = useAuth();
+  const { user, logout, pendingProjectInvitations, acceptPendingProjectInvitation } = useAuth();
   const { activeProject, clearActiveProject } = useActiveProject();
   const location = useLocation();
   const navigate = useNavigate();
@@ -369,6 +506,12 @@ export function AppNavbar() {
 
         {/* Right side */}
         <div className="flex items-center gap-3">
+          {/* Notification Bell */}
+          <NotificationBell
+            invitations={pendingProjectInvitations}
+            onAccept={acceptPendingProjectInvitation}
+          />
+
           {/* Active project badge */}
           {activeProject && (
             <div

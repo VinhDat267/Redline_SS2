@@ -456,7 +456,7 @@ function NotificationBell({ invitations: pendingInvitations, onAccept, token }) 
 }
 
 export function AppNavbar() {
-  const { user, logout, pendingProjectInvitations, acceptPendingProjectInvitation } = useAuth();
+  const { user, token, logout, pendingProjectInvitations, acceptPendingProjectInvitation } = useAuth();
   const { activeProject, clearActiveProject } = useActiveProject();
   const location = useLocation();
   const navigate = useNavigate();

@@ -197,10 +197,10 @@ function FeaturesSection() {
           <div className="landing-bento-card span-1">
             <div className="landing-bento-num">03</div>
             <div className="landing-bento-icon-wrap"><Bot size={22} /></div>
-            <h3 className="landing-bento-title">RAG-Enhanced AI Review</h3>
+            <h3 className="landing-bento-title">AI-Powered Review</h3>
             <p className="landing-bento-desc">
               AI analyzes each clause change with full contract context. Get risk
-              assessments, explanations, and suggested assignees powered by RAG.
+              assessments, explanations, and suggested assignees powered by AI.
             </p>
             <span className="landing-bento-tag"><Sparkles size={11} /> AI Copilot · Citation-grounded</span>
           </div>

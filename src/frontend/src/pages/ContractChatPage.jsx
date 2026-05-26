@@ -108,13 +108,12 @@ function providerBadgeLabel(message) {
   const provider = message?.provider_used;
   if (!provider) return "";
   const rawBase = provider.split(":")[0] || provider;
-  const base = rawBase.startsWith("local") ? "local" : rawBase;
   const hasCompareEvidence = Array.isArray(message.citations) && message.citations.some(c => c.compare_run_id || c.change_item_id || c.source_label);
-  if (rawBase === "local-compare") return "local · compare fallback";
-  if (hasCompareEvidence) return `${base} · compare changes`;
-  if (provider === "session-memory") return "session memory";
-  if (provider === "contract-metadata") return "contract metadata";
-  return `${base} · current draft`;
+  if (rawBase === "local-compare") return "\ud83d\udcc4 from compare changes";
+  if (hasCompareEvidence) return "\ud83d\udd04 from compare changes";
+  if (provider === "session-memory") return "\ud83d\udcac from conversation";
+  if (provider === "contract-metadata") return "\ud83d\udccb from contract info";
+  return "\ud83d\udcc4 from current draft";
 }
 function citationScopeLabel(c) { return c.source_label === "source" ? "Source" : c.source_label === "target" ? "Target" : ""; }
 function citationTitle(c) {
@@ -604,7 +603,7 @@ export function ContractChatPage() {
 
           {/* Capability badges */}
           <div style={{ display: "flex", gap: "5px", flexShrink: 0 }}>
-            {[["⚡", "RAG", "#FFF8E6", "#B07D0A"], ["🧠", "Memory", "#E8F7FD", "#1EAEDB"], ["📌", "Citations", "#EBF9F4", "#16714E"]].map(([ic, lbl, bg, col]) => (
+            {[["⚡", "Smart Search", "#FFF8E6", "#B07D0A"], ["🧠", "Memory", "#E8F7FD", "#1EAEDB"], ["📌", "Citations", "#EBF9F4", "#16714E"]].map(([ic, lbl, bg, col]) => (
               <span key={lbl} style={{ fontSize: "9px", fontWeight: 700, padding: "2px 7px", borderRadius: "4px", background: bg, color: col, border: `1px solid ${col}33` }}>{ic} {lbl}</span>
             ))}
           </div>
@@ -631,14 +630,14 @@ export function ContractChatPage() {
                 </div>
               </div>
               <div>
-                <p style={{ fontSize: "11px", fontWeight: 700, color: "#848E9C", textTransform: "uppercase", letterSpacing: ".1em", marginBottom: "8px" }}>Ready for grounded Q&A</p>
+                <p style={{ fontSize: "11px", fontWeight: 700, color: "#848E9C", textTransform: "uppercase", letterSpacing: ".1em", marginBottom: "8px" }}>Ready to answer</p>
                 <h2 style={{ fontSize: "26px", fontWeight: 800, color: "#1E2026", margin: "0 0 10px", letterSpacing: "-.02em" }}>
                   {selectedScope === "compare" ? "Ask about the comparison" : "Ask about this contract"}
                 </h2>
                 <p style={{ fontSize: "13px", color: "#848E9C", maxWidth: "400px", lineHeight: 1.7 }}>
                   {selectedScope === "compare"
                     ? "Get answers grounded in deterministic compare changes across the selected draft pair."
-                    : "Get citation-backed answers using RAG retrieval from parsed contract blocks."}
+                    : "AI searches through your contract to find verified answers with source references."}
                 </p>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "8px", maxWidth: "600px" }}>

@@ -57,8 +57,8 @@ const GATEWAY_CONTENT = {
   },
   qa: {
     title: "Contract Q&A",
-    eyebrow: "Grounded RAG Chat",
-    intro: "Q&A sessions are grounded in one contract's parsed document truth.",
+    eyebrow: "AI-Powered Q&A",
+    intro: "Ask questions and get answers directly from your contract documents.",
     icon: MessageSquareText,
     summary: "Open a contract, then start Contract Q&A to chat with document-backed citations and session memory.",
     steps: ["Open Projects", "Open a contract", "Start Contract Q&A"],

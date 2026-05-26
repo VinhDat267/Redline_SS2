@@ -169,7 +169,7 @@ def change_current_user_password(session: Session, user: User, payload: UserPass
 
 
 def _can_use_email_bound_invitations(user: User) -> bool:
-    return bool(user.google_sub)
+    return True
 
 
 def build_session_payload(session: Session, user: User) -> dict[str, object]:

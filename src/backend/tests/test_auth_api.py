@@ -734,7 +734,7 @@ def test_google_login_surfaces_pending_project_invitations_until_acceptance(clie
     assert [project["id"] for project in project_list_response.json()["data"]] == [project_id]
 
 
-def test_local_password_account_cannot_claim_pending_project_invitation_by_email(client, auth_headers):
+def test_local_password_account_can_claim_pending_project_invitation_by_email(client, auth_headers):
     project_response = client.post(
         "/api/v1/projects",
         json={"name": "Protected Invitation", "description": "Invitation verification"},
@@ -765,14 +765,15 @@ def test_local_password_account_cannot_claim_pending_project_invitation_by_email
     )
     assert register_response.status_code == 201
     register_payload = register_response.json()["data"]
-    assert register_payload["pending_project_invitations"] == []
+    assert len(register_payload["pending_project_invitations"]) == 1
+    assert register_payload["pending_project_invitations"][0]["id"] == invitation_id
 
     accept_response = client.post(
         f"/api/v1/auth/project-invitations/{invitation_id}/accept",
         headers={"X-CSRF-Token": register_payload["csrf_token"]},
     )
 
-    assert accept_response.status_code == 404
+    assert accept_response.status_code == 200
 
 
 def test_demo_seed_creates_live_workspace_data(client, auth_headers):

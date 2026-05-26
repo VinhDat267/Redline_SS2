@@ -406,9 +406,9 @@ def test_create_project_member_creates_pending_invitation_for_unverified_email(
     )
     assert add_known_user_response.status_code == 201
     known_user_payload = add_known_user_response.json()["data"]
-    assert known_user_payload["result_type"] == "member_added"
-    assert known_user_payload["member"]["user_email"] == "verified-reviewer@example.com"
-    assert known_user_payload["invitation"] is None
+    assert known_user_payload["result_type"] == "invitation_created"
+    assert known_user_payload["invitation"]["email"] == "verified-reviewer@example.com"
+    assert known_user_payload["member"] is None
 
     revoke_response = client.delete(
         f"/api/v1/projects/{project_id}/invitations/{invitation_id}",
@@ -421,6 +421,5 @@ def test_create_project_member_creates_pending_invitation_for_unverified_email(
         headers=auth_headers,
     )
     assert list_after_revoke_response.status_code == 200
-    assert [
-        invitation["id"] for invitation in list_after_revoke_response.json()["data"]
-    ] == [unverified_invitation_id]
+    leftover_ids = [invitation["id"] for invitation in list_after_revoke_response.json()["data"]]
+    assert sorted(leftover_ids) == sorted([unverified_invitation_id, known_user_payload["invitation"]["id"]])

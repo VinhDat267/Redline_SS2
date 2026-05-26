@@ -206,7 +206,7 @@ function ProfileDropdown({ displayName, email, initial, avatarUrl, onLogout }) {
 }
 
 /* ─── Notification Bell ─── */
-function NotificationBell({ invitations: pendingInvitations, onAccept, token }) {
+function NotificationBell({ invitations: pendingInvitations, onAccept, onDecline, token }) {
   const [isOpen, setIsOpen] = useState(false);
   const [processing, setProcessing] = useState(null); // { id, action }
   const [notifications, setNotifications] = useState([]);
@@ -264,14 +264,7 @@ function NotificationBell({ invitations: pendingInvitations, onAccept, token }) 
   async function handleDecline(inv) {
     setProcessing({ id: inv.id, action: "decline" });
     try {
-      const { declineProjectInvitation, acceptProjectInvitation: _ } = await import("../lib/api");
-      // We need the invitation's project_id — it's embedded in pendingInvitations
-      await declineProjectInvitation(token, inv.project_id, inv.id);
-      // Update session invitations list  
-      const { listNotifications: listNotifs } = await import("../lib/api");
-      const result = await listNotifs(token, { unreadOnly: false });
-      setNotifications(Array.isArray(result?.data ?? result) ? (result?.data ?? result) : []);
-      setUnreadCount(result?.unread_count ?? 0);
+      await onDecline(inv.id);
     } catch {
       // silent
     } finally {
@@ -456,7 +449,7 @@ function NotificationBell({ invitations: pendingInvitations, onAccept, token }) 
 }
 
 export function AppNavbar() {
-  const { user, token, logout, pendingProjectInvitations, acceptPendingProjectInvitation } = useAuth();
+  const { user, token, logout, pendingProjectInvitations, acceptPendingProjectInvitation, declinePendingProjectInvitation } = useAuth();
   const { activeProject, clearActiveProject } = useActiveProject();
   const location = useLocation();
   const navigate = useNavigate();
@@ -623,6 +616,7 @@ export function AppNavbar() {
           <NotificationBell
             invitations={pendingProjectInvitations}
             onAccept={acceptPendingProjectInvitation}
+            onDecline={declinePendingProjectInvitation}
             token={token}
           />
 

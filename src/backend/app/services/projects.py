@@ -89,81 +89,109 @@ def create_project_member(
     invited_by_user_id: int | None,
 ) -> dict[str, object]:
     project = get_project_or_404(session, project_id)
-    user = None
-    normalized_email = normalize_email(payload.user_email) if payload.user_email is not None else None
+
+    # A. Programmatic Direct Addition (e.g. by user_id in tests / admin actions)
     if payload.user_id is not None:
         user = session.get(User, payload.user_id)
-    elif payload.user_email is not None:
-        user = session.scalar(select(User).where(User.email == normalized_email))
-        if user is not None and not user.google_sub:
-            user = None
+        if user is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    if user is None:
-        if payload.user_email is not None:
-            invitation = project_invitation_service.create_or_reactivate_project_invitation(
-                session,
-                project_id,
-                payload.user_email,
-                payload.role,
-                invited_by_user_id,
+        existing_member = session.scalar(
+            select(ProjectMember).where(
+                ProjectMember.project_id == project_id,
+                ProjectMember.user_id == user.id,
             )
-            return {
-                "result_type": "invitation_created",
-                "member": None,
-                "invitation": invitation,
-                "message": "Invitation created for a future account match.",
-            }
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-
-    existing_member = session.scalar(
-        select(ProjectMember).where(
-            ProjectMember.project_id == project_id,
-            ProjectMember.user_id == user.id,
         )
-    )
-    if existing_member is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Member already exists")
+        if existing_member is not None:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Member already exists")
 
-    member = ProjectMember(project_id=project_id, user_id=user.id, role=payload.role)
-    session.add(member)
-    session.flush()
+        member = ProjectMember(project_id=project_id, user_id=user.id, role=payload.role)
+        session.add(member)
+        session.flush()
 
-    # Notify the added user
-    inviter = session.get(User, invited_by_user_id) if invited_by_user_id else None
-    notification_service.create_notification(
-        session,
-        user_id=user.id,
-        notification_type=NOTIF_PROJECT_INVITE,
-        title=f"You've been added to \"{project.name}\"",
-        body=f"{inviter.display_name if inviter else 'Someone'} added you as a member.",
-        project_id=project_id,
-        project_name=project.name,
-        actor_display_name=inviter.display_name if inviter else None,
-    )
-    session.commit()
-    session.refresh(member)
+        # Direct notification
+        inviter = session.get(User, invited_by_user_id) if invited_by_user_id else None
+        notification_service.create_notification(
+            session,
+            user_id=user.id,
+            notification_type=NOTIF_PROJECT_INVITE,
+            title=f"You've been added to \"{project.name}\"",
+            body=f"{inviter.display_name if inviter else 'Someone'} added you as a member.",
+            project_id=project_id,
+            project_name=project.name,
+            actor_display_name=inviter.display_name if inviter else None,
+        )
+        session.commit()
+        session.refresh(member)
 
-    pending_invitation = None
-    if normalized_email is not None:
-        pending_invitation = session.scalar(
+        # Update any pending invitations
+        pending_invitations = session.scalars(
             select(ProjectInvitation).where(
                 ProjectInvitation.project_id == project_id,
-                ProjectInvitation.email == normalized_email,
+                ProjectInvitation.email == normalize_email(user.email),
                 ProjectInvitation.status == "pending",
             )
-        )
+        ).all()
+        for pending_invitation in pending_invitations:
+            pending_invitation.status = "accepted"
+            pending_invitation.accepted_at = utcnow()
+            session.add(pending_invitation)
+        session.commit()
 
-    if pending_invitation is not None:
-        pending_invitation.status = "accepted"
-        pending_invitation.accepted_at = pending_invitation.accepted_at or member.joined_at
-        session.add(pending_invitation)
+        return {
+            "result_type": "member_added",
+            "member": member,
+            "invitation": None,
+            "message": "Project member added.",
+        }
+
+    # B. Email Invitation Flow (Always creates a pending invitation requiring Accept/Decline)
+    if payload.user_email is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email is required to invite a user")
+
+    normalized_email = normalize_email(payload.user_email)
+
+    # Check if they are already a member
+    user = session.scalar(select(User).where(User.email == normalized_email))
+    if user is not None:
+        existing_member = session.scalar(
+            select(ProjectMember).where(
+                ProjectMember.project_id == project_id,
+                ProjectMember.user_id == user.id,
+            )
+        )
+        if existing_member is not None:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Member already exists")
+
+    # Always create a pending ProjectInvitation
+    invitation = project_invitation_service.create_or_reactivate_project_invitation(
+        session,
+        project_id,
+        normalized_email,
+        payload.role,
+        invited_by_user_id,
+    )
+
+    # Send in-app notification if the user already has an active account
+    if user is not None:
+        inviter = session.get(User, invited_by_user_id) if invited_by_user_id else None
+        notification_service.create_notification(
+            session,
+            user_id=user.id,
+            notification_type=NOTIF_PROJECT_INVITE,
+            title=f"You've been invited to \"{project.name}\"",
+            body=f"{inviter.display_name if inviter else 'Someone'} invited you to join this project.",
+            project_id=project_id,
+            project_name=project.name,
+            actor_display_name=inviter.display_name if inviter else None,
+        )
         session.commit()
 
     return {
-        "result_type": "member_added",
-        "member": member,
-        "invitation": None,
-        "message": "Project member added.",
+        "result_type": "invitation_created",
+        "member": None,
+        "invitation": invitation,
+        "message": "Invitation sent successfully.",
     }
 
 

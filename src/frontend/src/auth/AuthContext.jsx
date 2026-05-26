@@ -1,10 +1,12 @@
-import { createContext, startTransition, useContext, useEffect, useRef, useState } from "react";
+import { createContext, startTransition, useCallback, useContext, useEffect, useRef, useState } from "react";
 
 import {
   acceptProjectInvitation,
   changeCurrentUserPassword,
+  declineMyProjectInvitation,
   deleteAvatar as deleteAvatarApi,
   fetchCurrentUser,
+  listMyPendingInvitations,
   loginUser,
   loginWithGoogleCredential,
   logoutUser,
@@ -111,6 +113,7 @@ export function AuthProvider({ children, initialSession = null }) {
   });
   const [session, setSession] = useState(initialAuthState.session);
   const [isAuthReady, setIsAuthReady] = useState(initialAuthState.isAuthReady);
+  const [liveInvitations, setLiveInvitations] = useState(null); // null = use session data
   const sessionCsrfRef = useRef(getSessionCsrfToken(session));
 
   useEffect(() => {
@@ -306,6 +309,8 @@ export function AuthProvider({ children, initialSession = null }) {
     }
 
     const acceptancePayload = await acceptProjectInvitation(csrfToken, invitationId);
+    // Update both session invitations and liveInvitations
+    const updatedInvitations = acceptancePayload.pending_project_invitations ?? [];
     startTransition(() => {
       setSession((currentSession) => {
         if (!currentSession) {
@@ -314,14 +319,38 @@ export function AuthProvider({ children, initialSession = null }) {
 
         const nextSession = {
           ...currentSession,
-          pending_project_invitations: acceptancePayload.pending_project_invitations ?? []
+          pending_project_invitations: updatedInvitations
         };
 
         writeStoredSession(nextSession);
         return nextSession;
       });
+      setLiveInvitations(updatedInvitations);
     });
     return acceptancePayload;
+  }
+
+  async function declinePendingProjectInvitation(invitationId) {
+    const csrfToken = getSessionCsrfToken(session);
+    if (!csrfToken) {
+      return null;
+    }
+
+    const result = await declineMyProjectInvitation(csrfToken, invitationId);
+    const updatedInvitations = result?.data?.pending_project_invitations ?? result?.pending_project_invitations ?? [];
+    startTransition(() => {
+      setSession((currentSession) => {
+        if (!currentSession) return currentSession;
+        const nextSession = {
+          ...currentSession,
+          pending_project_invitations: updatedInvitations
+        };
+        writeStoredSession(nextSession);
+        return nextSession;
+      });
+      setLiveInvitations(updatedInvitations);
+    });
+    return result;
   }
 
   function logout() {
@@ -339,6 +368,29 @@ export function AuthProvider({ children, initialSession = null }) {
   }
 
   const csrfToken = getSessionCsrfToken(session);
+
+  // Poll backend every 30s for new invitations (handles invite received after login)
+  const pollInvitations = useCallback(async () => {
+    if (!csrfToken) return;
+    try {
+      const result = await listMyPendingInvitations(csrfToken);
+      const invites = result?.data ?? [];
+      setLiveInvitations(Array.isArray(invites) ? invites : []);
+    } catch {
+      // silent – keep showing last known state
+    }
+  }, [csrfToken]);
+
+  useEffect(() => {
+    if (!csrfToken) return;
+    pollInvitations();
+    const timer = setInterval(pollInvitations, 30_000);
+    return () => clearInterval(timer);
+  }, [csrfToken, pollInvitations]);
+
+  // Merge: prefer liveInvitations (poll) over session snapshot
+  const pendingProjectInvitations = liveInvitations ?? (session?.pending_project_invitations ?? []);
+
   const value = {
     session,
     token: csrfToken,
@@ -346,7 +398,7 @@ export function AuthProvider({ children, initialSession = null }) {
     user: session?.user ?? null,
     isAuthReady,
     isAuthenticated: Boolean(csrfToken && session?.user),
-    pendingProjectInvitations: session?.pending_project_invitations ?? [],
+    pendingProjectInvitations,
     login,
     loginWithGoogle,
     register,
@@ -355,6 +407,7 @@ export function AuthProvider({ children, initialSession = null }) {
     removeAvatar,
     changePassword,
     acceptPendingProjectInvitation,
+    declinePendingProjectInvitation,
     logout
   };
 

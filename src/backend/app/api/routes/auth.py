@@ -3,7 +3,9 @@ from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_current_user, get_db_session
 from app.core.security import clear_auth_session_cookie, set_auth_session_cookie
+from app.services.auth import normalize_email
 from app.models import User
+from app.models import ProjectInvitation
 from app.schemas.auth import (
     AuthGoogleRequest,
     AuthLoginRequest,
@@ -15,9 +17,11 @@ from app.schemas.auth import (
     UserProfileUpdateRequest,
     UserRead,
 )
+from app.schemas.project_invitation import ProjectInvitationRead
 from app.services import auth as auth_service
 from app.services import auth_rate_limit
 from app.services import avatar as avatar_service
+from app.services import project_invitations as project_invitation_service
 
 
 router = APIRouter(tags=["auth"])
@@ -141,6 +145,38 @@ def accept_project_invitation(
             member=payload["member"],
             pending_project_invitations=payload["pending_project_invitations"],
         ).model_dump(mode="json")
+    }
+
+
+@router.get("/auth/my-invitations")
+def list_my_pending_invitations(
+    current_user: User = Depends(get_current_user),
+    database: Session = Depends(get_db_session),
+):
+    invitations = project_invitation_service.list_pending_invitations_for_email(database, current_user.email)
+    return {"data": [ProjectInvitationRead.model_validate(inv).model_dump(mode="json") for inv in invitations]}
+
+
+@router.post("/auth/project-invitations/{invitation_id}/decline", status_code=status.HTTP_200_OK)
+def decline_project_invitation(
+    invitation_id: int,
+    current_user: User = Depends(get_current_user),
+    database: Session = Depends(get_db_session),
+):
+    from fastapi import HTTPException
+    invitation = database.get(ProjectInvitation, invitation_id)
+    if invitation is None or invitation.status != "pending" or invitation.email != normalize_email(current_user.email):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project invitation not found")
+    invitation.status = "declined"
+    database.add(invitation)
+    database.commit()
+    pending_invitations = project_invitation_service.list_pending_invitations_for_email(database, current_user.email)
+    return {
+        "data": {
+            "pending_project_invitations": [
+                ProjectInvitationRead.model_validate(inv).model_dump(mode="json") for inv in pending_invitations
+            ]
+        }
     }
 
 

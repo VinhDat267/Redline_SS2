@@ -365,6 +365,17 @@ export function acceptProjectInvitation(token, invitationId) {
   });
 }
 
+export function listMyPendingInvitations(token) {
+  return apiRequest("/api/v1/auth/my-invitations", { token });
+}
+
+export function declineMyProjectInvitation(token, invitationId) {
+  return apiRequest(`/api/v1/auth/project-invitations/${invitationId}/decline`, {
+    method: "POST",
+    token
+  });
+}
+
 export function deleteProjectMember(token, projectId, memberId) {
   return apiRequest(`/api/v1/projects/${projectId}/members/${memberId}`, {
     method: "DELETE",

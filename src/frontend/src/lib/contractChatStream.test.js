@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 
+import { ApiError } from "./api";
 import { parseSseFrames, streamChatAttempt } from "./contractChatStream";
 
 function streamResponse(chunks) {
@@ -67,5 +68,34 @@ describe("streamChatAttempt", () => {
     );
     expect(fetchMock.mock.calls[0][1].headers.Authorization).toBeUndefined();
     expect(onEvent.mock.calls.map(([event]) => event.event)).toEqual(["metadata", "delta", "done"]);
+  });
+
+  test("raises a friendly ApiError when the stream handshake is rejected", async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({
+        ok: false,
+        status: 401,
+        json: async () => ({ detail: "Your session has expired. Please sign in again." })
+      })
+    );
+
+    await expect(
+      streamChatAttempt({
+        token: "expired-csrf",
+        endpoint: "/api/v1/contracts/10/chat/sessions/701/attempts/901/stream",
+        fetchImpl: fetchMock,
+        onEvent: vi.fn()
+      })
+    ).rejects.toMatchObject({
+      name: "ApiError",
+      status: 401,
+      message: "Your session has expired. Please sign in again."
+    });
+    await expect(streamChatAttempt({
+      token: "expired-csrf",
+      endpoint: "/api/v1/contracts/10/chat/sessions/701/attempts/901/stream",
+      fetchImpl: fetchMock,
+      onEvent: vi.fn()
+    })).rejects.toBeInstanceOf(ApiError);
   });
 });

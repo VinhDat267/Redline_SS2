@@ -1,3 +1,5 @@
+import { ApiError, extractErrorMessage } from "./api";
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 
 export function parseSseFrames(buffer) {
@@ -37,18 +39,31 @@ export async function streamChatAttempt({
   signal,
   fetchImpl = fetch
 }) {
-  const response = await fetchImpl(`${API_BASE_URL}${endpoint}`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      Accept: "text/event-stream",
-      ...(token ? { "X-CSRF-Token": token } : {})
-    },
-    signal
-  });
+  let response;
+  try {
+    response = await fetchImpl(`${API_BASE_URL}${endpoint}`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        Accept: "text/event-stream",
+        ...(token ? { "X-CSRF-Token": token } : {})
+      },
+      signal
+    });
+  } catch (err) {
+    if (err?.name === "AbortError") {
+      throw err;
+    }
+    throw new ApiError("Unable to connect to the server. Please check your network connection and try again.", 0, err);
+  }
 
   if (!response.ok) {
-    throw new Error(`Stream request failed with status ${response.status}`);
+    const payload = typeof response.json === "function" ? await response.json().catch(() => ({})) : {};
+    throw new ApiError(extractErrorMessage(payload), response.status, payload);
+  }
+
+  if (!response.body?.getReader) {
+    throw new ApiError("Chat response could not be streamed. Please try again.", response.status, null);
   }
 
   const reader = response.body.getReader();

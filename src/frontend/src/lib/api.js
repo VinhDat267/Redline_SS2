@@ -91,7 +91,7 @@ export function humanizeError(raw) {
   return FRIENDLY_ERRORS[raw] || raw;
 }
 
-function extractErrorMessage(payload) {
+export function extractErrorMessage(payload) {
   if (typeof payload?.detail === "string" && payload.detail.trim()) {
     return humanizeError(payload.detail);
   }

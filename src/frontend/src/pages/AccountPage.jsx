@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import { ApiError } from "../lib/api";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 
@@ -167,7 +168,7 @@ function AuthMethodBadge({ icon: Icon, label, active }) {
 /* ─── Main AccountPage ─── */
 
 export function AccountPage() {
-  const { changePassword, updateProfile, uploadAvatar, removeAvatar, user } = useAuth();
+  const { changePassword, updateProfile, uploadAvatar, removeAvatar, user, logout } = useAuth();
   const [displayName, setDisplayName] = useState(user?.display_name ?? "");
   const [profileStatus, setProfileStatus] = useState("");
   const [profileError, setProfileError] = useState("");
@@ -186,6 +187,14 @@ export function AccountPage() {
     setDisplayName(user?.display_name ?? "");
   }, [user?.display_name]);
 
+  function handleAccountError(error, setError, fallbackMessage = "This account action could not be completed.") {
+    if (error instanceof ApiError && error.status === 401) {
+      logout();
+      return;
+    }
+    setError(error.message || fallbackMessage);
+  }
+
   async function handleProfileSubmit(event) {
     event.preventDefault();
     const nextDisplayName = displayName.trim();
@@ -203,7 +212,7 @@ export function AccountPage() {
       await updateProfile({ display_name: nextDisplayName });
       setProfileStatus("Profile updated successfully.");
     } catch (error) {
-      setProfileError(error.message);
+      handleAccountError(error, setProfileError, "Profile could not be updated.");
     } finally {
       setIsSavingProfile(false);
     }
@@ -230,7 +239,7 @@ export function AccountPage() {
       setNewPassword("");
       setPasswordStatus("Password changed successfully.");
     } catch (error) {
-      setPasswordError(error.message);
+      handleAccountError(error, setPasswordError, "Password could not be changed.");
     } finally {
       setIsChangingPassword(false);
     }
@@ -272,7 +281,7 @@ export function AccountPage() {
       setAvatarSuccess("Avatar updated!");
       setTimeout(() => setAvatarSuccess(""), 3000);
     } catch (err) {
-      setAvatarError(err.message || "Upload failed.");
+      handleAccountError(err, setAvatarError, "Upload failed.");
     } finally {
       setIsUploadingAvatar(false);
     }
@@ -287,7 +296,7 @@ export function AccountPage() {
       setAvatarSuccess("Avatar removed.");
       setTimeout(() => setAvatarSuccess(""), 3000);
     } catch (err) {
-      setAvatarError(err.message || "Remove failed.");
+      handleAccountError(err, setAvatarError, "Remove failed.");
     } finally {
       setIsUploadingAvatar(false);
     }

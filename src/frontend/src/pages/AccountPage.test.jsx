@@ -131,6 +131,24 @@ describe("AccountPage", () => {
 
   /* ─── Avatar Upload Tests ─── */
 
+  test("logs out when profile save finds an expired session", async () => {
+    window.sessionStorage.setItem("redline.week7.session", JSON.stringify(localSession));
+    fetch.mockResolvedValueOnce(
+      jsonResponse({ detail: "Your session has expired. Please sign in again." }, 401)
+    );
+
+    renderAccountPage(localSession);
+
+    fireEvent.change(screen.getByLabelText(/display name/i), {
+      target: { value: "Expired Reviewer" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => {
+      expect(window.sessionStorage.getItem("redline.week7.session")).toBeNull();
+    });
+  });
+
   test("renders file input for avatar upload", () => {
     renderAccountPage(localSession);
     const input = screen.getByLabelText(/upload avatar/i);

@@ -79,7 +79,7 @@ For single change-item generation, use:
 }
 ```
 
-For compare-run batch generation, send the same fields to the compare-run AI review generation endpoint. The batch job records `use_rag` so the worker can generate every queued item with the same retrieval mode.
+For compare-run batch generation, send the same fields to the compare-run AI review generation endpoint. The batch job records `use_rag` so the worker can generate queued items with the same retrieval mode. Large compare runs keep their full deterministic change list, but one AI review batch job is capped by `REDLINE_AI_REVIEW_MAX_ITEMS_PER_JOB`.
 
 Use these score fields in `results-template.csv`:
 - `score_correctness`: 1 when the review identifies the expected risk and affected clause, else 0

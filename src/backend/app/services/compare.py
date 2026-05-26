@@ -333,8 +333,6 @@ def _build_change_items(
     session: Session,
     compare_run: CompareRun,
 ) -> tuple[list[ChangeItem], list[str]]:
-    from app.core.config import settings
-
     source_blocks = _load_blocks_for_parse_run(session, compare_run.source_parse_run_id)
     target_blocks = _load_blocks_for_parse_run(session, compare_run.target_parse_run_id)
     source_tables = _load_tables_for_parse_run(session, compare_run.source_parse_run_id)
@@ -348,19 +346,6 @@ def _build_change_items(
     table_change_items, table_warnings = _compare_tables(compare_run, source_tables, target_tables)
     change_items.extend(table_change_items)
     warnings.extend(table_warnings)
-
-    # ── Cap change items to prevent huge AI generation queues ──
-    max_items = settings.compare_max_change_items
-    if max_items > 0 and len(change_items) > max_items:
-        original_count = len(change_items)
-        # Priority: modified > added > removed (modifications are most useful for review)
-        type_priority = {"modified": 0, "added": 1, "removed": 2}
-        change_items.sort(key=lambda ci: type_priority.get(ci.change_type, 3))
-        change_items = change_items[:max_items]
-        warnings.append(
-            f"Compare generated {original_count} changes, truncated to {max_items}. "
-            f"Increase REDLINE_COMPARE_MAX_CHANGE_ITEMS to raise this limit."
-        )
 
     return change_items, sorted(set(warnings))
 

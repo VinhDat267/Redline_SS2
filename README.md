@@ -254,6 +254,7 @@ Backend configuration lives in `src/backend/.env`. Use
 | `REDLINE_UPLOAD_STORAGE_BACKEND` | Yes | `local`, `persistent-local`, `ephemeral-demo`, or `object`. |
 | `REDLINE_AI_GEMINI_API_KEY` | Optional | Enables provider-backed AI Review, AI Summary, AI suggestions, and LLM synthesis. |
 | `REDLINE_AI_GEMINI_MODEL` | Optional | Defaults to `gemini-3.1-flash-lite`. |
+| `REDLINE_AI_REVIEW_MAX_ITEMS_PER_JOB` | Optional | Caps one AI review batch job; compare results remain complete. Defaults to `500`. |
 | `REDLINE_RAG_EMBEDDING_MODEL` | Optional | Defaults to `gemini-embedding-2`. |
 | `REDLINE_GOOGLE_CLIENT_ID` | Optional | Required only for Google login. |
 | `REDLINE_OBJECT_STORAGE_*` | Deploy only | Required when `REDLINE_UPLOAD_STORAGE_BACKEND=object`. |

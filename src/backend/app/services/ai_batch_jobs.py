@@ -6,7 +6,7 @@ from datetime import timedelta
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session, joinedload, sessionmaker
 
 from app.core.config import settings
 from app.models import AIBatchJob, AIBatchJobItem, ChangeItem, CompareRun
@@ -49,12 +49,13 @@ def create_compare_run_ai_batch_job(
             detail="Compare run does not contain change items for AI generation",
         )
 
-    # ── Cap batch job items even if the CompareRun is huge ──
-    max_items = settings.compare_max_change_items
+    # AI review is a helper layer. Keep compare truth complete, but cap each
+    # provider job so very large compares do not exhaust quota or stall review.
+    max_items = settings.ai_review_max_items_per_job
     if max_items > 0 and len(selected_change_items) > max_items:
-        # Priority: modified > added > removed
-        type_priority = {"modified": 0, "added": 1, "removed": 2}
-        selected_change_items.sort(key=lambda ci: type_priority.get(ci.change_type, 3))
+        selected_change_items.sort(
+            key=lambda ci: _ai_review_priority_key(ci, force_regenerate=force_regenerate)
+        )
         selected_change_items = selected_change_items[:max_items]
 
     job = AIBatchJob(
@@ -277,7 +278,12 @@ def _load_selected_change_items(
     compare_run_id: int,
     change_item_ids: list[int] | None,
 ) -> list[ChangeItem]:
-    statement = select(ChangeItem).where(ChangeItem.compare_run_id == compare_run_id).order_by(ChangeItem.id)
+    statement = (
+        select(ChangeItem)
+        .where(ChangeItem.compare_run_id == compare_run_id)
+        .options(joinedload(ChangeItem.ai_review_draft))
+        .order_by(ChangeItem.id)
+    )
     if change_item_ids:
         unique_ids = sorted(set(change_item_ids))
         statement = statement.where(ChangeItem.id.in_(unique_ids))
@@ -287,6 +293,16 @@ def _load_selected_change_items(
     if change_item_ids and len(change_items) != len(set(change_item_ids)):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Change items not found for compare run")
     return change_items
+
+
+def _ai_review_priority_key(change_item: ChangeItem, *, force_regenerate: bool) -> tuple[int, int, int]:
+    generated_draft = (
+        change_item.ai_review_draft is not None
+        and change_item.ai_review_draft.generation_status == "generated"
+    )
+    existing_priority = 0 if force_regenerate or not generated_draft else 1
+    type_priority = {"modified": 0, "added": 1, "removed": 2}
+    return (existing_priority, type_priority.get(change_item.change_type, 3), change_item.id)
 
 
 def _process_batch_job_items(

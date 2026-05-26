@@ -481,6 +481,62 @@ describe("CompareScreenPage", () => {
     expect((await screen.findAllByText(/ai ready/i)).length).toBeGreaterThan(0);
   });
 
+  test("explains when ai review is limited to a prioritized subset", async () => {
+    fetch.mockImplementation((input, init = {}) => {
+      const url = String(input);
+      const method = init.method || "GET";
+
+      if (url.endsWith("/api/v1/compare-runs/55") && method === "GET") {
+        return Promise.resolve(
+          jsonResponse(
+            buildCompareRunPayload({
+              ai_batch_summary: {
+                job_id: 301,
+                compare_run_id: 55,
+                status: "completed",
+                requested_count: 2,
+                processed_count: 2,
+                generated_count: 2,
+                failed_count: 0,
+                force_regenerate: false,
+                active: false,
+                started_at: "2026-04-02T08:10:00Z",
+                completed_at: "2026-04-02T08:10:05Z",
+                error_message: null
+              }
+            })
+          )
+        );
+      }
+
+      if (url.endsWith("/api/v1/compare-runs/55/change-items") && method === "GET") {
+        return Promise.resolve(
+          jsonResponse(
+            buildQueuePayload([
+              buildQueueItem(),
+              buildQueueItem({ id: 901, change_type: "added", summary: "Added paragraph in body" }),
+              buildQueueItem({ id: 902, change_type: "removed", summary: "Removed paragraph in body" })
+            ])
+          )
+        );
+      }
+
+      if (url.endsWith("/api/v1/change-items/900") && method === "GET") {
+        return Promise.resolve(jsonResponse(buildChangeItemDetailPayload()));
+      }
+
+      return Promise.reject(new Error(`Unhandled request: ${url} ${method}`));
+    });
+
+    renderCompareScreen();
+
+    expect(
+      await screen.findByText(
+        /ai review is limited to 2 prioritized changes\. full compare contains 3 changes\./i
+      )
+    ).toBeInTheDocument();
+  });
+
   test("logs out when polling cannot refresh the selected change because the session expired", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     let changeDetailRequests = 0;

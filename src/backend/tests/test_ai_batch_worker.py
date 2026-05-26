@@ -24,7 +24,22 @@ def _build_compare_docx(requirement_lines: list[str]) -> bytes:
     return buffer.getvalue()
 
 
-def _create_compare_run(client, auth_headers) -> int:
+def _create_compare_run(
+    client,
+    auth_headers,
+    *,
+    source_lines: list[str] | None = None,
+    target_lines: list[str] | None = None,
+) -> int:
+    source_lines = source_lines or [
+        "The system shall support login.",
+        "The system shall write audit logs.",
+    ]
+    target_lines = target_lines or [
+        "The system shall support secure login.",
+        "The system shall write tamper-proof audit logs.",
+    ]
+
     project_response = client.post(
         "/api/v1/projects",
         json={"name": "AI Batch Worker Project", "description": "Batch worker coverage"},
@@ -50,12 +65,7 @@ def _create_compare_run(client, auth_headers) -> int:
         files={
             "file": (
                 "ai-batch-source.docx",
-                _build_compare_docx(
-                    [
-                        "The system shall support login.",
-                        "The system shall write audit logs.",
-                    ]
-                ),
+                _build_compare_docx(source_lines),
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             )
         },
@@ -70,12 +80,7 @@ def _create_compare_run(client, auth_headers) -> int:
         files={
             "file": (
                 "ai-batch-target.docx",
-                _build_compare_docx(
-                    [
-                        "The system shall support secure login.",
-                        "The system shall write tamper-proof audit logs.",
-                    ]
-                ),
+                _build_compare_docx(target_lines),
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             )
         },
@@ -95,6 +100,63 @@ def _create_compare_run(client, auth_headers) -> int:
     )
     assert compare_response.status_code == 201
     return compare_response.json()["data"]["id"]
+
+
+def test_create_batch_job_caps_ai_review_items_without_truncating_compare_truth(
+    client,
+    auth_headers,
+    session_factory,
+    monkeypatch,
+):
+    compare_run_id = _create_compare_run(
+        client,
+        auth_headers,
+        source_lines=[
+            "I like apples.",
+            "I like bananas.",
+        ],
+        target_lines=[
+            "I like apples and pears.",
+            "I like bananas.",
+            "I like grapes.",
+            "I like oranges.",
+        ],
+    )
+
+    from app.services import ai_batch_jobs as ai_batch_job_service
+
+    monkeypatch.setattr(settings, "ai_review_max_items_per_job", 2)
+
+    with session_factory() as session:
+        all_change_types = list(
+            session.scalars(
+                select(ChangeItem.change_type)
+                .where(ChangeItem.compare_run_id == compare_run_id)
+                .order_by(ChangeItem.id)
+            )
+        )
+        created_job = ai_batch_job_service.create_compare_run_ai_batch_job(
+            session,
+            compare_run_id=compare_run_id,
+            actor_user_id=1,
+            force_regenerate=False,
+        )
+        session.commit()
+
+    assert all_change_types == ["modified", "added", "added"]
+    assert created_job["requested_count"] == 2
+
+    with session_factory() as session:
+        requested_change_types = list(
+            session.scalars(
+                select(ChangeItem.change_type)
+                .join(AIBatchJobItem, AIBatchJobItem.change_item_id == ChangeItem.id)
+                .where(AIBatchJobItem.job_id == created_job["job_id"])
+                .order_by(AIBatchJobItem.id)
+            )
+        )
+
+    assert requested_change_types == ["modified", "added"]
 
 
 def test_create_batch_job_reuses_active_job(client, auth_headers, session_factory):

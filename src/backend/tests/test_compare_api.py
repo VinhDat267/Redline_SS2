@@ -518,10 +518,14 @@ def test_compare_routes_require_project_membership(client, auth_headers, registe
     assert outsider_queue_response.status_code == 404
 
 
-def test_compare_run_capping_and_prioritization(client, auth_headers, monkeypatch):
+def test_compare_preserves_all_change_items_even_when_ai_review_cap_is_lower(
+    client,
+    auth_headers,
+    monkeypatch,
+):
     from app.core.config import settings
-    # Force max compare change items to 2 via setting override
-    monkeypatch.setattr(settings, "compare_max_change_items", 2)
+
+    monkeypatch.setattr(settings, "ai_review_max_items_per_job", 2)
 
     compare_run, queue = _create_compare_run(
         client,
@@ -544,14 +548,9 @@ def test_compare_run_capping_and_prioritization(client, auth_headers, monkeypatc
         document_title="Compare Capping Document",
     )
 
-    # General Assertions
-    assert compare_run["compare_status"] == "completed_with_warnings"
-    assert compare_run["warning_count"] >= 1
-    # Although 3 changes occurred (1 modified, 2 added), only 2 are persisted due to cap = 2
-    assert len(queue) == 2
-
-    # Priority Verification: Modified must come first
+    assert compare_run["compare_status"] == "completed"
+    assert compare_run["warning_count"] == 0
+    assert compare_run["summary"] == {"total_changes": 3, "added": 2, "removed": 0, "modified": 1}
+    assert len(queue) == 3
     change_types = [item["change_type"] for item in queue]
-    assert "modified" in change_types
-    # Verify exact count mapping is preserved
-    assert change_types[0] == "modified"
+    assert change_types == ["modified", "added", "added"]

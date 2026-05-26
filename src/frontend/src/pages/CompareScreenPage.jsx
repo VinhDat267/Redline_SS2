@@ -77,6 +77,16 @@ function buildAiBatchProgress(job) {
   }
   return `${job.processed_count} / ${job.requested_count} processed`;
 }
+function buildAiBatchScopeNotice(job, totalChangeItems) {
+  if (!job || !Number.isFinite(totalChangeItems)) {
+    return null;
+  }
+  const requestedCount = Number(job.requested_count ?? 0);
+  if (requestedCount <= 0 || totalChangeItems <= requestedCount) {
+    return null;
+  }
+  return `AI review is limited to ${requestedCount} prioritized changes. Full compare contains ${totalChangeItems} changes.`;
+}
 const QUEUE_PAGE_SIZE = 4;
 function formatItemCount(count) {
   return `${count} item${count === 1 ? "" : "s"}`;
@@ -149,6 +159,7 @@ export function CompareScreenPage() {
     ? formatAiBatchJobStatus(displayedAiBatchJob.status)
     : describeAiBatchState(queue, { isGenerating: false });
   const aiBatchProgress = buildAiBatchProgress(displayedAiBatchJob);
+  const aiBatchScopeNotice = buildAiBatchScopeNotice(displayedAiBatchJob, queue.length);
   const selectedQueueIndex = filteredQueue.findIndex((item) => item.id === selectedChangeId);
   const totalPages = Math.max(1, Math.ceil(filteredQueue.length / QUEUE_PAGE_SIZE));
   const requestedPage = Number.parseInt(searchParams.get("page") ?? "", 10);
@@ -843,6 +854,11 @@ export function CompareScreenPage() {
                   <div style={{ height: '100%', borderRadius: '99px', background: '#F0B90B', width: `${aiGenerationSummary.total > 0 ? (aiGenerationSummary.generated / aiGenerationSummary.total) * 100 : 0}%`, transition: 'width 600ms ease' }} />
                 </div>
                 {aiBatchProgress && <p style={{ fontSize: '10px', color: '#848E9C', marginTop: '4px' }}>{aiBatchProgress}</p>}
+                {aiBatchScopeNotice && (
+                  <p style={{ fontSize: '10px', color: '#B07D0A', marginTop: '4px', lineHeight: 1.45 }}>
+                    {aiBatchScopeNotice}
+                  </p>
+                )}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
                 {[{ l: 'Status', v: compareStatusSummary.split(' with')[0] }, { l: 'AI State', v: aiBatchState }].map(({ l, v }) => (

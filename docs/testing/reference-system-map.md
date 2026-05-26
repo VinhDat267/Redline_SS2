@@ -236,6 +236,7 @@ These routes remain supported because the internal model names are still
 | `REDLINE_AI_PRIMARY_PROVIDER` | `gemini` | Primary LLM provider |
 | `REDLINE_AI_GEMINI_API_KEY` | empty | Gemini API key |
 | `REDLINE_AI_GEMINI_MODEL` | `gemini-3.1-flash-lite` | Primary Gemini model |
+| `REDLINE_AI_REVIEW_MAX_ITEMS_PER_JOB` | `500` | Maximum change items queued for one AI review job; compare truth is not truncated |
 | `REDLINE_RAG_EMBEDDING_PROVIDER` | `local-hash` unless env overrides | Embedding provider |
 | `REDLINE_RAG_EMBEDDING_MODEL` | `gemini-embedding-2` | Gemini embedding model |
 | `REDLINE_RAG_EMBEDDING_DIMENSIONS` | `3072` | pgvector embedding dimension |

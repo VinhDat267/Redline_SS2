@@ -225,7 +225,9 @@ function NotificationBell({ invitations: pendingInvitations, onAccept, onDecline
       try {
         const { listNotifications: listNotifs } = await import("../lib/api");
         const result = await listNotifs(token, { unreadOnly: false });
-        setNotifications(Array.isArray(result?.data ?? result) ? (result?.data ?? result) : []);
+        // Backend returns {items: [...], unread_count: N} after apiRequest unwrap
+        const items = Array.isArray(result?.items) ? result.items : (Array.isArray(result) ? result : []);
+        setNotifications(items);
         setUnreadCount(result?.unread_count ?? 0);
       } catch {
         // silent
@@ -314,7 +316,15 @@ function NotificationBell({ invitations: pendingInvitations, onAccept, onDecline
   }
 
   // Only show unread system notifications in bell
-  const unreadNotifs = notifications.filter(n => !n.is_read);
+  // Filter out invite notifications that already have a matching pending invitation
+  // (those are shown via the pendingInvitations list above — avoid duplicates)
+  const pendingProjectIds = new Set(pendingInvitations.map(inv => inv.project_id));
+  const unreadNotifs = notifications.filter(n => {
+    if (n.is_read) return false;
+    // Skip invite notifs that duplicated pending invitations
+    if (n.notification_type === "project_invite" && pendingProjectIds.has(n.project_id)) return false;
+    return true;
+  });
   const hasAny = pendingInvitations.length > 0 || unreadNotifs.length > 0;
 
   return (

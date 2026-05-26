@@ -1,9 +1,12 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef } from "react";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 
 /**
  * Hook that connects to the SSE endpoint for real-time project events.
+ *
+ * Uses `withCredentials: true` so the httpOnly session cookie is sent
+ * cross-origin (requires SameSite=None; Secure on the backend cookie).
  *
  * @param {number|null} projectId  - The project to subscribe to (null = disconnected)
  * @param {function}    onEvent    - Callback receiving { type, data, actor_display_name, ... }
@@ -24,11 +27,10 @@ export function useProjectEvents(projectId, onEvent, { enabled = true } = {}) {
 
         function connect() {
             const url = `${API_BASE_URL}/api/v1/projects/${projectId}/events`;
-
             eventSource = new EventSource(url, { withCredentials: true });
 
-            eventSource.addEventListener("connected", (e) => {
-                retryCount = 0; // reset on successful connection
+            eventSource.addEventListener("connected", () => {
+                retryCount = 0;
                 console.debug("[SSE] Connected to project", projectId);
             });
 
@@ -45,7 +47,7 @@ export function useProjectEvents(projectId, onEvent, { enabled = true } = {}) {
                 eventSource.close();
                 if (retryCount < MAX_RETRIES) {
                     retryCount++;
-                    const delay = Math.min(1000 * 2 ** retryCount, 30000); // exponential backoff, max 30s
+                    const delay = Math.min(1000 * 2 ** retryCount, 30000);
                     console.debug(`[SSE] Reconnecting in ${delay}ms (attempt ${retryCount})`);
                     reconnectTimer = setTimeout(connect, delay);
                 } else {

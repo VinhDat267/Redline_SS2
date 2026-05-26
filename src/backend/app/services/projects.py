@@ -3,6 +3,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models import Document, Project, ProjectInvitation, ProjectMember, User
+from app.models.mixins import utcnow
 from app.schemas.project import ProjectCreate, ProjectUpdate
 from app.schemas.project_member import ProjectMemberCreate, ProjectMemberUpdate
 from app.services.auth import normalize_email
@@ -121,10 +122,8 @@ def create_project_member(
             project_name=project.name,
             actor_display_name=inviter.display_name if inviter else None,
         )
-        session.commit()
-        session.refresh(member)
 
-        # Update any pending invitations
+        # Update any pending invitations (same atomic commit)
         pending_invitations = session.scalars(
             select(ProjectInvitation).where(
                 ProjectInvitation.project_id == project_id,
@@ -136,7 +135,10 @@ def create_project_member(
             pending_invitation.status = "accepted"
             pending_invitation.accepted_at = utcnow()
             session.add(pending_invitation)
+
+        # Single atomic commit for member + notification + invitation updates
         session.commit()
+        session.refresh(member)
 
         return {
             "result_type": "member_added",
@@ -148,6 +150,10 @@ def create_project_member(
     # B. Email Invitation Flow (Always creates a pending invitation requiring Accept/Decline)
     if payload.user_email is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email is required to invite a user")
+
+    # Prevent privilege escalation: "owner" role can't be assigned via invite
+    if payload.role and payload.role.strip().lower() == "owner":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot assign owner role via invitation")
 
     normalized_email = normalize_email(payload.user_email)
 

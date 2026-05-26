@@ -20,8 +20,10 @@ def list_notifications(
     )
     unread_count = notification_service.count_unread_notifications(database, current_user.id)
     return {
-        "data": [UserNotificationRead.model_validate(n).model_dump(mode="json") for n in notifs],
-        "unread_count": unread_count,
+        "data": {
+            "items": [UserNotificationRead.model_validate(n).model_dump(mode="json") for n in notifs],
+            "unread_count": unread_count,
+        }
     }
 
 

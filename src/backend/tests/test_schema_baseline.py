@@ -35,6 +35,7 @@ def test_full_erd_baseline_tables_exist(session_factory):
         "requirements",
         "review_comments",
         "test_cases",
+        "user_notifications",
         "users",
     }
 

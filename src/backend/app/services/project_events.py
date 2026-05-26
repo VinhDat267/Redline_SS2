@@ -35,6 +35,14 @@ EVENT_REVIEW_COMPLETED = "review_completed"
 EVENT_ACTIVITY = "activity"
 EVENT_PROJECT_UPDATED = "project_updated"
 EVENT_PROJECT_DELETED = "project_deleted"
+EVENT_REQUIREMENT_CREATED = "requirement_created"
+EVENT_REQUIREMENT_UPDATED = "requirement_updated"
+EVENT_REQUIREMENT_DELETED = "requirement_deleted"
+EVENT_TEST_CASE_CREATED = "test_case_created"
+EVENT_TEST_CASE_UPDATED = "test_case_updated"
+EVENT_TEST_CASE_DELETED = "test_case_deleted"
+EVENT_CHANGE_ITEM_REVIEWED = "change_item_reviewed"
+EVENT_CHANGE_ITEM_COMMENTED = "change_item_commented"
 
 
 @dataclass

@@ -383,13 +383,6 @@ export function deleteProjectMember(token, projectId, memberId) {
   });
 }
 
-export function declineProjectInvitation(token, projectId, invitationId) {
-  return apiRequest(`/api/v1/projects/${projectId}/invitations/${invitationId}/decline`, {
-    method: "POST",
-    token
-  });
-}
-
 // ── Notifications ──────────────────────────────────────────────────────────
 
 export function listNotifications(token, { unreadOnly = false } = {}) {

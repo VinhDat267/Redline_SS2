@@ -6,6 +6,10 @@ from app.models import User
 from app.schemas.test_case import TestCaseCreate, TestCaseRead, TestCaseUpdate
 from app.services import project_access as project_access_service
 from app.services import test_cases as test_case_service
+from app.services.project_events import (
+    get_event_broker, ProjectEvent,
+    EVENT_TEST_CASE_CREATED, EVENT_TEST_CASE_UPDATED, EVENT_TEST_CASE_DELETED,
+)
 
 
 router = APIRouter(tags=["test-cases"], dependencies=[Depends(get_current_user)])
@@ -31,6 +35,13 @@ def create_test_case(
 ):
     project_access_service.ensure_project_access_or_404(database, project_id, current_user.id)
     test_case = test_case_service.create_test_case(database, project_id, payload)
+    get_event_broker().publish(ProjectEvent(
+        event_type=EVENT_TEST_CASE_CREATED,
+        project_id=project_id,
+        data={"test_case_code": test_case.test_case_code, "title": test_case.title},
+        actor_user_id=current_user.id,
+        actor_display_name=current_user.display_name,
+    ))
     return {"data": TestCaseRead.model_validate(test_case).model_dump(mode="json")}
 
 
@@ -53,6 +64,13 @@ def update_test_case(
 ):
     test_case = project_access_service.ensure_test_case_access_or_404(database, test_case_id, current_user.id)
     test_case = test_case_service.update_test_case(database, test_case, payload)
+    get_event_broker().publish(ProjectEvent(
+        event_type=EVENT_TEST_CASE_UPDATED,
+        project_id=test_case.project_id,
+        data={"test_case_code": test_case.test_case_code, "title": test_case.title},
+        actor_user_id=current_user.id,
+        actor_display_name=current_user.display_name,
+    ))
     return {"data": TestCaseRead.model_validate(test_case).model_dump(mode="json")}
 
 
@@ -63,5 +81,15 @@ def delete_test_case(
     database: Session = Depends(get_db_session),
 ):
     test_case = project_access_service.ensure_test_case_access_or_404(database, test_case_id, current_user.id)
+    project_id = test_case.project_id
+    tc_code = test_case.test_case_code
     test_case_service.delete_test_case(database, test_case)
+    get_event_broker().publish(ProjectEvent(
+        event_type=EVENT_TEST_CASE_DELETED,
+        project_id=project_id,
+        data={"test_case_code": tc_code},
+        actor_user_id=current_user.id,
+        actor_display_name=current_user.display_name,
+    ))
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+

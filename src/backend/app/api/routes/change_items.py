@@ -21,6 +21,10 @@ from app.services import ai_traceability as ai_traceability_service
 from app.services import change_items as change_item_service
 from app.services import compare as compare_service
 from app.services import project_access as project_access_service
+from app.services.project_events import (
+    get_event_broker, ProjectEvent,
+    EVENT_CHANGE_ITEM_REVIEWED, EVENT_CHANGE_ITEM_COMMENTED,
+)
 
 
 router = APIRouter(tags=["change-items"], dependencies=[Depends(get_current_user)])
@@ -66,6 +70,13 @@ def update_change_item(
             entity_id=change_item_id,
             description=f'Updated review status to "{payload.review_status}"',
         )
+        get_event_broker().publish(ProjectEvent(
+            event_type=EVENT_CHANGE_ITEM_REVIEWED,
+            project_id=project_id,
+            data={"change_item_id": change_item_id, "review_status": payload.review_status},
+            actor_user_id=current_user.id,
+            actor_display_name=current_user.display_name,
+        ))
     return {"data": ChangeItemDetailRead.model_validate(detail).model_dump(mode="json")}
 
 
@@ -84,6 +95,14 @@ def create_review_comment(
         author_user_id=current_user.id,
         content=payload.content,
     )
+    project_id = change_item.compare_run.source_version.document.project_id
+    get_event_broker().publish(ProjectEvent(
+        event_type=EVENT_CHANGE_ITEM_COMMENTED,
+        project_id=project_id,
+        data={"change_item_id": change_item_id},
+        actor_user_id=current_user.id,
+        actor_display_name=current_user.display_name,
+    ))
     return {"data": ReviewCommentRead.model_validate(comment).model_dump(mode="json")}
 
 

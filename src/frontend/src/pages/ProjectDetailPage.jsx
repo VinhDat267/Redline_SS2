@@ -164,7 +164,7 @@ function FormSelect({ label, children, "aria-label": ariaLabel, ...props }) {
 }
 
 export function ProjectDetailPage() {
-  const { logout, token } = useAuth();
+  const { logout, token, user } = useAuth();
   const { setActiveProject } = useActiveProject();
   const { projectId } = useParams();
   const [project, setProject] = useState(null);
@@ -308,7 +308,23 @@ export function ProjectDetailPage() {
       case "compare_started":
       case "compare_completed":
       case "review_completed":
-        setFeedback(`${actor} ${type.replace("_", " ")}`);
+        setFeedback(`${actor} ${type.replace(/_/g, " ")}`);
+        break;
+      case "requirement_created":
+      case "requirement_updated":
+      case "requirement_deleted":
+        refreshRequirementInventory();
+        setFeedback(`${actor} ${type.replace(/_/g, " ")}`);
+        break;
+      case "test_case_created":
+      case "test_case_updated":
+      case "test_case_deleted":
+        refreshTestCaseInventory();
+        setFeedback(`${actor} ${type.replace(/_/g, " ")}`);
+        break;
+      case "change_item_reviewed":
+      case "change_item_commented":
+        setFeedback(`${actor} ${type.replace(/_/g, " ")}`);
         break;
       default:
         break;
@@ -825,6 +841,9 @@ export function ProjectDetailPage() {
     }
   }
 
+  const currentUserMembership = members.find(m => m.user_id === user?.id);
+  const isCurrentUserOwner = (currentUserMembership?.role || "").toLowerCase() === "owner";
+
   const selectedDocument = documents[0] ?? null;
   const filteredRequirements = requirements.filter((requirement) => {
     const query = requirementSearch.trim().toLowerCase();
@@ -1155,14 +1174,16 @@ export function ProjectDetailPage() {
               <Card
                 title="Active Members"
                 aside={
-                  <button
-                    className={pillBtnCls}
-                    style={{ ...pillBtnStyle, padding: "6px 14px", fontSize: "13px" }}
-                    onClick={() => { setShowMemberForm(true); setError(""); setFeedback(""); }}
-                    type="button"
-                  >
-                    <Plus size={14} /> Invite Member
-                  </button>
+                  isCurrentUserOwner && (
+                    <button
+                      className={pillBtnCls}
+                      style={{ ...pillBtnStyle, padding: "6px 14px", fontSize: "13px" }}
+                      onClick={() => { setShowMemberForm(true); setError(""); setFeedback(""); }}
+                      type="button"
+                    >
+                      <Plus size={14} /> Invite Member
+                    </button>
+                  )
                 }
               >
                 {members.length > 0 ? (
@@ -1194,16 +1215,18 @@ export function ProjectDetailPage() {
                             <span className={`px-2.5 py-0.5 border text-[11px] font-semibold uppercase tracking-wider ${roleColor}`} style={{ borderRadius: "6px" }}>
                               {m.role || "Member"}
                             </span>
-                            <button
-                              aria-label={`Remove member ${m.user_email || m.user_display_name}`}
-                              className="p-1.5 text-[#848E9C] bg-transparent border-none cursor-pointer hover:text-[#F6465D]"
-                              style={{ borderRadius: "6px", transition: "color 200ms ease" }}
-                              onClick={() => handleDeleteMember(m.id)}
-                              type="button"
-                              title="Remove member"
-                            >
-                              <LogOut size={14} />
-                            </button>
+                            {isCurrentUserOwner && (
+                              <button
+                                aria-label={`Remove member ${m.user_email || m.user_display_name}`}
+                                className="p-1.5 text-[#848E9C] bg-transparent border-none cursor-pointer hover:text-[#F6465D]"
+                                style={{ borderRadius: "6px", transition: "color 200ms ease" }}
+                                onClick={() => handleDeleteMember(m.id)}
+                                type="button"
+                                title="Remove member"
+                              >
+                                <LogOut size={14} />
+                              </button>
+                            )}
                           </div>
                         </li>
                       );
@@ -1245,17 +1268,19 @@ export function ProjectDetailPage() {
                           <span className="px-2.5 py-0.5 bg-[#FFF8E6] border border-[#F0B90B44] text-[11px] font-semibold text-[#B07D00] uppercase tracking-wider" style={{ borderRadius: "6px" }}>
                             Pending
                           </span>
-                          <button
-                            aria-label={`Revoke invitation ${inv.email}`}
-                            className="p-1.5 text-[#848E9C] bg-transparent border-none cursor-pointer hover:text-[#F6465D] disabled:opacity-50"
-                            style={{ borderRadius: "6px", transition: "color 200ms ease" }}
-                            disabled={revokingInvitationId === inv.id}
-                            onClick={() => handleRevokeInvitation(inv.id)}
-                            type="button"
-                            title="Revoke invitation"
-                          >
-                            <X size={14} />
-                          </button>
+                          {isCurrentUserOwner && (
+                            <button
+                              aria-label={`Revoke invitation ${inv.email}`}
+                              className="p-1.5 text-[#848E9C] bg-transparent border-none cursor-pointer hover:text-[#F6465D] disabled:opacity-50"
+                              style={{ borderRadius: "6px", transition: "color 200ms ease" }}
+                              disabled={revokingInvitationId === inv.id}
+                              onClick={() => handleRevokeInvitation(inv.id)}
+                              type="button"
+                              title="Revoke invitation"
+                            >
+                              <X size={14} />
+                            </button>
+                          )}
                         </div>
                       </li>
                     ))}

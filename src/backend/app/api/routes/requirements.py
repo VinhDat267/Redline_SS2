@@ -6,6 +6,10 @@ from app.models import User
 from app.schemas.requirement import RequirementCreate, RequirementRead, RequirementUpdate
 from app.services import project_access as project_access_service
 from app.services import requirements as requirement_service
+from app.services.project_events import (
+    get_event_broker, ProjectEvent,
+    EVENT_REQUIREMENT_CREATED, EVENT_REQUIREMENT_UPDATED, EVENT_REQUIREMENT_DELETED,
+)
 
 
 router = APIRouter(tags=["requirements"], dependencies=[Depends(get_current_user)])
@@ -33,6 +37,13 @@ def create_requirement(
 ):
     project_access_service.ensure_project_access_or_404(database, project_id, current_user.id)
     requirement = requirement_service.create_requirement(database, project_id, payload)
+    get_event_broker().publish(ProjectEvent(
+        event_type=EVENT_REQUIREMENT_CREATED,
+        project_id=project_id,
+        data={"requirement_code": requirement.requirement_code, "title": requirement.title},
+        actor_user_id=current_user.id,
+        actor_display_name=current_user.display_name,
+    ))
     return {"data": RequirementRead.model_validate(requirement).model_dump(mode="json")}
 
 
@@ -55,6 +66,13 @@ def update_requirement(
 ):
     requirement = project_access_service.ensure_requirement_access_or_404(database, requirement_id, current_user.id)
     requirement = requirement_service.update_requirement(database, requirement, payload)
+    get_event_broker().publish(ProjectEvent(
+        event_type=EVENT_REQUIREMENT_UPDATED,
+        project_id=requirement.document.project_id,
+        data={"requirement_code": requirement.requirement_code, "title": requirement.title},
+        actor_user_id=current_user.id,
+        actor_display_name=current_user.display_name,
+    ))
     return {"data": RequirementRead.model_validate(requirement).model_dump(mode="json")}
 
 
@@ -65,5 +83,15 @@ def delete_requirement(
     database: Session = Depends(get_db_session),
 ):
     requirement = project_access_service.ensure_requirement_access_or_404(database, requirement_id, current_user.id)
+    project_id = requirement.document.project_id
+    req_code = requirement.requirement_code
     requirement_service.delete_requirement(database, requirement)
+    get_event_broker().publish(ProjectEvent(
+        event_type=EVENT_REQUIREMENT_DELETED,
+        project_id=project_id,
+        data={"requirement_code": req_code},
+        actor_user_id=current_user.id,
+        actor_display_name=current_user.display_name,
+    ))
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+

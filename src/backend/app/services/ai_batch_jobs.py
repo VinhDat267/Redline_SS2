@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import timedelta
 
 from fastapi import HTTPException, status
@@ -152,7 +153,6 @@ def process_next_ai_batch_job(
     *,
     concurrency: int | None = None,
 ) -> bool:
-    _ = concurrency  # Reserved for a future bounded-concurrency worker step.
 
     with session_factory() as session:
         requeue_stale_ai_batch_jobs(
@@ -192,11 +192,33 @@ def process_next_ai_batch_job(
         )
 
     try:
-        item_batches = list(_chunked(item_ids, settings.ai_review_batch_size))
-        for batch_index, item_batch in enumerate(item_batches):
-            if batch_index > 0:
-                time.sleep(settings.ai_batch_inter_item_delay)
-            _process_batch_job_items(session_factory, item_batch, adapter=adapter)
+        if settings.ai_review_batch_max_chars > 0:
+            with session_factory() as budget_session:
+                item_batches = _chunked_by_budget(
+                    item_ids, budget_session,
+                    max_chars=settings.ai_review_batch_max_chars,
+                    max_items=settings.ai_review_batch_size,
+                )
+        else:
+            item_batches = list(_chunked(item_ids, settings.ai_review_batch_size))
+        effective_concurrency = max(1, concurrency or 1)
+
+        if effective_concurrency == 1:
+            for batch_index, item_batch in enumerate(item_batches):
+                if batch_index > 0:
+                    time.sleep(settings.ai_batch_inter_item_delay)
+                _process_batch_job_items(session_factory, item_batch, adapter=adapter)
+        else:
+            def _run_batch(batch_tuple):
+                idx, items = batch_tuple
+                if idx > 0:
+                    time.sleep(settings.ai_batch_inter_item_delay * (idx % effective_concurrency))
+                _process_batch_job_items(session_factory, items, adapter=adapter)
+
+            with ThreadPoolExecutor(max_workers=effective_concurrency) as pool:
+                futures = [pool.submit(_run_batch, (i, b)) for i, b in enumerate(item_batches)]
+                for future in as_completed(futures):
+                    future.result()
     except Exception as exc:
         with session_factory() as session:
             job = session.get(AIBatchJob, job_id)
@@ -293,6 +315,48 @@ def _load_selected_change_items(
     if change_item_ids and len(change_items) != len(set(change_item_ids)):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Change items not found for compare run")
     return change_items
+
+
+def _estimate_item_chars(change_item: ChangeItem) -> int:
+    """Estimate character count for a change item's AI review payload."""
+    return (
+        len(change_item.old_content or "")
+        + len(change_item.new_content or "")
+        + len(change_item.section_title or "")
+        + 200  # overhead for prompt template
+    )
+
+
+def _chunked_by_budget(
+    item_ids: list[int],
+    session: Session,
+    *,
+    max_chars: int,
+    max_items: int,
+) -> list[list[int]]:
+    """Chunk items by character budget, with max_items as hard cap per batch."""
+    if max_chars <= 0:
+        return list(_chunked(item_ids, max_items))
+
+    change_items_by_id: dict[int, ChangeItem] = {}
+    for ci in session.scalars(select(ChangeItem).where(ChangeItem.id.in_(item_ids))):
+        change_items_by_id[ci.id] = ci
+
+    batches: list[list[int]] = []
+    current_batch: list[int] = []
+    current_chars = 0
+    for item_id in item_ids:
+        ci = change_items_by_id.get(item_id)
+        chars = _estimate_item_chars(ci) if ci else 500
+        if current_batch and (current_chars + chars > max_chars or len(current_batch) >= max_items):
+            batches.append(current_batch)
+            current_batch = []
+            current_chars = 0
+        current_batch.append(item_id)
+        current_chars += chars
+    if current_batch:
+        batches.append(current_batch)
+    return batches
 
 
 def _ai_review_priority_key(change_item: ChangeItem, *, force_regenerate: bool) -> tuple[int, int, int]:

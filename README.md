@@ -30,7 +30,7 @@ Project -> Contract -> Draft Upload -> Parse -> Compare
 
 ## Project Status
 
-Updated: 2026-05-24
+Updated: 2026-05-26
 
 The system is deployable as a full-stack web application and has been verified
 on the Docker path expected for local installation and review.
@@ -255,6 +255,7 @@ Backend configuration lives in `src/backend/.env`. Use
 | `REDLINE_AI_GEMINI_API_KEY` | Optional | Enables provider-backed AI Review, AI Summary, AI suggestions, and LLM synthesis. |
 | `REDLINE_AI_GEMINI_MODEL` | Optional | Defaults to `gemini-3.1-flash-lite`. |
 | `REDLINE_AI_REVIEW_MAX_ITEMS_PER_JOB` | Optional | Caps one AI review batch job; compare results remain complete. Defaults to `500`. |
+| `REDLINE_AI_REVIEW_BATCH_MAX_CHARS` | Optional | Character budget per AI batch chunk. Prevents prompt overflow for long clauses. Defaults to `30000` (~8000 tokens). |
 | `REDLINE_RAG_EMBEDDING_MODEL` | Optional | Defaults to `gemini-embedding-2`. |
 | `REDLINE_GOOGLE_CLIENT_ID` | Optional | Required only for Google login. |
 | `REDLINE_OBJECT_STORAGE_*` | Deploy only | Required when `REDLINE_UPLOAD_STORAGE_BACKEND=object`. |

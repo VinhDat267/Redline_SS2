@@ -138,12 +138,30 @@ def generate_change_item_ai_draft_records_batch(
             results_by_change_item_id[change_item.id] = (existing_draft, True)
             continue
         pending_change_items.append(change_item)
+
+    # Pre-compute RAG query embeddings for all pending items in one batch
+    precomputed_embeddings: dict[int, tuple[str, list[float]]] = {}
+    if use_rag and pending_change_items:
+        from app.services import rag_service
+        queries = []
+        for ci in pending_change_items:
+            query = " ".join(
+                p.strip() for p in (ci.section_title or "", ci.old_content or "", ci.new_content or "")
+                if p and p.strip()
+            )
+            queries.append(query or "")
+        embedding_payloads = rag_service.build_text_embedding_payloads(queries)
+        for ci, (provider, vector, _) in zip(pending_change_items, embedding_payloads):
+            precomputed_embeddings[ci.id] = (provider, vector)
+
+    for change_item in pending_change_items:
         pending_payloads.append(
             _build_generation_payload(
                 session,
                 change_item,
                 actor_user_id=actor_user_id,
                 use_rag=use_rag,
+                precomputed_embedding=precomputed_embeddings.get(change_item.id),
             )
         )
 
@@ -321,6 +339,7 @@ def _build_generation_payload(
     *,
     actor_user_id: int | None,
     use_rag: bool,
+    precomputed_embedding: tuple[str, list[float]] | None = None,
 ) -> dict[str, object]:
     project_id = change_item.source_version.document.project_id
     project_members = list(
@@ -396,7 +415,7 @@ def _build_generation_payload(
             for member in project_members
         ],
         "rag_enabled": use_rag,
-        "rag_context": _build_rag_context(session, change_item) if use_rag else [],
+        "rag_context": _build_rag_context(session, change_item, precomputed_embedding=precomputed_embedding) if use_rag else [],
     }
 
 
@@ -481,7 +500,10 @@ def _matches_medium_risk_profile(text: str) -> bool:
     )
 
 
-def _build_rag_context(session: Session, change_item: ChangeItem) -> list[dict[str, object]]:
+def _build_rag_context(
+    session: Session, change_item: ChangeItem,
+    precomputed_embedding: tuple[str, list[float]] | None = None,
+) -> list[dict[str, object]]:
     from app.services import rag_service
 
     rag_context: list[dict[str, object]] = []
@@ -505,7 +527,7 @@ def _build_rag_context(session: Session, change_item: ChangeItem) -> list[dict[s
     if not query:
         return rag_context
 
-    query_embedding_payload = rag_service.build_query_embedding_payload(query)
+    query_embedding_payload = precomputed_embedding or rag_service.build_query_embedding_payload(query)
     for draft_id in (change_item.target_version_id, change_item.source_version_id):
         retrieved_blocks = rag_service.retrieve_similar_blocks(
             session,

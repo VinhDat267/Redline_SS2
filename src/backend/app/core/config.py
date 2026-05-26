@@ -68,8 +68,9 @@ class Settings(BaseSettings):
     ai_batch_poll_interval_ms: int = 2000
     ai_batch_stale_item_seconds: int = 300
     ai_batch_stale_job_seconds: int = 600
-    ai_batch_inter_item_delay: float = 2.0
-    ai_review_batch_size: int = 15
+    ai_batch_inter_item_delay: float = 0.5
+    ai_review_batch_size: int = 25
+    ai_review_batch_max_chars: int = 30000
     ai_review_max_items_per_job: int = 500
     ai_rate_limit_window_seconds: int = 60
     ai_chat_rate_limit_max_attempts: int = 10

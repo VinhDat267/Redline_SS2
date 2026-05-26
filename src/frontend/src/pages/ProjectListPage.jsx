@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 
 import { useAuth } from "../auth/AuthContext";
+import { useActiveProject } from "../context/ActiveProjectContext";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { Toast } from "../components/Toast";
 // Modal is now inline — no WorkspaceDrawer needed
@@ -267,6 +268,7 @@ function EmptyState({ onCreateProject, onSeedDemo, isSeeding }) {
 
 export function ProjectListPage() {
   const { logout, token, user, pendingProjectInvitations, acceptPendingProjectInvitation } = useAuth();
+  const { activeProject, clearActiveProject } = useActiveProject();
   const navigate = useNavigate();
   const [projects, setProjects] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -440,6 +442,10 @@ export function ProjectListPage() {
       await deleteProject(token, deleteTarget.id);
       if (editingProjectId === deleteTarget.id) {
         resetProjectForm();
+      }
+      // Clear active project from navbar if it was the deleted one
+      if (activeProject && activeProject.id === deleteTarget.id) {
+        clearActiveProject();
       }
       setDeleteTarget(null);
       await refreshProjects();

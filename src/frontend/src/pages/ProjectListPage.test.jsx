@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { AuthProvider } from "../auth/AuthContext";
+import { ActiveProjectProvider } from "../context/ActiveProjectContext";
 import { ProjectListPage } from "./ProjectListPage";
 
 function jsonResponse(payload, status = 200) {
@@ -34,12 +35,14 @@ function buildProject(project) {
 function renderProjectList(path = "/") {
   return render(
     <AuthProvider initialSession={session}>
-      <MemoryRouter initialEntries={[path]}>
-        <Routes>
-          <Route element={<ProjectListPage />} path="/" />
-          <Route element={<p>Project Route</p>} path="/projects/:projectId" />
-        </Routes>
-      </MemoryRouter>
+      <ActiveProjectProvider>
+        <MemoryRouter initialEntries={[path]}>
+          <Routes>
+            <Route element={<ProjectListPage />} path="/" />
+            <Route element={<p>Project Route</p>} path="/projects/:projectId" />
+          </Routes>
+        </MemoryRouter>
+      </ActiveProjectProvider>
     </AuthProvider>
   );
 }

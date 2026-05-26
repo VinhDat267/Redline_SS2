@@ -1072,60 +1072,251 @@ export function ProjectDetailPage() {
           </Card>
         )}
 
-        {/* â• â• â•  TEAM TAB â• â• â•  */}
+        {/* ═══ TEAM TAB ═══ */}
         {activeTab === "team" && (
-          <Card
-            title="Project Team & Assignees"
-            aside={
-              !showMemberForm ? (
-                <button className={pillBtnCls} style={{ ...pillBtnStyle, padding: "6px 14px", fontSize: "13px" }} onClick={() => { setShowMemberForm(true); setError(""); setFeedback(""); }} type="button" disabled={isAddingMember}><Plus size={14} /> Add Member</button>
-              ) : (
-                <form onSubmit={async e => { e.preventDefault(); if (newMemberEmail.trim()) await handleAddMember(newMemberEmail.trim()); }} className="flex items-center gap-2">
-                  <input aria-label="Member email" className="h-8 px-3 bg-[#F5F5F5] border border-[#E6E8EA] text-[13px] text-[#1E2026] placeholder-[#848E9C]" style={{ borderRadius: "8px", outline: "none", transition: "border-color 200ms ease", width: "220px" }} onFocus={e => { e.target.style.borderColor = "#000"; }} onBlur={e => { e.target.style.borderColor = "#E6E8EA"; }} type="email" placeholder="teammate@email.com" value={newMemberEmail} onChange={e => setNewMemberEmail(e.target.value)} autoFocus required />
-                  <button className={formBtnPrimary} style={{ ...formBtnStyle, padding: "6px 14px", fontSize: "13px" }} type="submit" disabled={isAddingMember || !newMemberEmail.trim()}>{isAddingMember ? "Saving..." : "Save"}</button>
-                  <button className={formBtnSecondary} style={{ ...formBtnStyle, padding: "6px 14px", fontSize: "13px" }} type="button" onClick={() => { setShowMemberForm(false); setNewMemberEmail(""); }} disabled={isAddingMember}>Cancel</button>
-                </form>
-              )
-            }
-          >
-            <div className="space-y-6">
-              <div>
-                <h4 className="text-[12px] font-semibold text-[#848E9C] uppercase tracking-wider mb-3 pb-2 border-b border-[#E6E8EA]">Active Members</h4>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* ── Left: Active Members ── */}
+            <div className="lg:col-span-2 space-y-5">
+              <Card
+                title="Active Members"
+                aside={
+                  <button
+                    className={pillBtnCls}
+                    style={{ ...pillBtnStyle, padding: "6px 14px", fontSize: "13px" }}
+                    onClick={() => { setShowMemberForm(true); setError(""); setFeedback(""); }}
+                    type="button"
+                  >
+                    <Plus size={14} /> Invite Member
+                  </button>
+                }
+              >
                 {members.length > 0 ? (
-                  <InlineTable
-                    headers={["Name", "Email", "Role", "Joined", "Actions"]}
-                    colWidths={["20%", "30%", "12%", "24%", "14%"]}
-                    rows={members.map(m => [
-                      <span key={`${m.id}-n`} className="flex items-center gap-2"><span className="w-6 h-6 flex items-center justify-center text-[10px] text-white font-bold bg-[#F0B90B]" style={{ borderRadius: "50%" }}>{m.user_display_name?.[0]?.toUpperCase() || "U"}</span> <span className="font-semibold text-[#1E2026]">{m.user_display_name || "No Name"}</span></span>,
-                      <span key={`${m.id}-e`} className="text-[12px] text-[#848E9C] font-medium">{m.user_email || `ID: ${m.user_id}`}</span>,
-                      <span key={`${m.id}-r`} className="px-2 py-0.5 bg-[#F5F5F5] border border-[#E6E8EA] text-[11px] font-semibold text-[#32313A]" style={{ borderRadius: "6px" }}>{m.role || "Member"}</span>,
-                      <span key={`${m.id}-j`} className="text-[#848E9C] text-[12px]">{formatDateTime(m.joined_at)}</span>,
-                      <button aria-label={`Remove member ${m.user_email || m.user_display_name || m.user_id}`} key={`${m.id}-d`} className="p-1.5 text-[#848E9C] bg-transparent border-none cursor-pointer" style={{ borderRadius: "6px" }} onClick={() => handleDeleteMember(m.id)} type="button" title="Remove"><Trash2 size={14} /></button>
-                    ])}
-                  />
-                ) : <p className="text-[14px] text-[#848E9C]">No active members.</p>}
-              </div>
-              <div>
-                <h4 className="text-[12px] font-semibold text-[#848E9C] uppercase tracking-wider mb-3 pb-2 border-b border-[#E6E8EA]">Pending Invitations</h4>
-                {invitations.length > 0 ? (
-                  <InlineTable
-                    headers={["Email", "Role", "Invited By", "Created", "Actions"]}
-                    colWidths={["30%", "12%", "22%", "24%", "12%"]}
-                    rows={invitations.map(inv => [
-                      <span key={`${inv.id}-e`} className="text-[12px] text-[#848E9C] font-medium">{inv.email}</span>,
-                      <span key={`${inv.id}-r`} className="px-2 py-0.5 bg-[#F5F5F5] border border-[#E6E8EA] text-[11px] font-semibold text-[#32313A]" style={{ borderRadius: "6px" }}>{inv.role || "Member"}</span>,
-                      <span key={`${inv.id}-b`} className="text-[#848E9C] text-[12px]">{inv.invited_by_display_name || "Unknown"}</span>,
-                      <span key={`${inv.id}-t`} className="text-[#848E9C] text-[12px]">{formatDateTime(inv.created_at)}</span>,
-                      <button aria-label={`Revoke invitation ${inv.email}`} key={`${inv.id}-rv`} className="p-1.5 text-[#848E9C] bg-transparent border-none cursor-pointer" style={{ borderRadius: "6px" }} disabled={revokingInvitationId === inv.id} onClick={() => handleRevokeInvitation(inv.id)} type="button" title="Revoke"><Trash2 size={14} /></button>
-                    ])}
-                  />
-                ) : <p className="text-[14px] text-[#848E9C]">No pending invitations.</p>}
-              </div>
+                  <ul style={{ listStyle: "none", margin: 0, padding: 0 }} className="space-y-2">
+                    {members.map(m => {
+                      const initials = (m.user_display_name || m.user_email || "U").slice(0, 2).toUpperCase();
+                      const isOwner = (m.role || "").toLowerCase() === "owner";
+                      const isAdmin = (m.role || "").toLowerCase() === "admin";
+                      const roleColor = isOwner
+                        ? "bg-[#FFF8E6] border-[#F0B90B44] text-[#B07D00]"
+                        : isAdmin
+                          ? "bg-[#E8F5E9] border-[#A5D6A7] text-[#1B5E20]"
+                          : "bg-[#F5F5F5] border-[#E6E8EA] text-[#474D57]";
+                      return (
+                        <li key={m.id} className="flex items-center justify-between px-4 py-3 border border-[#E6E8EA] bg-white" style={{ borderRadius: "10px", transition: "box-shadow 200ms ease" }}
+                          onMouseEnter={e => e.currentTarget.style.boxShadow = "rgba(32,32,37,0.06) 0px 2px 8px 0px"}
+                          onMouseLeave={e => e.currentTarget.style.boxShadow = "none"}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 flex items-center justify-center text-[13px] font-bold text-white bg-[#F0B90B] flex-shrink-0" style={{ borderRadius: "50%" }}>
+                              {initials}
+                            </div>
+                            <div>
+                              <p className="text-[14px] font-semibold text-[#1E2026] leading-snug">{m.user_display_name || "No Name"}</p>
+                              <p className="text-[12px] text-[#848E9C] font-medium">{m.user_email || `User #${m.user_id}`}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2.5 py-0.5 border text-[11px] font-semibold uppercase tracking-wider ${roleColor}`} style={{ borderRadius: "6px" }}>
+                              {m.role || "Member"}
+                            </span>
+                            <button
+                              aria-label={`Remove member ${m.user_email || m.user_display_name}`}
+                              className="p-1.5 text-[#848E9C] bg-transparent border-none cursor-pointer hover:text-[#F6465D]"
+                              style={{ borderRadius: "6px", transition: "color 200ms ease" }}
+                              onClick={() => handleDeleteMember(m.id)}
+                              type="button"
+                              title="Remove member"
+                            >
+                              <LogOut size={14} />
+                            </button>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <div className="flex flex-col items-center justify-center p-10 text-center border-2 border-dashed border-[#E6E8EA]" style={{ borderRadius: "12px" }}>
+                    <Users size={28} className="mb-3 text-[#C0C6CF]" />
+                    <p className="text-[14px] font-semibold text-[#1E2026] mb-1">No members yet</p>
+                    <p className="text-[13px] text-[#848E9C] mb-4">Invite teammates to collaborate on this project.</p>
+                    <button
+                      className={pillBtnCls}
+                      style={{ ...pillBtnStyle, padding: "6px 18px", fontSize: "13px" }}
+                      onClick={() => { setShowMemberForm(true); setError(""); }}
+                      type="button"
+                    >
+                      <Plus size={14} /> Invite First Member
+                    </button>
+                  </div>
+                )}
+              </Card>
+
+              {/* ── Pending Invitations ── */}
+              {invitations.length > 0 && (
+                <Card title="Pending Invitations" aside={`${invitations.length} pending`}>
+                  <ul style={{ listStyle: "none", margin: 0, padding: 0 }} className="space-y-2">
+                    {invitations.map(inv => (
+                      <li key={inv.id} className="flex items-center justify-between px-4 py-3 border border-[#E6E8EA] bg-[#FFF8E6]" style={{ borderRadius: "10px" }}>
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 flex items-center justify-center text-[12px] font-bold text-[#B07D00] bg-[#F0B90B]/15 border border-[#F0B90B]/30 flex-shrink-0" style={{ borderRadius: "50%" }}>
+                            {inv.email[0]?.toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="text-[13px] font-semibold text-[#1E2026]">{inv.email}</p>
+                            <p className="text-[11px] text-[#848E9C]">Invited by {inv.invited_by_display_name || "Unknown"} · {formatDateTime(inv.created_at)}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="px-2.5 py-0.5 bg-[#FFF8E6] border border-[#F0B90B44] text-[11px] font-semibold text-[#B07D00] uppercase tracking-wider" style={{ borderRadius: "6px" }}>
+                            Pending
+                          </span>
+                          <button
+                            aria-label={`Revoke invitation ${inv.email}`}
+                            className="p-1.5 text-[#848E9C] bg-transparent border-none cursor-pointer hover:text-[#F6465D] disabled:opacity-50"
+                            style={{ borderRadius: "6px", transition: "color 200ms ease" }}
+                            disabled={revokingInvitationId === inv.id}
+                            onClick={() => handleRevokeInvitation(inv.id)}
+                            type="button"
+                            title="Revoke invitation"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </Card>
+              )}
             </div>
-          </Card>
+
+            {/* ── Right: Info column ── */}
+            <div className="space-y-5">
+              <Card title="Access Levels">
+                <ul className="space-y-3" style={{ listStyle: "none", margin: 0, padding: 0 }}>
+                  {[
+                    { role: "Owner", color: "bg-[#FFF8E6] border-[#F0B90B44] text-[#B07D00]", desc: "Full access: manage members, edit & delete project" },
+                    { role: "Admin", color: "bg-[#E8F5E9] border-[#A5D6A7] text-[#1B5E20]", desc: "Manage contracts, compare runs, review" },
+                    { role: "Member", color: "bg-[#F5F5F5] border-[#E6E8EA] text-[#474D57]", desc: "View and collaborate on all contracts" },
+                  ].map(({ role, color, desc }) => (
+                    <li key={role} className="flex items-start gap-3">
+                      <span className={`px-2.5 py-0.5 border text-[11px] font-semibold uppercase tracking-wider flex-shrink-0 mt-0.5 ${color}`} style={{ borderRadius: "6px" }}>{role}</span>
+                      <p className="text-[12px] text-[#848E9C] font-medium leading-snug">{desc}</p>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+              <Card title="Team Summary">
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center py-2 border-b border-[#E6E8EA]">
+                    <span className="text-[13px] font-medium text-[#848E9C]">Active members</span>
+                    <span className="text-[14px] font-bold text-[#1E2026]">{members.length}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b border-[#E6E8EA]">
+                    <span className="text-[13px] font-medium text-[#848E9C]">Pending invitations</span>
+                    <span className="text-[14px] font-bold text-[#F0B90B]">{invitations.length}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2">
+                    <span className="text-[13px] font-medium text-[#848E9C]">Owners</span>
+                    <span className="text-[14px] font-bold text-[#1E2026]">{members.filter(m => (m.role || "").toLowerCase() === "owner").length}</span>
+                  </div>
+                </div>
+              </Card>
+            </div>
+          </div>
         )}
 
-        {/* â• â• â•  ACTIVITY TAB â• â• â•  */}
+        {/* ═══ INVITE MEMBER MODAL ═══ */}
+        {showMemberForm && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ backgroundColor: "rgba(30,32,38,0.45)", backdropFilter: "blur(4px)" }}
+            onClick={() => { if (!isAddingMember) { setShowMemberForm(false); setNewMemberEmail(""); } }}
+          >
+            <div
+              aria-label="Invite Member"
+              aria-modal="true"
+              className="w-full max-w-[440px] bg-white border border-[#E6E8EA] overflow-hidden"
+              onClick={e => e.stopPropagation()}
+              role="dialog"
+              style={{ borderRadius: "12px", boxShadow: "rgba(0,0,0,0.18) 0px 8px 32px", animation: "pdModalIn 0.2s ease-out" }}
+            >
+              {/* Modal header */}
+              <div className="relative px-6 pt-6 pb-4 border-b border-[#E6E8EA] bg-[#F5F5F5]">
+                <button
+                  className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center bg-transparent border-none text-[#848E9C] hover:text-[#1E2026] cursor-pointer"
+                  style={{ borderRadius: "6px", transition: "color 200ms ease" }}
+                  disabled={isAddingMember}
+                  onClick={() => { setShowMemberForm(false); setNewMemberEmail(""); }}
+                  type="button"
+                >
+                  <X size={18} />
+                </button>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 flex items-center justify-center text-[#F0B90B]" style={{ borderRadius: "8px", background: "rgba(240,185,11,0.1)" }}>
+                    <Users size={20} />
+                  </div>
+                  <div>
+                    <h2 className="text-[18px] font-semibold text-[#1E2026]">Invite Member</h2>
+                    <p className="text-[13px] text-[#848E9C] mt-0.5">Share this project with a teammate</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal body */}
+              <form
+                className="px-6 pb-6 pt-5 space-y-4"
+                onSubmit={async e => {
+                  e.preventDefault();
+                  if (newMemberEmail.trim()) await handleAddMember(newMemberEmail.trim());
+                }}
+              >
+                <div>
+                  <label className="text-[12px] font-semibold text-[#848E9C] uppercase tracking-wider block mb-1.5">
+                    Email address
+                  </label>
+                  <input
+                    aria-label="Member email"
+                    autoFocus
+                    className="w-full h-11 px-3 bg-[#F5F5F5] border border-[#E6E8EA] text-[14px] font-medium text-[#1E2026] placeholder-[#848E9C]"
+                    style={{ borderRadius: "8px", outline: "none", transition: "border-color 200ms ease" }}
+                    onFocus={e => { e.target.style.borderColor = "#000"; }}
+                    onBlur={e => { e.target.style.borderColor = "#E6E8EA"; }}
+                    type="email"
+                    placeholder="teammate@company.com"
+                    value={newMemberEmail}
+                    onChange={e => setNewMemberEmail(e.target.value)}
+                    required
+                  />
+                  <p className="text-[12px] text-[#848E9C] mt-1.5">
+                    If they already have an account, they'll be added immediately. Otherwise, an invitation will be sent.
+                  </p>
+                </div>
+
+                <div className="flex gap-3 pt-2 border-t border-[#E6E8EA]">
+                  <button
+                    className={formBtnPrimary}
+                    style={{ ...formBtnStyle, flex: 1, justifyContent: "center" }}
+                    type="submit"
+                    disabled={isAddingMember || !newMemberEmail.trim()}
+                  >
+                    {isAddingMember ? "Sending…" : "Send Invitation"}
+                  </button>
+                  <button
+                    className={formBtnSecondary}
+                    style={formBtnStyle}
+                    type="button"
+                    disabled={isAddingMember}
+                    onClick={() => { setShowMemberForm(false); setNewMemberEmail(""); }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ═══ ACTIVITY TAB ═══ */}
         {activeTab === "activity" && (
           <Card title="Activity Log" aside={`${activityLogs.length} events`}>
             {activityLogs.length > 0 ? (

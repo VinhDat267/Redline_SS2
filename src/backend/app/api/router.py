@@ -13,6 +13,7 @@ from app.api.routes.projects import router as projects_router
 from app.api.routes.requirements import router as requirements_router
 from app.api.routes.requirement_candidates import router as requirement_candidates_router
 from app.api.routes.requirement_test_case_mappings import router as requirement_test_case_mappings_router
+from app.api.routes.notifications import router as notifications_router
 from app.api.routes.test_cases import router as test_cases_router
 
 
@@ -31,3 +32,4 @@ api_router.include_router(requirements_router, prefix="/api/v1")
 api_router.include_router(requirement_candidates_router, prefix="/api/v1")
 api_router.include_router(requirement_test_case_mappings_router, prefix="/api/v1")
 api_router.include_router(test_cases_router, prefix="/api/v1")
+api_router.include_router(notifications_router, prefix="/api/v1")

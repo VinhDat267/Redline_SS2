@@ -54,3 +54,4 @@ class User(TimestampMixin, Base):
     )
     review_comments = relationship("ReviewComment", back_populates="author")
     chat_sessions = relationship("ChatSession", back_populates="created_by")
+    notifications = relationship("UserNotification", back_populates="user", cascade="all, delete-orphan")

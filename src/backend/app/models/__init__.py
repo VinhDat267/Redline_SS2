@@ -28,6 +28,7 @@ from app.models.requirement import Requirement
 from app.models.review_comment import ReviewComment
 from app.models.test_case import TestCase
 from app.models.user import User
+from app.models.user_notification import UserNotification
 
 __all__ = [
     "ActivityLog",
@@ -60,4 +61,5 @@ __all__ = [
     "ReviewComment",
     "TestCase",
     "User",
+    "UserNotification",
 ]

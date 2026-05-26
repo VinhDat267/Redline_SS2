@@ -6,8 +6,10 @@ from app.models import Document, Project, ProjectInvitation, ProjectMember, User
 from app.schemas.project import ProjectCreate, ProjectUpdate
 from app.schemas.project_member import ProjectMemberCreate, ProjectMemberUpdate
 from app.services.auth import normalize_email
+from app.services import notifications as notification_service
 from app.services import project_access as project_access_service
 from app.services import project_invitations as project_invitation_service
+from app.services.notifications import NOTIF_PROJECT_INVITE, NOTIF_PROJECT_REMOVED
 
 
 def list_projects(session: Session, user_id: int) -> list[Project]:
@@ -86,7 +88,7 @@ def create_project_member(
     payload: ProjectMemberCreate,
     invited_by_user_id: int | None,
 ) -> dict[str, object]:
-    get_project_or_404(session, project_id)
+    project = get_project_or_404(session, project_id)
     user = None
     normalized_email = normalize_email(payload.user_email) if payload.user_email is not None else None
     if payload.user_id is not None:
@@ -124,6 +126,20 @@ def create_project_member(
 
     member = ProjectMember(project_id=project_id, user_id=user.id, role=payload.role)
     session.add(member)
+    session.flush()
+
+    # Notify the added user
+    inviter = session.get(User, invited_by_user_id) if invited_by_user_id else None
+    notification_service.create_notification(
+        session,
+        user_id=user.id,
+        notification_type=NOTIF_PROJECT_INVITE,
+        title=f"You've been added to \"{project.name}\"",
+        body=f"{inviter.display_name if inviter else 'Someone'} added you as a member.",
+        project_id=project_id,
+        project_name=project.name,
+        actor_display_name=inviter.display_name if inviter else None,
+    )
     session.commit()
     session.refresh(member)
 
@@ -163,10 +179,33 @@ def update_project_member(session: Session, member: ProjectMember, payload: Proj
     return member
 
 
-def delete_project_member(session: Session, member: ProjectMember) -> None:
+def delete_project_member(
+    session: Session,
+    member: ProjectMember,
+    actor_display_name: str | None = None,
+) -> None:
     if _is_owner_role(member.role):
         _ensure_project_keeps_owner(session, member)
+
+    # Fetch project name before delete
+    project = session.get(Project, member.project_id)
+    project_name = project.name if project else "a project"
+    removed_user_id = member.user_id
+
     session.delete(member)
+    session.flush()
+
+    # Notify removed user
+    notification_service.create_notification(
+        session,
+        user_id=removed_user_id,
+        notification_type=NOTIF_PROJECT_REMOVED,
+        title=f"You've been removed from \"{project_name}\"",
+        body=f"{actor_display_name or 'A project admin'} removed you from this project.",
+        project_id=member.project_id if project else None,
+        project_name=project_name,
+        actor_display_name=actor_display_name,
+    )
     session.commit()
 
 

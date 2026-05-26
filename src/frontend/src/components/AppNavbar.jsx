@@ -206,13 +206,35 @@ function ProfileDropdown({ displayName, email, initial, avatarUrl, onLogout }) {
 }
 
 /* ─── Notification Bell ─── */
-function NotificationBell({ invitations, onAccept }) {
+function NotificationBell({ invitations: pendingInvitations, onAccept, token }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [accepting, setAccepting] = useState(null);
+  const [processing, setProcessing] = useState(null); // { id, action }
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const ref = useRef(null);
-  const count = invitations.length;
+
+  // Total badge = pending invitations + unread system notifications
+  const totalBadge = pendingInvitations.length + unreadCount;
 
   const close = useCallback(() => setIsOpen(false), []);
+
+  // Fetch system notifications (removed etc.) on mount + every 30s
+  useEffect(() => {
+    if (!token) return undefined;
+    async function fetchNotifs() {
+      try {
+        const { listNotifications: listNotifs } = await import("../lib/api");
+        const result = await listNotifs(token, { unreadOnly: false });
+        setNotifications(Array.isArray(result?.data ?? result) ? (result?.data ?? result) : []);
+        setUnreadCount(result?.unread_count ?? 0);
+      } catch {
+        // silent
+      }
+    }
+    fetchNotifs();
+    const timer = setInterval(fetchNotifs, 30000);
+    return () => clearInterval(timer);
+  }, [token]);
 
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -231,20 +253,67 @@ function NotificationBell({ invitations, onAccept }) {
   }, [isOpen, close]);
 
   async function handleAccept(inv) {
-    setAccepting(inv.id);
+    setProcessing({ id: inv.id, action: "accept" });
     try {
       await onAccept(inv.id);
     } finally {
-      setAccepting(null);
+      setProcessing(null);
     }
   }
+
+  async function handleDecline(inv) {
+    setProcessing({ id: inv.id, action: "decline" });
+    try {
+      const { declineProjectInvitation, acceptProjectInvitation: _ } = await import("../lib/api");
+      // We need the invitation's project_id — it's embedded in pendingInvitations
+      await declineProjectInvitation(token, inv.project_id, inv.id);
+      // Update session invitations list  
+      const { listNotifications: listNotifs } = await import("../lib/api");
+      const result = await listNotifs(token, { unreadOnly: false });
+      setNotifications(Array.isArray(result?.data ?? result) ? (result?.data ?? result) : []);
+      setUnreadCount(result?.unread_count ?? 0);
+    } catch {
+      // silent
+    } finally {
+      setProcessing(null);
+    }
+  }
+
+  async function handleDismissNotif(notif) {
+    setProcessing({ id: notif.id, action: "dismiss" });
+    try {
+      const { markNotificationRead } = await import("../lib/api");
+      await markNotificationRead(token, notif.id);
+      setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, is_read: true } : n));
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    } catch {
+      // silent
+    } finally {
+      setProcessing(null);
+    }
+  }
+
+  async function handleMarkAllRead() {
+    try {
+      const { markAllNotificationsRead } = await import("../lib/api");
+      await markAllNotificationsRead(token);
+      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+      setUnreadCount(0);
+    } catch {
+      // silent
+    }
+  }
+
+  // Only show unread system notifications in bell
+  const unreadNotifs = notifications.filter(n => !n.is_read);
+  const hasAny = pendingInvitations.length > 0 || unreadNotifs.length > 0;
 
   return (
     <div className="relative" ref={ref}>
       <button
         type="button"
-        aria-label={`Notifications — ${count} pending invitation${count !== 1 ? "s" : ""}`}
-        className="relative flex items-center justify-center w-9 h-9 border border-[#E6E8EA] bg-white cursor-pointer"
+        aria-label={`Notifications — ${totalBadge} unread`}
+        className="relative flex items-center justify-center w-9 h-9 cursor-pointer"
         style={{
           borderRadius: "50%",
           transition: "all 200ms ease",
@@ -256,12 +325,12 @@ function NotificationBell({ invitations, onAccept }) {
         onMouseLeave={e => { if (!isOpen) { e.currentTarget.style.borderColor = "#E6E8EA"; e.currentTarget.style.background = "#FFFFFF"; } }}
       >
         <Bell size={16} className="text-[#474D57]" />
-        {count > 0 && (
+        {totalBadge > 0 && (
           <span
             className="absolute -top-1 -right-1 flex items-center justify-center text-white text-[9px] font-bold bg-[#F6465D] min-w-[16px] h-4 px-0.5"
             style={{ borderRadius: "50px", lineHeight: 1 }}
           >
-            {count > 9 ? "9+" : count}
+            {totalBadge > 9 ? "9+" : totalBadge}
           </span>
         )}
       </button>
@@ -269,71 +338,115 @@ function NotificationBell({ invitations, onAccept }) {
       {/* Dropdown */}
       {isOpen && (
         <div
-          className="absolute right-0 mt-2 w-[320px] bg-white border border-[#E6E8EA] overflow-hidden"
+          className="absolute right-0 mt-2 w-[340px] bg-white border border-[#E6E8EA] overflow-hidden"
           style={{
             borderRadius: "12px",
             boxShadow: "0 8px 30px rgba(0,0,0,0.10), 0 2px 8px rgba(0,0,0,0.05)",
             animation: "profileDropdownIn 150ms ease-out",
+            zIndex: 200,
           }}
         >
           {/* Header */}
           <div className="px-4 py-3 border-b border-[#F0F0F0] flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Bell size={14} className="text-[#F0B90B]" />
-              <span className="text-[13px] font-semibold text-[#1E2026]">Project Invitations</span>
+              <span className="text-[13px] font-semibold text-[#1E2026]">Notifications</span>
             </div>
-            {count > 0 && (
-              <span className="px-2 py-0.5 bg-[#F6465D]/10 text-[#F6465D] text-[11px] font-bold" style={{ borderRadius: "50px" }}>
-                {count} pending
-              </span>
+            {unreadNotifs.length > 0 && (
+              <button
+                type="button"
+                onClick={handleMarkAllRead}
+                className="text-[11px] font-semibold text-[#848E9C] bg-transparent border-none cursor-pointer hover:text-[#1E2026]"
+                style={{ transition: "color 150ms ease" }}
+              >
+                Mark all read
+              </button>
             )}
           </div>
 
-          {/* List */}
-          {count === 0 ? (
+          {/* Content */}
+          {!hasAny ? (
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <Bell size={24} className="text-[#C0C6CF] mb-2" />
-              <p className="text-[13px] font-medium text-[#848E9C]">No pending invitations</p>
+              <p className="text-[13px] font-medium text-[#848E9C]">You're all caught up!</p>
             </div>
           ) : (
-            <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-              {invitations.map(inv => (
-                <li key={inv.id} className="px-4 py-3 border-b border-[#F5F5F5] last:border-b-0">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-2.5 min-w-0">
-                      <div
-                        className="w-8 h-8 flex items-center justify-center text-[12px] font-bold text-[#B07D00] flex-shrink-0 mt-0.5"
-                        style={{ borderRadius: "50%", background: "rgba(240,185,11,0.12)" }}
-                      >
-                        {(inv.project_name || "P")[0]?.toUpperCase()}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-[13px] font-semibold text-[#1E2026] truncate">{inv.project_name || `Project #${inv.project_id}`}</p>
-                        <p className="text-[11px] text-[#848E9C] mt-0.5">
-                          Invited by <span className="font-semibold">{inv.invited_by_display_name || "Someone"}</span>
-                          {inv.role ? ` · ${inv.role}` : ""}
-                        </p>
+            <ul style={{ listStyle: "none", margin: 0, padding: 0 }} className="max-h-[380px] overflow-y-auto">
+
+              {/* ── Pending Invitations ── */}
+              {pendingInvitations.map(inv => (
+                <li key={`inv-${inv.id}`} className="px-4 py-3 border-b border-[#F5F5F5] bg-[#FFFDF5]">
+                  <div className="flex items-start gap-2.5">
+                    <div
+                      className="w-8 h-8 flex items-center justify-center text-[12px] font-bold text-[#B07D00] flex-shrink-0 mt-0.5"
+                      style={{ borderRadius: "50%", background: "rgba(240,185,11,0.12)" }}
+                    >
+                      {(inv.project_name || "P")[0]?.toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[12px] font-semibold text-[#1E2026] truncate">
+                        You were invited to <span className="text-[#B07D00]">{inv.project_name || `Project #${inv.project_id}`}</span>
+                      </p>
+                      <p className="text-[11px] text-[#848E9C] mt-0.5">
+                        By <span className="font-semibold">{inv.invited_by_display_name || "Someone"}</span>
+                        {inv.role ? ` · ${inv.role}` : ""}
+                      </p>
+                      <div className="flex gap-2 mt-2">
+                        <button
+                          type="button"
+                          disabled={processing?.id === inv.id}
+                          onClick={() => handleAccept(inv)}
+                          className="flex items-center gap-1 px-2.5 py-1 bg-[#F0B90B] border-none text-[#1E2026] text-[11px] font-bold cursor-pointer disabled:opacity-50"
+                          style={{ borderRadius: "6px", transition: "background 150ms ease" }}
+                          onMouseEnter={e => { if (processing?.id !== inv.id) e.currentTarget.style.background = "#E0AB0A"; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = "#F0B90B"; }}
+                        >
+                          {processing?.id === inv.id && processing?.action === "accept" ? "…" : <><Check size={11} /> Accept</>}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={processing?.id === inv.id}
+                          onClick={() => handleDecline(inv)}
+                          className="flex items-center gap-1 px-2.5 py-1 bg-white border border-[#E6E8EA] text-[#848E9C] text-[11px] font-semibold cursor-pointer disabled:opacity-50 hover:text-[#F6465D] hover:border-[#F6465D]"
+                          style={{ borderRadius: "6px", transition: "all 150ms ease" }}
+                        >
+                          {processing?.id === inv.id && processing?.action === "decline" ? "…" : <><X size={11} /> Decline</>}
+                        </button>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      aria-label={`Accept invitation to ${inv.project_name}`}
-                      disabled={accepting === inv.id}
-                      onClick={() => handleAccept(inv)}
-                      className="flex items-center gap-1 px-2.5 py-1 bg-[#F0B90B] border-none text-[#1E2026] text-[11px] font-bold cursor-pointer disabled:opacity-50 flex-shrink-0"
-                      style={{ borderRadius: "6px", transition: "background 150ms ease" }}
-                      onMouseEnter={e => { if (accepting !== inv.id) e.currentTarget.style.background = "#E0AB0A"; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = "#F0B90B"; }}
-                    >
-                      {accepting === inv.id ? (
-                        "…"
-                      ) : (
-                        <><Check size={11} /> Accept</>
-                      )}
-                    </button>
                   </div>
                 </li>
               ))}
+
+              {/* ── System Notifications (removed, etc.) ── */}
+              {unreadNotifs.map(notif => {
+                const isRemoved = notif.notification_type === "project_removed";
+                return (
+                  <li key={`notif-${notif.id}`} className={`px-4 py-3 border-b border-[#F5F5F5] ${isRemoved ? "bg-[#FFF5F5]" : "bg-white"}`}>
+                    <div className="flex items-start gap-2.5">
+                      <div
+                        className={`w-8 h-8 flex items-center justify-center text-[12px] font-bold flex-shrink-0 mt-0.5 ${isRemoved ? "text-[#F6465D] bg-[#F6465D]/10" : "text-[#848E9C] bg-[#F5F5F5]"}`}
+                        style={{ borderRadius: "50%" }}
+                      >
+                        {isRemoved ? <LogOut size={13} /> : <Bell size={13} />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[12px] font-semibold text-[#1E2026]">{notif.title}</p>
+                        {notif.body && <p className="text-[11px] text-[#848E9C] mt-0.5">{notif.body}</p>}
+                        <button
+                          type="button"
+                          disabled={processing?.id === notif.id}
+                          onClick={() => handleDismissNotif(notif)}
+                          className="mt-1.5 text-[11px] font-semibold text-[#848E9C] bg-transparent border-none cursor-pointer hover:text-[#1E2026] disabled:opacity-50"
+                          style={{ transition: "color 150ms ease" }}
+                        >
+                          {processing?.id === notif.id ? "…" : "Dismiss"}
+                        </button>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
@@ -510,6 +623,7 @@ export function AppNavbar() {
           <NotificationBell
             invitations={pendingProjectInvitations}
             onAccept={acceptPendingProjectInvitation}
+            token={token}
           />
 
           {/* Active project badge */}

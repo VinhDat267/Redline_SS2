@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+from sqlalchemy import select as sa_select
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_current_user, get_db_session
-from app.models import Project, User
+from app.models import Project, ProjectInvitation, User
 from app.schemas.project import ProjectCreate, ProjectRead, ProjectUpdate
 from app.schemas.project_invitation import ProjectInvitationRead
 from app.schemas.project_member import (
@@ -133,7 +134,7 @@ def delete_project_member(
 ):
     project_access_service.ensure_project_admin_or_403(database, project_id, current_user.id)
     member = project_service.get_project_member_or_404(database, project_id, member_id)
-    project_service.delete_project_member(database, member)
+    project_service.delete_project_member(database, member, actor_display_name=current_user.display_name)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -167,6 +168,30 @@ def delete_project_invitation(
         invitation_id,
     )
     project_invitation_service.revoke_project_invitation(database, invitation)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/projects/{project_id}/invitations/{invitation_id}/decline", status_code=status.HTTP_204_NO_CONTENT)
+def decline_project_invitation(
+    project_id: int,
+    invitation_id: int,
+    current_user: User = Depends(get_current_user),
+    database: Session = Depends(get_db_session),
+):
+    """Allow the invited user themselves to decline an invitation."""
+    inv = database.scalar(
+        sa_select(ProjectInvitation).where(
+            ProjectInvitation.id == invitation_id,
+            ProjectInvitation.project_id == project_id,
+            ProjectInvitation.email == current_user.email,
+            ProjectInvitation.status == "pending",
+        )
+    )
+    if inv is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found")
+    inv.status = "declined"
+    database.add(inv)
+    database.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

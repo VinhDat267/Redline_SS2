@@ -372,6 +372,34 @@ export function deleteProjectMember(token, projectId, memberId) {
   });
 }
 
+export function declineProjectInvitation(token, projectId, invitationId) {
+  return apiRequest(`/api/v1/projects/${projectId}/invitations/${invitationId}/decline`, {
+    method: "POST",
+    token
+  });
+}
+
+// ── Notifications ──────────────────────────────────────────────────────────
+
+export function listNotifications(token, { unreadOnly = false } = {}) {
+  const query = unreadOnly ? "?unread_only=true" : "";
+  return apiRequest(`/api/v1/notifications${query}`, { token });
+}
+
+export function markNotificationRead(token, notificationId) {
+  return apiRequest(`/api/v1/notifications/${notificationId}/read`, {
+    method: "PATCH",
+    token
+  });
+}
+
+export function markAllNotificationsRead(token) {
+  return apiRequest(`/api/v1/notifications/read-all`, {
+    method: "POST",
+    token
+  });
+}
+
 export function listProjectDocuments(token, projectId) {
   return apiRequest(`/api/v1/projects/${projectId}/documents`, { token });
 }

@@ -328,6 +328,18 @@ export function ReviewPanelPage() {
         setAssigneeUserId(payload.assignee_user_id ? String(payload.assignee_user_id) : "");
         setReviewSummary(payload.summary ?? "");
         setReviewMessage("Review saved successfully.");
+
+        // Clean auto-advance to next unreviewed/unresolved item after saving resolved
+        if (payload.review_status === "resolved") {
+          const currentIndex = filteredQueue.findIndex(item => item.id === payload.id);
+          const nextUnresolved = filteredQueue.slice(currentIndex + 1).find(item => item.review_status !== "resolved");
+          const targetNext = nextUnresolved || (currentIndex < filteredQueue.length - 1 ? filteredQueue[currentIndex + 1] : null);
+          if (targetNext) {
+            setTimeout(() => {
+              updateQueueParams({ change: String(targetNext.id) });
+            }, 600);
+          }
+        }
       }
     } catch (saveError) {
       if (saveError instanceof ApiError && saveError.status === 401) {
@@ -565,9 +577,11 @@ export function ReviewPanelPage() {
               <span style={{ fontSize: '10px', color: '#C0C6CF', fontFamily: 'monospace', flexShrink: 0 }}>#{changeItem.id}</span>
               {compareRun && <span style={{ fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: '#F4F5F7', color: '#848E9C', border: '1px solid #E6E8EA', flexShrink: 0 }}>{(() => { const n = Number(compareRun.id); return `CR-${String(n).padStart(4, '0')}`; })()}</span>}
               {/* Surface */}
-              <span style={{ fontSize: '10px', color: '#848E9C', flexShrink: 0, display: 'flex', alignItems: 'center', gap: '3px' }}>
-                <span style={{ padding: '1px 5px', borderRadius: '3px', background: '#F4F5F7', fontSize: '9px', fontFamily: 'monospace' }}>{changeItem.surface_type}/{changeItem.surface_key}</span>
-              </span>
+              {changeItem.section_title ? null : (
+                <span style={{ fontSize: '10px', color: '#848E9C', flexShrink: 0, display: 'flex', alignItems: 'center', gap: '3px' }}>
+                  <span style={{ padding: '1px 5px', borderRadius: '3px', background: '#F4F5F7', fontSize: '9px', fontFamily: 'monospace' }}>Clause #{changeItem.id}</span>
+                </span>
+              )}
             </>
           ) : (
             <span style={{ fontSize: '13px', color: '#848E9C' }}>Select a change from the queue</span>
@@ -704,13 +718,8 @@ export function ReviewPanelPage() {
                     </span>
                   )}
                   {changeItem.ai_review_draft.provider_used && (
-                    <span style={{ marginTop: '4px', display: 'inline-block', marginLeft: '4px', fontSize: '10px', fontWeight: 700, padding: '1px 7px', borderRadius: '4px', background: '#F4F5F7', color: '#848E9C', border: '1px solid #E6E8EA' }}>
-                      {changeItem.ai_review_draft.provider_used}
-                    </span>
-                  )}
-                  {changeItem.ai_review_draft.fallback_used && (
-                    <span style={{ marginTop: '4px', display: 'inline-block', marginLeft: '4px', fontSize: '10px', fontWeight: 700, padding: '1px 7px', borderRadius: '4px', background: '#FFF8E6', color: '#B07D0A', border: '1px solid #F0B90B44' }}>
-                      Fallback used
+                    <span style={{ marginTop: '4px', display: 'inline-block', marginLeft: '4px', fontSize: '10px', fontWeight: 700, padding: '1px 7px', borderRadius: '4px', background: '#EBF9F4', color: '#16714E', border: '1px solid #2EBD8544' }}>
+                      ✦ AI Generated
                     </span>
                   )}
                   {changeItem.ai_review_draft.error_message && (

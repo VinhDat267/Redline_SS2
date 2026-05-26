@@ -304,11 +304,11 @@ export function CompareScreenPage() {
         if (jobDone) {
           const normalizedStatus = String(jobPayload.status).toLowerCase();
           if (normalizedStatus === "completed") {
-            setAiMessage("AI batch job completed.");
+            setAiMessage("AI analysis complete.");
           } else if (normalizedStatus === "completed_with_failures") {
-            setAiMessage("AI batch job completed with failures.");
+            setAiMessage("AI analysis complete (some items could not be analyzed).");
           } else if (normalizedStatus === "failed") {
-            setAiMessage("AI batch job failed.");
+            setAiMessage("AI analysis failed. Please try again.");
           }
           return;
         }
@@ -752,9 +752,11 @@ export function CompareScreenPage() {
                 {/* Change header */}
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#848E9C', textTransform: 'uppercase', letterSpacing: '.06em' }}>
-                      {selectedChange.surface_type} · {selectedChange.surface_key}
-                    </span>
+                    {selectedChange.section_title ? null : (
+                      <span style={{ fontSize: '10px', fontWeight: 700, color: '#848E9C', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+                        Clause #{selectedChange.id}
+                      </span>
+                    )}
                     {(() => {
                       const ct = selectedChange.change_type || 'modified';
                       const cfg = { added: ['#EBF9F4', '#16714E'], removed: ['#FFF1F0', '#C03050'], modified: ['#FFF8E6', '#B07D0A'] };
@@ -841,8 +843,8 @@ export function CompareScreenPage() {
                     <div style={{ padding: '12px 14px', borderBottom: `1px solid ${bdr}` }}>
                       <p style={{ fontSize: '12px', color: '#474D57', lineHeight: 1.65 }}>{selectedChange.ai_review_draft.explanation}</p>
                       {selectedChange.ai_review_draft.provider_used && (
-                        <span style={{ marginTop: '6px', display: 'inline-block', fontSize: '10px', fontWeight: 700, padding: '1px 7px', borderRadius: '4px', background: '#F4F5F7', color: '#848E9C', border: '1px solid #E6E8EA' }}>
-                          {selectedChange.ai_review_draft.provider_used}
+                        <span style={{ marginTop: '6px', display: 'inline-block', fontSize: '10px', fontWeight: 700, padding: '1px 7px', borderRadius: '4px', background: '#EBF9F4', color: '#16714E', border: '1px solid #2EBD8544' }}>
+                          ✦ AI Generated
                         </span>
                       )}
                     </div>

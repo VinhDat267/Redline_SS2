@@ -817,7 +817,7 @@ def test_contract_compare_chat_does_not_use_unrelated_change_items_for_specific_
 
     assert message_response.status_code == 201
     assistant_message = message_response.json()["data"]["assistant_message"]
-    assert "compare run does not contain enough grounded evidence" in assistant_message["content"]
+    assert "comparison doesn't contain enough information" in assistant_message["content"]
     assert assistant_message["provider_used"] == "local-compare"
     assert assistant_message["citations"] == []
     assert adapter_called is False

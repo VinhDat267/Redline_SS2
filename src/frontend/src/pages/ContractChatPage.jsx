@@ -22,8 +22,8 @@ function hasParsedStatus(d) { return ["parsed", "parsed_with_warnings"].includes
 function createClientRequestId() { return globalThis.crypto?.randomUUID?.() ?? `req-${Date.now()}-${Math.random().toString(16).slice(2)}`; }
 
 const STREAM_STATUS_LABELS = {
-  starting: "Starting", grounding: "Grounding clauses", answering: "Answering",
-  sources_pending: "Attaching sources", cancelling: "Stopping", cancelled: "Stopped", error: "Failed"
+  starting: "Preparing", grounding: "Searching contract\u2026", answering: "Answering",
+  sources_pending: "Verifying references\u2026", cancelling: "Stopping", cancelled: "Stopped", error: "Failed"
 };
 const STREAM_STATUS_ICONS = {
   starting: "⏳", grounding: "🔍", answering: "✍️", sources_pending: "📎", cancelling: "⏹", cancelled: "⏹", error: "❌"

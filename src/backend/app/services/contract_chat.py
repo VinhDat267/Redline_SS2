@@ -271,7 +271,7 @@ def generate_chat_answer(
             should_cancel=should_cancel,
         )
     else:
-        answer_text = "I could not find a grounded answer in the current contract draft."
+        answer_text = "I couldn't find a relevant answer in the current contract draft. Try rephrasing your question."
 
     return ContractChatAnswer(
         content=answer_text,
@@ -476,8 +476,8 @@ def _build_compare_run_answer(
     if not change_items:
         return ContractChatAnswer(
             content=(
-                "This compare run has no detected clause changes. "
-                "I cannot describe differences that are not present in compare truth."
+                "No changes were found between these two versions. "
+                "The documents appear to be identical."
             ),
             citations=[],
             provider_used="local-compare",
@@ -489,7 +489,7 @@ def _build_compare_run_answer(
             selected = change_items[:_CHAT_CONTEXT_LIMIT]
         else:
             return ContractChatAnswer(
-                content="The compare run does not contain enough grounded evidence to answer that question.",
+                content="The comparison doesn't contain enough information to answer that question. Try asking about specific clauses.",
                 citations=[],
                 provider_used="local-compare",
             )
@@ -516,7 +516,7 @@ def _build_compare_run_answer(
             )
 
     lines = [
-        f"Compare Q&A is using deterministic compare truth for {source_label} -> {target_label}.",
+        f"Here are the changes between {source_label} and {target_label}:",
     ]
     for index, change_item in enumerate(selected, start=1):
         title = change_item.section_title or f"Change item {change_item.id}"
@@ -832,11 +832,11 @@ def _build_contract_metadata_answer(
             if description:
                 lines.append(f"Mô tả: {description}.")
         if draft_label:
-            draft_text = f"Bản nháp đang dùng cho RAG: {draft_label}"
+            draft_text = f"Bản nháp đang phân tích: {draft_label}"
             if file_name:
                 draft_text = f"{draft_text} ({file_name})"
             lines.append(f"{draft_text}.")
-        lines.append("Các câu hỏi về điều khoản sẽ tiếp tục được trả lời bằng RAG và citation từ nội dung đã parse.")
+        lines.append("Các câu hỏi về điều khoản sẽ được trả lời dựa trên nội dung hợp đồng đã phân tích.")
     else:
         if title_only:
             lines = [f'The document name is "{title}".']
@@ -846,11 +846,11 @@ def _build_contract_metadata_answer(
             if description:
                 lines.append(f"Description: {description}.")
         if draft_label:
-            draft_text = f"Current RAG draft: {draft_label}"
+            draft_text = f"Active draft: {draft_label}"
             if file_name:
                 draft_text = f"{draft_text} ({file_name})"
             lines.append(f"{draft_text}.")
-        lines.append("Clause questions will still be answered with RAG citations from the parsed document text.")
+        lines.append("Clause questions will be answered with references from the analyzed document.")
 
     return ContractChatAnswer(
         content="\n".join(lines),
@@ -1019,7 +1019,7 @@ def _build_contract_chat_llm_payload(
         "instructions": {
             "truth_boundary": "Use only the supplied metadata, recent conversation, and evidence blocks.",
             "citation_style": "When relying on an evidence block, cite it inline as [citation_number].",
-            "fallback": "If the evidence does not answer the question, say the parsed contract draft does not contain enough grounded evidence.",
+            "fallback": "If the evidence does not answer the question, say the contract draft does not contain enough information to answer.",
         },
     }
 
@@ -1139,8 +1139,8 @@ def _build_extractive_answer(context_blocks: list[dict[str, object]]) -> str:
         if str(item.get("content") or "").strip()
     ]
     if len(lines) == 1:
-        return f"Based on the contract text, {lines[0]}"
-    return "Based on the contract text:\n" + "\n".join(f"- {line}" for line in lines)
+        return f"Here's what I found in the contract: {lines[0]}"
+    return "Here's what I found in the contract:\n" + "\n".join(f"- {line}" for line in lines)
 
 
 def _serialize_citations(retrieved_blocks: list[dict[str, object]]) -> list[dict[str, object]]:

@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+﻿import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, BarChart3, CheckSquare, ClipboardList, Clock, FileText, FolderHeart, FolderOpen, History, LogOut, MessageSquare, Pencil, Plus, Trash2, X, Users, ShieldCheck, Activity } from "lucide-react";
 
@@ -30,6 +30,7 @@ import {
   updateContract
 } from "../lib/api";
 import { formatDateTime } from "../lib/formatters";
+import { useProjectEvents } from "../hooks/useProjectEvents";
 
 const EMPTY_DOCUMENT_FORM = {
   title: "",
@@ -256,6 +257,80 @@ export function ProjectDetailPage() {
       isCurrent = false;
     };
   }, [logout, projectId, token]);
+
+  // ── Real-time SSE: auto-refresh on project events from other members ──
+  const handleProjectEvent = useCallback((event) => {
+    const { type, data, actor_display_name } = event;
+    const actor = actor_display_name || "A team member";
+
+    switch (type) {
+      case "document_created":
+        refreshDocumentInventory();
+        setFeedback(`${actor} created document "${data?.title || ""}"`);
+        break;
+      case "document_updated":
+        refreshDocumentInventory();
+        setFeedback(`${actor} updated a document`);
+        break;
+      case "document_deleted":
+        refreshDocumentInventory();
+        setFeedback(`${actor} deleted document "${data?.title || ""}"`);
+        break;
+      case "version_created":
+        refreshDocumentInventory();
+        setFeedback(`${actor} uploaded version "${data?.version_label || ""}" to "${data?.document_title || ""}"`);
+        break;
+      case "member_added":
+        refreshMemberInventory();
+        setFeedback(`${actor} added a new member`);
+        break;
+      case "member_removed":
+        refreshMemberInventory();
+        setFeedback(`${actor} removed a member`);
+        break;
+      case "invitation_created":
+        refreshInvitationInventory();
+        setFeedback(`${actor} sent an invitation to ${data?.email || "someone"}`);
+        break;
+      case "invitation_accepted":
+      case "invitation_declined":
+        refreshInvitationInventory();
+        refreshMemberInventory();
+        setFeedback(`An invitation was ${type === "invitation_accepted" ? "accepted" : "declined"}`);
+        break;
+      case "project_updated":
+        loadProjectData();
+        setFeedback(`${actor} updated the project`);
+        break;
+      case "project_deleted":
+        setFeedback(`${actor} deleted this project`);
+        break;
+      case "compare_started":
+      case "compare_completed":
+      case "review_completed":
+        setFeedback(`${actor} ${type.replace("_", " ")}`);
+        break;
+      default:
+        break;
+    }
+  }, [projectId, token]);
+
+  useProjectEvents(projectId ? Number(projectId) : null, handleProjectEvent);
+
+  // Lightweight refresh helpers for SSE event handler
+  async function refreshMemberInventory() {
+    try {
+      const memberPayload = await listProjectMembers(token, projectId);
+      setMembers(memberPayload);
+    } catch { /* silent */ }
+  }
+  async function loadProjectData() {
+    try {
+      const p = await getProject(token, projectId);
+      setProject(p);
+      setActiveProject(p);
+    } catch { /* silent */ }
+  }
 
   async function refreshDocumentInventory() {
     try {

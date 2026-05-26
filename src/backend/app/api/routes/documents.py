@@ -11,6 +11,7 @@ from app.services import documents as document_service
 from app.services.document_parser import DocumentParseError
 from app.services import parser_workspace as parser_workspace_service
 from app.services import project_access as project_access_service
+from app.services.project_events import get_event_broker, ProjectEvent, EVENT_DOCUMENT_CREATED, EVENT_DOCUMENT_DELETED, EVENT_VERSION_CREATED
 
 
 router = APIRouter(tags=["documents"], dependencies=[Depends(get_current_user)])
@@ -45,6 +46,13 @@ def create_document(
         entity_id=document.id,
         description=f'Created document "{document.title}"',
     )
+    get_event_broker().publish(ProjectEvent(
+        event_type=EVENT_DOCUMENT_CREATED,
+        project_id=project_id,
+        data={"document_id": document.id, "title": document.title},
+        actor_user_id=current_user.id,
+        actor_display_name=current_user.display_name,
+    ))
     return {"data": DocumentRead.model_validate(document).model_dump(mode="json")}
 
 
@@ -89,6 +97,14 @@ def delete_document(
     database: Session = Depends(get_db_session),
 ):
     document = project_access_service.ensure_document_access_or_404(database, document_id, current_user.id)
+    project_id = document.project_id
+    get_event_broker().publish(ProjectEvent(
+        event_type=EVENT_DOCUMENT_DELETED,
+        project_id=project_id,
+        data={"document_id": document.id, "title": document.title},
+        actor_user_id=current_user.id,
+        actor_display_name=current_user.display_name,
+    ))
     document_service.delete_document(database, document)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -133,6 +149,13 @@ def create_document_version(
         entity_id=version.id,
         description=f'Uploaded version "{version_label}" to "{document.title}"',
     )
+    get_event_broker().publish(ProjectEvent(
+        event_type=EVENT_VERSION_CREATED,
+        project_id=document.project_id,
+        data={"document_id": document.id, "version_id": version.id, "version_label": version_label, "document_title": document.title},
+        actor_user_id=current_user.id,
+        actor_display_name=current_user.display_name,
+    ))
     return {"data": DocumentVersionRead.model_validate(version).model_dump(mode="json")}
 
 

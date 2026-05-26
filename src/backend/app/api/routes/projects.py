@@ -16,6 +16,7 @@ from app.services import analytics as analytics_service
 from app.services import project_access as project_access_service
 from app.services import project_invitations as project_invitation_service
 from app.services import projects as project_service
+from app.services.project_events import get_event_broker, ProjectEvent, EVENT_MEMBER_ADDED, EVENT_MEMBER_REMOVED, EVENT_INVITATION_CREATED, EVENT_INVITATION_DECLINED, EVENT_PROJECT_UPDATED, EVENT_PROJECT_DELETED
 
 
 router = APIRouter(tags=["projects"], dependencies=[Depends(get_current_user)])
@@ -74,6 +75,13 @@ def update_project(
     project = project_access_service.ensure_project_admin_or_403(database, project_id, current_user.id)
     project = project_service.update_project(database, project, payload)
     document_count = project_service.count_project_documents(database, project.id)
+    get_event_broker().publish(ProjectEvent(
+        event_type=EVENT_PROJECT_UPDATED,
+        project_id=project_id,
+        data={"name": project.name},
+        actor_user_id=current_user.id,
+        actor_display_name=current_user.display_name,
+    ))
     return {"data": _project_read_data(project, document_count)}
 
 
@@ -84,6 +92,13 @@ def delete_project(
     database: Session = Depends(get_db_session),
 ):
     project = project_access_service.ensure_project_admin_or_403(database, project_id, current_user.id)
+    get_event_broker().publish(ProjectEvent(
+        event_type=EVENT_PROJECT_DELETED,
+        project_id=project_id,
+        data={"name": project.name},
+        actor_user_id=current_user.id,
+        actor_display_name=current_user.display_name,
+    ))
     project_service.delete_project(database, project)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -108,6 +123,14 @@ def create_project_member(
 ):
     project_access_service.ensure_project_admin_or_403(database, project_id, current_user.id)
     result = project_service.create_project_member(database, project_id, payload, current_user.id)
+    event_type = EVENT_MEMBER_ADDED if result.get("result_type") == "member_added" else EVENT_INVITATION_CREATED
+    get_event_broker().publish(ProjectEvent(
+        event_type=event_type,
+        project_id=project_id,
+        data={"email": payload.user_email, "role": payload.role},
+        actor_user_id=current_user.id,
+        actor_display_name=current_user.display_name,
+    ))
     return {"data": ProjectMemberCreateResultRead.model_validate(result).model_dump(mode="json")}
 
 
@@ -134,7 +157,15 @@ def delete_project_member(
 ):
     project_access_service.ensure_project_admin_or_403(database, project_id, current_user.id)
     member = project_service.get_project_member_or_404(database, project_id, member_id)
+    member_email = getattr(member, "user_email", None)  # capture before delete detaches
     project_service.delete_project_member(database, member, actor_display_name=current_user.display_name)
+    get_event_broker().publish(ProjectEvent(
+        event_type=EVENT_MEMBER_REMOVED,
+        project_id=project_id,
+        data={"member_id": member_id, "email": member_email},
+        actor_user_id=current_user.id,
+        actor_display_name=current_user.display_name,
+    ))
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

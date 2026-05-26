@@ -17,6 +17,7 @@ from app.services import ai_batch_jobs as ai_batch_job_service
 from app.services import ai_rate_limit
 from app.services import compare as compare_service
 from app.services import project_access as project_access_service
+from app.services.project_events import get_event_broker, ProjectEvent, EVENT_COMPARE_STARTED
 
 
 router = APIRouter(tags=["compare"], dependencies=[Depends(get_current_user)])
@@ -46,6 +47,13 @@ def create_compare_run(
         entity_id=compare_run["id"],
         description=f'Created compare run for "{document.title}"',
     )
+    get_event_broker().publish(ProjectEvent(
+        event_type=EVENT_COMPARE_STARTED,
+        project_id=document.project_id,
+        data={"compare_run_id": compare_run["id"], "document_title": document.title},
+        actor_user_id=current_user.id,
+        actor_display_name=current_user.display_name,
+    ))
     return {"data": CompareRunRead.model_validate(compare_run).model_dump(mode="json")}
 
 

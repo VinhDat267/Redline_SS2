@@ -337,7 +337,7 @@ export function AuthProvider({ children, initialSession = null }) {
     }
 
     const result = await declineMyProjectInvitation(csrfToken, invitationId);
-    const updatedInvitations = result?.data?.pending_project_invitations ?? result?.pending_project_invitations ?? [];
+    const updatedInvitations = result?.pending_project_invitations ?? [];
     startTransition(() => {
       setSession((currentSession) => {
         if (!currentSession) return currentSession;
@@ -373,8 +373,7 @@ export function AuthProvider({ children, initialSession = null }) {
   const pollInvitations = useCallback(async () => {
     if (!csrfToken) return;
     try {
-      const result = await listMyPendingInvitations(csrfToken);
-      const invites = result?.data ?? [];
+      const invites = await listMyPendingInvitations(csrfToken);
       setLiveInvitations(Array.isArray(invites) ? invites : []);
     } catch {
       // silent – keep showing last known state

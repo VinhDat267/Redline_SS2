@@ -252,10 +252,25 @@ function NotificationBell({ invitations: pendingInvitations, onAccept, onDecline
     };
   }, [isOpen, close]);
 
+  // Helper: mark the UserNotification for a given project as read (auto-dismiss after accept/decline)
+  async function autoDismissInviteNotif(projectId) {
+    const notif = notifications.find(n => n.notification_type === "project_invite" && n.project_id === projectId && !n.is_read);
+    if (!notif) return;
+    try {
+      const { markNotificationRead } = await import("../lib/api");
+      await markNotificationRead(token, notif.id);
+      setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, is_read: true } : n));
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    } catch {
+      // silent
+    }
+  }
+
   async function handleAccept(inv) {
     setProcessing({ id: inv.id, action: "accept" });
     try {
       await onAccept(inv.id);
+      await autoDismissInviteNotif(inv.project_id);
     } finally {
       setProcessing(null);
     }
@@ -265,6 +280,7 @@ function NotificationBell({ invitations: pendingInvitations, onAccept, onDecline
     setProcessing({ id: inv.id, action: "decline" });
     try {
       await onDecline(inv.id);
+      await autoDismissInviteNotif(inv.project_id);
     } catch {
       // silent
     } finally {
@@ -411,30 +427,69 @@ function NotificationBell({ invitations: pendingInvitations, onAccept, onDecline
                 </li>
               ))}
 
-              {/* ── System Notifications (removed, etc.) ── */}
+              {/* ── System Notifications (invite alerts, removed, etc.) ── */}
               {unreadNotifs.map(notif => {
                 const isRemoved = notif.notification_type === "project_removed";
+                const isInvite = notif.notification_type === "project_invite";
+
+                // For invite notifications: find matching pending invitation by project_id
+                const matchedInvitation = isInvite
+                  ? pendingInvitations.find(inv => inv.project_id === notif.project_id)
+                  : null;
+
                 return (
-                  <li key={`notif-${notif.id}`} className={`px-4 py-3 border-b border-[#F5F5F5] ${isRemoved ? "bg-[#FFF5F5]" : "bg-white"}`}>
+                  <li key={`notif-${notif.id}`} className={`px-4 py-3 border-b border-[#F5F5F5] ${isRemoved ? "bg-[#FFF5F5]" : isInvite ? "bg-[#FFFDF5]" : "bg-white"}`}>
                     <div className="flex items-start gap-2.5">
                       <div
-                        className={`w-8 h-8 flex items-center justify-center text-[12px] font-bold flex-shrink-0 mt-0.5 ${isRemoved ? "text-[#F6465D] bg-[#F6465D]/10" : "text-[#848E9C] bg-[#F5F5F5]"}`}
-                        style={{ borderRadius: "50%" }}
+                        className={`w-8 h-8 flex items-center justify-center text-[12px] font-bold flex-shrink-0 mt-0.5`}
+                        style={{
+                          borderRadius: "50%",
+                          background: isRemoved ? "rgba(246,70,93,0.10)" : isInvite ? "rgba(240,185,11,0.12)" : "#F5F5F5",
+                          color: isRemoved ? "#F6465D" : isInvite ? "#B07D00" : "#848E9C",
+                        }}
                       >
-                        {isRemoved ? <LogOut size={13} /> : <Bell size={13} />}
+                        {isRemoved ? <LogOut size={13} /> : isInvite ? (notif.project_name || "P")[0]?.toUpperCase() : <Bell size={13} />}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-[12px] font-semibold text-[#1E2026]">{notif.title}</p>
                         {notif.body && <p className="text-[11px] text-[#848E9C] mt-0.5">{notif.body}</p>}
-                        <button
-                          type="button"
-                          disabled={processing?.id === notif.id}
-                          onClick={() => handleDismissNotif(notif)}
-                          className="mt-1.5 text-[11px] font-semibold text-[#848E9C] bg-transparent border-none cursor-pointer hover:text-[#1E2026] disabled:opacity-50"
-                          style={{ transition: "color 150ms ease" }}
-                        >
-                          {processing?.id === notif.id ? "…" : "Dismiss"}
-                        </button>
+
+                        {/* Invite: show Accept/Decline if pending invitation still exists */}
+                        {isInvite && matchedInvitation ? (
+                          <div className="flex gap-2 mt-2">
+                            <button
+                              type="button"
+                              disabled={processing?.id === matchedInvitation.id}
+                              onClick={() => handleAccept(matchedInvitation)}
+                              className="flex items-center gap-1 px-2.5 py-1 bg-[#F0B90B] border-none text-[#1E2026] text-[11px] font-bold cursor-pointer disabled:opacity-50"
+                              style={{ borderRadius: "6px", transition: "background 150ms ease" }}
+                              onMouseEnter={e => { if (processing?.id !== matchedInvitation.id) e.currentTarget.style.background = "#E0AB0A"; }}
+                              onMouseLeave={e => { e.currentTarget.style.background = "#F0B90B"; }}
+                            >
+                              {processing?.id === matchedInvitation.id && processing?.action === "accept" ? "…" : <><Check size={11} /> Accept</>}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={processing?.id === matchedInvitation.id}
+                              onClick={() => handleDecline(matchedInvitation)}
+                              className="flex items-center gap-1 px-2.5 py-1 bg-white border border-[#E6E8EA] text-[#848E9C] text-[11px] font-semibold cursor-pointer disabled:opacity-50 hover:text-[#F6465D] hover:border-[#F6465D]"
+                              style={{ borderRadius: "6px", transition: "all 150ms ease" }}
+                            >
+                              {processing?.id === matchedInvitation.id && processing?.action === "decline" ? "…" : <><X size={11} /> Decline</>}
+                            </button>
+                          </div>
+                        ) : (
+                          /* All other notifications: Dismiss */
+                          <button
+                            type="button"
+                            disabled={processing?.id === notif.id}
+                            onClick={() => handleDismissNotif(notif)}
+                            className="mt-1.5 text-[11px] font-semibold text-[#848E9C] bg-transparent border-none cursor-pointer hover:text-[#1E2026] disabled:opacity-50"
+                            style={{ transition: "color 150ms ease" }}
+                          >
+                            {processing?.id === notif.id ? "…" : "Dismiss"}
+                          </button>
+                        )}
                       </div>
                     </div>
                   </li>

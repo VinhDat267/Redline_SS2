@@ -329,7 +329,7 @@ function Footer() {
             <span className="landing-footer-brand-name">Redline</span>
           </div>
           <p className="landing-footer-copy">
-            © 2026 Redline — AI Contract Review. Built for 62FIT3SS2.
+            © 2026 Redline — AI Contract Review.
           </p>
           <div className="landing-footer-links">
             <a href="#features">Features</a>

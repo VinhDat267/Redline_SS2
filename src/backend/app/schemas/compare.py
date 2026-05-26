@@ -75,6 +75,21 @@ class CompareQueueItemRead(BaseModel):
     sort_key: str
 
 
+class CompareQueueReviewCountsRead(BaseModel):
+    total: int = 0
+    open: int = 0
+    in_review: int = 0
+    resolved: int = 0
+
+
+class CompareQueuePageRead(BaseModel):
+    items: list[CompareQueueItemRead]
+    total_count: int
+    limit: int
+    offset: int
+    review_counts: CompareQueueReviewCountsRead = Field(default_factory=CompareQueueReviewCountsRead)
+
+
 class ChangeItemUpdate(BaseModel):
     review_status: str | None = None
     assignee_user_id: int | None = None

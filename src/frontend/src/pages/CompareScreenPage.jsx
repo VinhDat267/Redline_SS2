@@ -94,19 +94,39 @@ function formatItemCount(count) {
 function normalizeQueueSearch(value) {
   return String(value ?? "").trim().toLowerCase();
 }
-function matchesQueueSearch(item, search) {
-  if (!search) {
-    return true;
+function normalizeQueuePage(payload) {
+  if (Array.isArray(payload)) {
+    return {
+      items: payload,
+      total_count: payload.length,
+      limit: payload.length,
+      offset: 0,
+      review_counts: summarizeReviewCounts(payload)
+    };
   }
-  return [
-    item.section_title,
-    item.surface_key,
-    item.summary,
-    item.old_content,
-    item.new_content
-  ]
-    .filter(Boolean)
-    .some((value) => String(value).toLowerCase().includes(search));
+  const items = Array.isArray(payload?.items) ? payload.items : [];
+  const totalCount = Number(payload?.total_count);
+  const limit = Number(payload?.limit);
+  const offset = Number(payload?.offset);
+  const reviewCounts = payload?.review_counts;
+  return {
+    items,
+    total_count: Number.isFinite(totalCount) ? totalCount : items.length,
+    limit: Number.isFinite(limit) ? limit : items.length,
+    offset: Number.isFinite(offset) ? offset : 0,
+    review_counts: reviewCounts && typeof reviewCounts === "object"
+      ? {
+        total: Number(reviewCounts.total ?? 0),
+        open: Number(reviewCounts.open ?? 0),
+        inReview: Number(reviewCounts.in_review ?? reviewCounts.inReview ?? 0),
+        resolved: Number(reviewCounts.resolved ?? 0)
+      }
+      : summarizeReviewCounts(items)
+  };
+}
+function parsePositiveInteger(value, fallback = 1) {
+  const parsedValue = Number.parseInt(String(value ?? ""), 10);
+  return Number.isInteger(parsedValue) && parsedValue > 0 ? parsedValue : fallback;
 }
 function clampPage(value, totalPages) {
   if (!Number.isInteger(value) || value < 1) {
@@ -120,6 +140,12 @@ export function CompareScreenPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [compareRun, setCompareRun] = useState(null);
   const [queue, setQueue] = useState([]);
+  const [queueMeta, setQueueMeta] = useState({
+    total_count: 0,
+    limit: QUEUE_PAGE_SIZE,
+    offset: 0,
+    review_counts: summarizeReviewCounts([])
+  });
   const [selectedChange, setSelectedChange] = useState(null);
   const [aiBatchJob, setAiBatchJob] = useState(null);
   const [isWorkspaceLoading, setIsWorkspaceLoading] = useState(true);
@@ -133,24 +159,20 @@ export function CompareScreenPage() {
   const reviewStatusFilter = searchParams.get("reviewStatus") ?? "all";
   const aiStatusFilter = searchParams.get("aiStatus") ?? "all";
   const normalizedSearch = normalizeQueueSearch(queueSearch);
-  const filteredQueue = queue.filter((item) => {
-    if (!matchesQueueSearch(item, normalizedSearch)) {
-      return false;
-    }
-    if (changeTypeFilter !== "all" && item.change_type !== changeTypeFilter) {
-      return false;
-    }
-    if (reviewStatusFilter !== "all" && item.review_status !== reviewStatusFilter) {
-      return false;
-    }
-    if (aiStatusFilter !== "all" && item.ai_generation_status !== aiStatusFilter) {
-      return false;
-    }
-    return true;
-  });
-  const selectedChangeId = resolveSelectedChangeId(compareRun, filteredQueue, requestedChangeId);
+  const filteredQueue = queue;
+  const queueTotalCount = Number.isFinite(Number(queueMeta.total_count))
+    ? Number(queueMeta.total_count)
+    : filteredQueue.length;
+  const requestedPage = parsePositiveInteger(searchParams.get("page"), 1);
+  const pageStartIndex = (requestedPage - 1) * QUEUE_PAGE_SIZE;
+  const totalPages = Math.max(1, Math.ceil(queueTotalCount / QUEUE_PAGE_SIZE));
+  const currentPage = clampPage(requestedPage, totalPages);
+  const requestedChangeNumber = Number.parseInt(String(requestedChangeId ?? ""), 10);
+  const selectedChangeId = Number.isInteger(requestedChangeNumber) && requestedChangeNumber > 0
+    ? requestedChangeNumber
+    : resolveSelectedChangeId(compareRun, filteredQueue, requestedChangeId);
   const selectedQueueItem = getSelectedQueueItem(filteredQueue, selectedChangeId);
-  const reviewCounts = summarizeReviewCounts(queue);
+  const reviewCounts = queueMeta.review_counts ?? summarizeReviewCounts(queue);
   const aiGenerationSummary = summarizeAiGeneration(queue);
   const displayedAiBatchJob =
     aiBatchJob ?? compareRun?.active_ai_batch_job ?? compareRun?.ai_batch_summary ?? null;
@@ -159,18 +181,9 @@ export function CompareScreenPage() {
     ? formatAiBatchJobStatus(displayedAiBatchJob.status)
     : describeAiBatchState(queue, { isGenerating: false });
   const aiBatchProgress = buildAiBatchProgress(displayedAiBatchJob);
-  const aiBatchScopeNotice = buildAiBatchScopeNotice(displayedAiBatchJob, queue.length);
+  const aiBatchScopeNotice = buildAiBatchScopeNotice(displayedAiBatchJob, queueTotalCount);
   const selectedQueueIndex = filteredQueue.findIndex((item) => item.id === selectedChangeId);
-  const totalPages = Math.max(1, Math.ceil(filteredQueue.length / QUEUE_PAGE_SIZE));
-  const requestedPage = Number.parseInt(searchParams.get("page") ?? "", 10);
-  const currentPage = searchParams.has("page")
-    ? clampPage(requestedPage, totalPages)
-    : clampPage(
-      selectedQueueIndex >= 0 ? Math.floor(selectedQueueIndex / QUEUE_PAGE_SIZE) + 1 : 1,
-      totalPages
-    );
-  const pageStartIndex = (currentPage - 1) * QUEUE_PAGE_SIZE;
-  const paginatedQueue = filteredQueue.slice(pageStartIndex, pageStartIndex + QUEUE_PAGE_SIZE);
+  const paginatedQueue = filteredQueue;
   useEffect(() => {
     let isCurrent = true;
     async function loadCompareWorkspace() {
@@ -180,13 +193,22 @@ export function CompareScreenPage() {
       try {
         const [compareRunPayload, queuePayload] = await Promise.all([
           getCompareRun(token, compareRunId),
-          listCompareRunChangeItems(token, compareRunId)
+          listCompareRunChangeItems(token, compareRunId, {
+            limit: QUEUE_PAGE_SIZE,
+            offset: pageStartIndex,
+            search: normalizedSearch,
+            changeType: changeTypeFilter,
+            reviewStatus: reviewStatusFilter,
+            aiStatus: aiStatusFilter
+          })
         ]);
         if (!isCurrent) {
           return;
         }
+        const normalizedQueuePage = normalizeQueuePage(queuePayload);
         setCompareRun(compareRunPayload);
-        setQueue(queuePayload);
+        setQueue(normalizedQueuePage.items);
+        setQueueMeta(normalizedQueuePage);
         setAiBatchJob(compareRunPayload.active_ai_batch_job ?? compareRunPayload.ai_batch_summary ?? null);
       } catch (loadError) {
         if (loadError instanceof ApiError && loadError.status === 401) {
@@ -206,7 +228,16 @@ export function CompareScreenPage() {
     return () => {
       isCurrent = false;
     };
-  }, [compareRunId, logout, token]);
+  }, [
+    aiStatusFilter,
+    changeTypeFilter,
+    compareRunId,
+    logout,
+    normalizedSearch,
+    pageStartIndex,
+    reviewStatusFilter,
+    token
+  ]);
   useEffect(() => {
     if (!displayedAiBatchJob || !isActiveAiBatchJob(displayedAiBatchJob)) {
       return undefined;
@@ -228,14 +259,23 @@ export function CompareScreenPage() {
           // Refresh workspace data when progress changes or job completes
           const [compareRunPayload, queuePayload] = await Promise.all([
             getCompareRun(token, compareRunId),
-            listCompareRunChangeItems(token, compareRunId)
+            listCompareRunChangeItems(token, compareRunId, {
+              limit: QUEUE_PAGE_SIZE,
+              offset: pageStartIndex,
+              search: normalizedSearch,
+              changeType: changeTypeFilter,
+              reviewStatus: reviewStatusFilter,
+              aiStatus: aiStatusFilter
+            })
           ]);
           if (!isCurrent) {
             return;
           }
           // Batch all state updates together — no async gap between them
+          const normalizedQueuePage = normalizeQueuePage(queuePayload);
           setCompareRun(compareRunPayload);
-          setQueue(queuePayload);
+          setQueue(normalizedQueuePage.items);
+          setQueueMeta(normalizedQueuePage);
           setAiBatchJob(
             jobDone
               ? (compareRunPayload.active_ai_batch_job ?? compareRunPayload.ai_batch_summary ?? jobPayload)
@@ -294,7 +334,18 @@ export function CompareScreenPage() {
         window.clearTimeout(timeoutId);
       }
     };
-  }, [compareRunId, displayedAiBatchJob?.job_id, logout, selectedChangeId, token]);
+  }, [
+    aiStatusFilter,
+    changeTypeFilter,
+    compareRunId,
+    displayedAiBatchJob?.job_id,
+    logout,
+    normalizedSearch,
+    pageStartIndex,
+    reviewStatusFilter,
+    selectedChangeId,
+    token
+  ]);
   useEffect(() => {
     let isCurrent = true;
     async function loadSelectedChange() {
@@ -379,6 +430,8 @@ export function CompareScreenPage() {
   }
   function updateQueueParams(updates) {
     const nextParams = new URLSearchParams(searchParams);
+    const queueViewKeys = new Set(["search", "changeType", "reviewStatus", "aiStatus", "page"]);
+    const shouldResetSelection = Object.keys(updates).some((key) => queueViewKeys.has(key));
     Object.entries(updates).forEach(([key, value]) => {
       if (value === null || value === undefined || value === "" || value === "all") {
         nextParams.delete(key);
@@ -386,6 +439,9 @@ export function CompareScreenPage() {
       }
       nextParams.set(key, String(value));
     });
+    if (shouldResetSelection && !Object.prototype.hasOwnProperty.call(updates, "change")) {
+      nextParams.delete("change");
+    }
     setSearchParams(nextParams);
   }
   const stats = [
@@ -428,7 +484,9 @@ export function CompareScreenPage() {
   const reviewPath = buildCompareRunPath(compareRunId, "/review", selectedChangeId);
   const impactPath = buildCompareRunPath(compareRunId, "/impact", selectedChangeId);
   const summaryPath = buildCompareRunPath(compareRunId, "/summary", selectedChangeId);
-  const currentChangeIndex = filteredQueue.findIndex(item => item.id === selectedChangeId);
+  const currentChangeIndex = selectedQueueIndex >= 0
+    ? Number(queueMeta.offset ?? pageStartIndex) + selectedQueueIndex
+    : -1;
   // Keyboard J/K navigation
   useEffect(() => {
     function onKey(e) {
@@ -479,7 +537,7 @@ export function CompareScreenPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               {/* SVG Donut */}
               {(() => {
-                const total = queue.length || 1;
+                const total = reviewCounts.total || 1;
                 const r = 16, circ = 2 * Math.PI * r;
                 const resolvedDash = (reviewCounts.resolved / total) * circ;
                 const inReviewDash = (reviewCounts.inReview / total) * circ;
@@ -556,7 +614,7 @@ export function CompareScreenPage() {
           {/* Item count */}
           {(normalizedSearch || changeTypeFilter !== 'all' || reviewStatusFilter !== 'all' || aiStatusFilter !== 'all') && (
             <div style={{ padding: '4px 12px', flexShrink: 0 }}>
-              <span style={{ fontSize: '10px', color: '#848E9C', fontWeight: 600 }}>{formatItemCount(filteredQueue.length)}</span>
+              <span style={{ fontSize: '10px', color: '#848E9C', fontWeight: 600 }}>{formatItemCount(queueTotalCount)}</span>
             </div>
           )}
           {/* Timeline Queue */}
@@ -604,7 +662,7 @@ export function CompareScreenPage() {
             })}
           </div>
           {/* Pagination */}
-          {filteredQueue.length > QUEUE_PAGE_SIZE && (
+          {queueTotalCount > QUEUE_PAGE_SIZE && (
             <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 14px', borderTop: '1px solid #E6E8EA' }}>
               <span style={{ fontSize: '11px', color: '#848E9C' }}>Page {currentPage} of {totalPages}</span>
               <div style={{ display: 'flex', gap: '5px' }}>
@@ -636,9 +694,9 @@ export function CompareScreenPage() {
               <span style={{ padding: '3px 10px', borderRadius: '20px', background: '#EBF9F4', border: '1px solid #2EBD8533', color: '#16714E', fontSize: '11px', fontWeight: 700, flexShrink: 0, maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 v2 · {compareRun?.target_version?.version_label ?? '…'}
               </span>
-              {currentChangeIndex >= 0 && filteredQueue.length > 0 && (
+              {currentChangeIndex >= 0 && queueTotalCount > 0 && (
                 <span style={{ fontSize: '11px', color: '#848E9C', flexShrink: 0, marginLeft: '4px' }}>
-                  · change <strong style={{ color: '#474D57' }}>{currentChangeIndex + 1}</strong>/{filteredQueue.length}
+                  · change <strong style={{ color: '#474D57' }}>{currentChangeIndex + 1}</strong>/{queueTotalCount}
                 </span>
               )}
               {selectedChangeId && (

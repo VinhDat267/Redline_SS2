@@ -69,8 +69,8 @@ Updated: 2026-05-24.
 
 | Suite | Count | Framework | Notes |
 |-------|-------|-----------|-------|
-| Backend | **291 passed** | Pytest | SQLite fixtures, covers auth, projects, documents, compare, AI, chat, avatar |
-| Frontend | **140 passed** (20 files) | Vitest | Covers routes, auth context, all page workspaces, avatar upload, compare-scoped Q&A |
+| Backend | **294 passed** | Pytest | SQLite fixtures, covers auth, projects, documents, compare, AI, chat, avatar |
+| Frontend | **143 passed** (20 files) | Vitest | Covers routes, auth context, all page workspaces, avatar upload, compare-scoped Q&A |
 | Frontend build | Passes | Vite | Existing chunk-size warning only |
 
 ## Suggested Fixture Set

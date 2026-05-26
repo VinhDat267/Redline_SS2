@@ -9,6 +9,7 @@ from app.schemas.ai_batch_job import AIBatchJobRead
 from app.schemas.compare import (
     CompareCreate,
     CompareQueueItemRead,
+    CompareQueuePageRead,
     CompareRunAIGenerateRequest,
     CompareRunRead,
 )
@@ -62,12 +63,35 @@ def get_compare_run(
 @router.get("/compare-runs/{compare_run_id}/change-items")
 def list_compare_run_change_items(
     compare_run_id: int,
+    limit: int | None = Query(None, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    search: str | None = Query(None, max_length=200),
+    change_type: str | None = Query(None),
+    review_status: str | None = Query(None),
+    ai_status: str | None = Query(None),
     current_user: User = Depends(get_current_user),
     database: Session = Depends(get_db_session),
 ):
     project_access_service.ensure_compare_run_access_or_404(database, compare_run_id, current_user.id)
-    queue = compare_service.list_compare_run_change_items(database, compare_run_id)
-    return {"data": [CompareQueueItemRead.model_validate(item).model_dump(mode="json") for item in queue]}
+    has_page_query = any(
+        value not in (None, "", "all")
+        for value in (limit, search, change_type, review_status, ai_status)
+    ) or offset > 0
+    if not has_page_query:
+        queue = compare_service.list_compare_run_change_items(database, compare_run_id)
+        return {"data": [CompareQueueItemRead.model_validate(item).model_dump(mode="json") for item in queue]}
+
+    page = compare_service.list_compare_run_change_items_page(
+        database,
+        compare_run_id,
+        limit=limit or 100,
+        offset=offset,
+        search=search,
+        change_type=change_type,
+        review_status=review_status,
+        ai_status=ai_status,
+    )
+    return {"data": CompareQueuePageRead.model_validate(page).model_dump(mode="json")}
 
 
 @router.post("/compare-runs/{compare_run_id}/ai-review-drafts/generate")

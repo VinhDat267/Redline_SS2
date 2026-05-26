@@ -604,8 +604,30 @@ export async function getContractCompareRun(token, compareRunId) {
   return normalizeContractCompareRun(compareRun);
 }
 
-export function listCompareRunChangeItems(token, compareRunId) {
-  return apiRequest(`/api/v1/compare-runs/${compareRunId}/change-items`, { token });
+export function listCompareRunChangeItems(token, compareRunId, options = {}) {
+  const params = new URLSearchParams();
+  if (Number.isFinite(Number(options.limit))) {
+    params.set("limit", String(Number(options.limit)));
+  }
+  if (Number.isFinite(Number(options.offset)) && Number(options.offset) > 0) {
+    params.set("offset", String(Number(options.offset)));
+  } else if (Number.isFinite(Number(options.offset)) && Number(options.offset) === 0 && options.limit) {
+    params.set("offset", "0");
+  }
+  if (options.search) {
+    params.set("search", String(options.search));
+  }
+  if (options.changeType && options.changeType !== "all") {
+    params.set("change_type", String(options.changeType));
+  }
+  if (options.reviewStatus && options.reviewStatus !== "all") {
+    params.set("review_status", String(options.reviewStatus));
+  }
+  if (options.aiStatus && options.aiStatus !== "all") {
+    params.set("ai_status", String(options.aiStatus));
+  }
+  const query = params.toString();
+  return apiRequest(`/api/v1/compare-runs/${compareRunId}/change-items${query ? `?${query}` : ""}`, { token });
 }
 
 export function listContractClauseChanges(token, compareRunId) {

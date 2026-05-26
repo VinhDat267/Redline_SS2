@@ -103,6 +103,18 @@ function buildQueuePayload(items = [buildQueueItem()]) {
   };
 }
 
+function buildQueuePagePayload(items = [buildQueueItem()], overrides = {}) {
+  return {
+    data: {
+      items,
+      total_count: items.length,
+      limit: 4,
+      offset: 0,
+      ...overrides
+    }
+  };
+}
+
 function buildChangeItemDetailPayload(overrides = {}) {
   return {
     data: {
@@ -166,8 +178,8 @@ describe("CompareScreenPage", () => {
         return Promise.resolve(jsonResponse(buildCompareRunPayload()));
       }
 
-      if (url.endsWith("/api/v1/compare-runs/55/change-items")) {
-        return Promise.resolve(jsonResponse(buildQueuePayload()));
+      if (url.includes("/api/v1/compare-runs/55/change-items")) {
+        return Promise.resolve(jsonResponse(buildQueuePagePayload()));
       }
 
       if (url.endsWith("/api/v1/change-items/900")) {
@@ -192,6 +204,11 @@ describe("CompareScreenPage", () => {
     expect(await screen.findByText((_, element) => element?.textContent === "The system shall support secure login.")).toBeInTheDocument();
     expect(await screen.findByText(/completed with warnings/i)).toBeInTheDocument();
     expect(await screen.findByText(/title: login/i)).toBeInTheDocument();
+    const queueRequest = fetch.mock.calls.find(([requestUrl]) =>
+      String(requestUrl).includes("/api/v1/compare-runs/55/change-items")
+    );
+    expect(String(queueRequest?.[0])).toContain("limit=4");
+    expect(String(queueRequest?.[0])).toContain("offset=0");
   });
 
   test("creates an ai batch job, polls progress, and refreshes the queue when the job completes", async () => {
@@ -229,7 +246,7 @@ describe("CompareScreenPage", () => {
         return Promise.resolve(jsonResponse(payload));
       }
 
-      if (url.endsWith("/api/v1/compare-runs/55/change-items") && method === "GET") {
+      if (url.includes("/api/v1/compare-runs/55/change-items") && method === "GET") {
         const payload = buildQueuePayload();
         if (aiGenerated) {
           payload.data[0].ai_generation_status = "generated";
@@ -406,7 +423,7 @@ describe("CompareScreenPage", () => {
         );
       }
 
-      if (url.endsWith("/api/v1/compare-runs/55/change-items") && method === "GET") {
+      if (url.includes("/api/v1/compare-runs/55/change-items") && method === "GET") {
         const payload = buildQueuePayload();
         if (aiGenerated) {
           payload.data[0].ai_generation_status = "generated";
@@ -509,7 +526,7 @@ describe("CompareScreenPage", () => {
         );
       }
 
-      if (url.endsWith("/api/v1/compare-runs/55/change-items") && method === "GET") {
+      if (url.includes("/api/v1/compare-runs/55/change-items") && method === "GET") {
         return Promise.resolve(
           jsonResponse(
             buildQueuePayload([
@@ -568,7 +585,7 @@ describe("CompareScreenPage", () => {
         );
       }
 
-      if (url.endsWith("/api/v1/compare-runs/55/change-items") && method === "GET") {
+      if (url.includes("/api/v1/compare-runs/55/change-items") && method === "GET") {
         return Promise.resolve(
           jsonResponse(
             buildQueuePayload([
@@ -731,8 +748,42 @@ describe("CompareScreenPage", () => {
         );
       }
 
-      if (url.endsWith("/api/v1/compare-runs/55/change-items")) {
-        return Promise.resolve(jsonResponse(buildQueuePayload(queueItems)));
+      if (url.includes("/api/v1/compare-runs/55/change-items")) {
+        const requestUrl = new URL(url, "http://localhost");
+        const params = requestUrl.searchParams;
+        const search = String(params.get("search") ?? "").toLowerCase();
+        const changeType = params.get("change_type");
+        const reviewStatus = params.get("review_status");
+        const aiStatus = params.get("ai_status");
+        const limit = Number(params.get("limit") ?? 4);
+        const offset = Number(params.get("offset") ?? 0);
+        const filteredItems = queueItems.filter((item) => {
+          const haystack = [
+            item.section_title,
+            item.surface_key,
+            item.summary,
+            item.old_content,
+            item.new_content
+          ].filter(Boolean).join(" ").toLowerCase();
+          return (
+            (!search || haystack.includes(search)) &&
+            (!changeType || item.change_type === changeType) &&
+            (!reviewStatus || item.review_status === reviewStatus) &&
+            (!aiStatus || item.ai_generation_status === aiStatus)
+          );
+        });
+        return Promise.resolve(
+          jsonResponse(
+            buildQueuePagePayload(
+              filteredItems.slice(offset, offset + limit),
+              {
+                total_count: filteredItems.length,
+                limit,
+                offset
+              }
+            )
+          )
+        );
       }
 
       const changeItemMatch = url.match(/\/api\/v1\/change-items\/(\d+)$/);
@@ -744,7 +795,7 @@ describe("CompareScreenPage", () => {
       return Promise.reject(new Error(`Unhandled request: ${url} ${init.method || "GET"}`));
     });
 
-    renderCompareScreen("/compare-runs/55?change=904");
+    renderCompareScreen("/compare-runs/55?page=2&change=904");
 
     const queueSection = (await screen.findByRole("heading", { name: /change queue/i })).closest("section");
     expect(queueSection).not.toBeNull();

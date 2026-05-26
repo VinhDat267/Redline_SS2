@@ -366,6 +366,95 @@ def test_compare_queue_sorts_by_target_anchor_then_source_anchor(client, auth_he
     assert sort_keys == sorted(sort_keys)
 
 
+def test_compare_queue_supports_paginated_filtered_response(client, auth_headers):
+    compare_run, _queue = _create_compare_run(
+        client,
+        auth_headers,
+        source_payload=_build_compare_docx(
+            body_paragraphs=[
+                ("I like apples.", None),
+                ("I like bananas.", None),
+            ]
+        ),
+        target_payload=_build_compare_docx(
+            body_paragraphs=[
+                ("I like apples and pears.", None),
+                ("I like bananas.", None),
+                ("I like grapes.", None),
+                ("I like oranges.", None),
+            ]
+        ),
+        project_name="Compare Pagination Project",
+        document_title="Compare Pagination Document",
+    )
+
+    response = client.get(
+        f"/api/v1/compare-runs/{compare_run['id']}/change-items",
+        params={"limit": 1, "offset": 1, "change_type": "added"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["total_count"] == 2
+    assert payload["limit"] == 1
+    assert payload["offset"] == 1
+    assert payload["review_counts"] == {
+        "total": 2,
+        "open": 2,
+        "in_review": 0,
+        "resolved": 0,
+    }
+    assert len(payload["items"]) == 1
+    assert payload["items"][0]["change_type"] == "added"
+    assert payload["items"][0]["new_content"] == "I like oranges."
+
+    search_response = client.get(
+        f"/api/v1/compare-runs/{compare_run['id']}/change-items",
+        params={"limit": 10, "search": "pears"},
+        headers=auth_headers,
+    )
+
+    assert search_response.status_code == 200
+    search_payload = search_response.json()["data"]
+    assert search_payload["total_count"] == 1
+    assert search_payload["items"][0]["change_type"] == "modified"
+
+
+def test_compare_run_detail_does_not_hydrate_full_change_queue(client, auth_headers, monkeypatch):
+    compare_run, _queue = _create_compare_run(
+        client,
+        auth_headers,
+        source_payload=_build_compare_docx(
+            body_paragraphs=[
+                ("I like apples.", None),
+                ("I like bananas.", None),
+            ]
+        ),
+        target_payload=_build_compare_docx(
+            body_paragraphs=[
+                ("I like apples and pears.", None),
+                ("I like bananas.", None),
+                ("I like grapes.", None),
+            ]
+        ),
+        project_name="Compare Detail Pagination Project",
+        document_title="Compare Detail Pagination Document",
+    )
+
+    def fail_if_full_queue_loaded(*_args, **_kwargs):
+        raise AssertionError("Compare detail should not hydrate the full change queue")
+
+    monkeypatch.setattr(compare_service, "list_compare_run_change_items", fail_if_full_queue_loaded)
+
+    response = client.get(f"/api/v1/compare-runs/{compare_run['id']}", headers=auth_headers)
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["selected_change_item_id"] is not None
+    assert payload["summary"]["total_changes"] == 2
+
+
 def test_compare_queue_includes_ai_generation_status(client, auth_headers, session_factory):
     compare_run, _queue = _create_compare_run(
         client,

@@ -2,7 +2,7 @@ import json
 from collections import defaultdict
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session, aliased, joinedload
 
 from app.models import (
@@ -13,6 +13,7 @@ from app.models import (
     ChangeItemRequirementLink,
     CompareRun,
     DocumentBlock,
+    DocumentSurface,
     DocumentTable,
     DocumentTableRow,
     DocumentVersion,
@@ -112,7 +113,6 @@ def create_compare_run(
 
 def get_compare_run_detail(session: Session, compare_run_id: int) -> dict[str, object]:
     compare_run = _get_compare_run_or_404(session, compare_run_id)
-    queue = list_compare_run_change_items(session, compare_run_id)
 
     return {
         "id": compare_run.id,
@@ -130,7 +130,7 @@ def get_compare_run_detail(session: Session, compare_run_id: int) -> dict[str, o
         "source_version": CompareVersionRead.model_validate(compare_run.source_version).model_dump(mode="json"),
         "target_version": CompareVersionRead.model_validate(compare_run.target_version).model_dump(mode="json"),
         "summary": _parse_summary(compare_run.summary_json),
-        "selected_change_item_id": queue[0]["id"] if queue else None,
+        "selected_change_item_id": _get_first_compare_run_change_item_id(session, compare_run.id),
         "has_ai_review_drafts": _has_ai_review_drafts(session, compare_run.id),
         "impact_summary_ready": _impact_summary_ready(session, compare_run.id),
         "active_ai_batch_job": ai_batch_job_service.get_active_ai_batch_job_summary(session, compare_run.id),
@@ -272,35 +272,251 @@ def list_compare_run_change_items(session: Session, compare_run_id: int) -> list
     )
 
     serialized_items = [
-        {
-            "id": change_item.id,
-            "compare_run_id": change_item.compare_run_id,
-            "change_type": change_item.change_type,
-            "review_status": change_item.review_status,
-            "section_title": change_item.section_title,
-            "surface_type": change_item.surface_type,
-            "surface_key": change_item.surface_key,
-            "container_type": change_item.container_type,
-            "container_key": change_item.container_key,
-            "table_key": change_item.table_key,
-            "row_key": change_item.row_key,
-            "old_content": change_item.old_content,
-            "new_content": change_item.new_content,
-            "summary": change_item.summary,
-            "ai_generation_status": _resolve_ai_generation_status(
-                change_item,
-                active_job_item_statuses.get(change_item.id),
-            ),
-            "has_ai_review_draft": (
-                change_item.ai_review_draft is not None
-                or _resolve_ai_generation_status(change_item, active_job_item_statuses.get(change_item.id))
-                != "not_requested"
-            ),
-            "sort_key": _build_sort_key(change_item),
-        }
+        _serialize_queue_item(change_item, active_job_item_statuses.get(change_item.id))
         for change_item in change_items
     ]
     return sorted(serialized_items, key=lambda item: item["sort_key"])
+
+
+def list_compare_run_change_items_page(
+    session: Session,
+    compare_run_id: int,
+    *,
+    limit: int,
+    offset: int,
+    search: str | None = None,
+    change_type: str | None = None,
+    review_status: str | None = None,
+    ai_status: str | None = None,
+) -> dict[str, object]:
+    compare_run = _get_compare_run_or_404(session, compare_run_id)
+    active_job = _get_active_ai_batch_job(session, compare_run.id)
+    filters = _build_change_item_filters(
+        compare_run.id,
+        search=search,
+        change_type=change_type,
+        review_status=review_status,
+        ai_status=ai_status,
+        active_job_id=active_job.id if active_job is not None else None,
+    )
+    total_count = int(session.scalar(select(func.count(ChangeItem.id)).where(*filters)) or 0)
+    active_job_item_statuses = _load_active_job_item_statuses(session, compare_run.id)
+
+    page_statement, sort_expressions = _change_item_page_query()
+    change_items = list(
+        session.execute(
+            page_statement
+            .where(*filters)
+            .order_by(*sort_expressions)
+            .offset(offset)
+            .limit(limit)
+        )
+        .unique()
+        .scalars()
+    )
+
+    return {
+        "items": [
+            _serialize_queue_item(
+                change_item,
+                active_job_item_statuses.get(change_item.id),
+            )
+            for change_item in change_items
+        ],
+        "total_count": total_count,
+        "limit": limit,
+        "offset": offset,
+        "review_counts": _count_review_statuses(session, filters),
+    }
+
+
+def _serialize_queue_item(
+    change_item: ChangeItem,
+    active_job_item_status: str | None,
+) -> dict[str, object]:
+    ai_generation_status = _resolve_ai_generation_status(change_item, active_job_item_status)
+    return {
+        "id": change_item.id,
+        "compare_run_id": change_item.compare_run_id,
+        "change_type": change_item.change_type,
+        "review_status": change_item.review_status,
+        "section_title": change_item.section_title,
+        "surface_type": change_item.surface_type,
+        "surface_key": change_item.surface_key,
+        "container_type": change_item.container_type,
+        "container_key": change_item.container_key,
+        "table_key": change_item.table_key,
+        "row_key": change_item.row_key,
+        "old_content": change_item.old_content,
+        "new_content": change_item.new_content,
+        "summary": change_item.summary,
+        "ai_generation_status": ai_generation_status,
+        "has_ai_review_draft": change_item.ai_review_draft is not None or ai_generation_status != "not_requested",
+        "sort_key": _build_sort_key(change_item),
+    }
+
+
+def _get_active_ai_batch_job(session: Session, compare_run_id: int) -> AIBatchJob | None:
+    return session.scalar(
+        select(AIBatchJob)
+        .where(
+            AIBatchJob.compare_run_id == compare_run_id,
+            AIBatchJob.status.in_(("queued", "running")),
+        )
+        .order_by(AIBatchJob.id.desc())
+    )
+
+
+def _build_change_item_filters(
+    compare_run_id: int,
+    *,
+    search: str | None,
+    change_type: str | None,
+    review_status: str | None,
+    ai_status: str | None,
+    active_job_id: int | None,
+) -> list[object]:
+    filters: list[object] = [ChangeItem.compare_run_id == compare_run_id]
+
+    if change_type and change_type != "all":
+        filters.append(ChangeItem.change_type == change_type)
+    if review_status and review_status != "all":
+        filters.append(ChangeItem.review_status == review_status)
+
+    normalized_search = _normalize_optional_text(search)
+    if normalized_search:
+        search_pattern = f"%{normalized_search}%"
+        filters.append(
+            or_(
+                func.lower(func.coalesce(ChangeItem.section_title, "")).like(search_pattern),
+                func.lower(func.coalesce(ChangeItem.surface_key, "")).like(search_pattern),
+                func.lower(func.coalesce(ChangeItem.summary, "")).like(search_pattern),
+                func.lower(func.coalesce(ChangeItem.old_content, "")).like(search_pattern),
+                func.lower(func.coalesce(ChangeItem.new_content, "")).like(search_pattern),
+            )
+        )
+
+    normalized_ai_status = _normalize_optional_text(ai_status) or "all"
+    if normalized_ai_status == "all":
+        return filters
+
+    any_draft_exists = (
+        select(AIReviewDraft.id)
+        .where(AIReviewDraft.change_item_id == ChangeItem.id)
+        .exists()
+    )
+    draft_status_exists = (
+        select(AIReviewDraft.id)
+        .where(
+            AIReviewDraft.change_item_id == ChangeItem.id,
+            AIReviewDraft.generation_status == normalized_ai_status,
+        )
+        .exists()
+    )
+    active_job_item_exists = None
+    if active_job_id is not None:
+        active_job_item_exists = (
+            select(AIBatchJobItem.id)
+            .where(
+                AIBatchJobItem.job_id == active_job_id,
+                AIBatchJobItem.change_item_id == ChangeItem.id,
+                AIBatchJobItem.status.in_(("queued", "running")),
+            )
+            .exists()
+        )
+
+    if normalized_ai_status in {"generated", "failed"}:
+        filters.append(draft_status_exists)
+    elif normalized_ai_status == "pending":
+        if active_job_item_exists is None:
+            filters.append(draft_status_exists)
+        else:
+            filters.append(or_(draft_status_exists, active_job_item_exists))
+    elif normalized_ai_status == "not_requested":
+        filters.append(~any_draft_exists)
+        if active_job_item_exists is not None:
+            filters.append(~active_job_item_exists)
+
+    return filters
+
+
+def _change_item_page_query() -> tuple[object, tuple[object, ...]]:
+    TargetBlock = aliased(DocumentBlock)
+    SourceBlock = aliased(DocumentBlock)
+    TargetSurface = aliased(DocumentSurface)
+    SourceSurface = aliased(DocumentSurface)
+
+    anchor_surface_order = func.coalesce(
+        TargetSurface.logical_order_index,
+        SourceSurface.logical_order_index,
+        9999,
+    )
+    anchor_block_order = func.coalesce(
+        TargetBlock.surface_order_index,
+        SourceBlock.surface_order_index,
+        999999,
+    )
+    target_missing_rank = case((ChangeItem.target_block_id.isnot(None), 0), else_=1)
+
+    statement = (
+        select(ChangeItem)
+        .outerjoin(TargetBlock, ChangeItem.target_block_id == TargetBlock.id)
+        .outerjoin(SourceBlock, ChangeItem.source_block_id == SourceBlock.id)
+        .outerjoin(TargetSurface, TargetBlock.surface_id == TargetSurface.id)
+        .outerjoin(SourceSurface, SourceBlock.surface_id == SourceSurface.id)
+        .options(
+            joinedload(ChangeItem.ai_review_draft),
+            joinedload(ChangeItem.source_block).joinedload(DocumentBlock.surface),
+            joinedload(ChangeItem.target_block).joinedload(DocumentBlock.surface),
+        )
+    )
+    return statement, (
+        anchor_surface_order,
+        anchor_block_order,
+        target_missing_rank,
+        ChangeItem.id,
+    )
+
+
+def _count_review_statuses(session: Session, filters: list[object]) -> dict[str, int]:
+    counts = {
+        "total": 0,
+        "open": 0,
+        "in_review": 0,
+        "resolved": 0,
+    }
+    rows = session.execute(
+        select(ChangeItem.review_status, func.count(ChangeItem.id))
+        .where(*filters)
+        .group_by(ChangeItem.review_status)
+    )
+    for review_status, count in rows:
+        item_count = int(count or 0)
+        counts["total"] += item_count
+        normalized_status = str(review_status or "open").lower()
+        if normalized_status == "resolved":
+            counts["resolved"] += item_count
+        elif normalized_status == "in_review":
+            counts["in_review"] += item_count
+        else:
+            counts["open"] += item_count
+    return counts
+
+
+def _get_first_compare_run_change_item_id(session: Session, compare_run_id: int) -> int | None:
+    page_statement, sort_expressions = _change_item_page_query()
+    change_item = (
+        session.execute(
+            page_statement
+            .where(ChangeItem.compare_run_id == compare_run_id)
+            .order_by(*sort_expressions)
+            .limit(1)
+        )
+        .unique()
+        .scalars()
+        .first()
+    )
+    return change_item.id if change_item is not None else None
 
 
 def _get_parsed_version(session: Session, document_id: int, version_id: int) -> DocumentVersion:

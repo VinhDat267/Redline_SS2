@@ -479,7 +479,7 @@ def test_contract_compare_runs_can_filter_latest_fresh_run_per_pair(client, auth
     assert stale_latest_response.json()["data"] == []
 
 
-def test_contract_compare_runs_latest_fresh_endpoint_does_not_hydrate_superseded_history(
+def test_contract_compare_runs_latest_fresh_endpoint_does_not_hydrate_full_change_queues(
     client,
     auth_headers,
     monkeypatch,
@@ -515,7 +515,7 @@ def test_contract_compare_runs_latest_fresh_endpoint_does_not_hydrate_superseded
     assert latest_response.status_code == 200
     assert [compare_run["id"] for compare_run in latest_response.json()["data"]] == [second_compare_run_id]
     assert first_compare_run_id not in hydrated_compare_run_ids
-    assert hydrated_compare_run_ids == [second_compare_run_id]
+    assert hydrated_compare_run_ids == []
 
 
 def test_contract_compare_run_reports_stale_after_reparse(client, auth_headers):

@@ -39,8 +39,8 @@ Latest verified baseline:
 
 | Area | Result |
 | --- | --- |
-| Backend test suite | `291 passed` |
-| Frontend test suite | `140 passed` across 20 files |
+| Backend test suite | `294 passed` |
+| Frontend test suite | `143 passed` across 20 files |
 | Frontend production build | Passes, with Vite chunk-size warning only |
 | Alembic schema check | No new upgrade operations detected |
 | Docker full stack | Backend, frontend, and PostgreSQL start successfully |
@@ -287,7 +287,7 @@ cd src/backend
 .\.venv\Scripts\python -m pytest tests -q
 ```
 
-Expected baseline: `291 passed`.
+Expected baseline: `294 passed`.
 
 ### Frontend tests
 
@@ -296,7 +296,7 @@ cd src/frontend
 npm run test -- --run
 ```
 
-Expected baseline: `140 passed`.
+Expected baseline: `143 passed`.
 
 ### Frontend production build
 

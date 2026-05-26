@@ -165,6 +165,8 @@ These routes remain supported because the internal model names are still
 - `POST /api/v1/documents/{document_id}/compare-runs`
 - `GET /api/v1/compare-runs/{compare_run_id}`
 - `GET /api/v1/compare-runs/{compare_run_id}/change-items`
+  - Without query params, returns the legacy full queue list for review/export/traceability compatibility.
+  - With `limit`, `offset`, `search`, `change_type`, `review_status`, or `ai_status`, returns a paginated `{items,total_count,limit,offset,review_counts}` envelope for large compare queues.
 - `POST /api/v1/compare-runs/{compare_run_id}/ai-review-drafts/generate`
 - `GET /api/v1/ai-batch-jobs/{job_id}`
 - `GET /api/v1/ai-batch-jobs/{job_id}/items`
@@ -265,7 +267,7 @@ cd src/backend
 .\.venv\Scripts\python -m pytest tests -q
 ```
 
-Expected baseline: `291 passed`.
+Expected baseline: `294 passed`.
 
 ### Frontend
 
@@ -276,7 +278,7 @@ npm run build
 npm audit
 ```
 
-Expected baseline: `140 passed`, build succeeds, `0 vulnerabilities`.
+Expected baseline: `143 passed`, build succeeds, `0 vulnerabilities`.
 
 ## Backend Test File Map
 

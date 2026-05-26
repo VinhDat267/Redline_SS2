@@ -516,20 +516,35 @@ def _build_compare_run_answer(
             )
 
     lines = [
-        f"Here are the changes between {source_label} and {target_label}:",
+        f"Here are the key changes between {source_label} and {target_label}:\n",
     ]
-    for index, change_item in enumerate(selected, start=1):
-        title = change_item.section_title or f"Change item {change_item.id}"
-        lines.append(f"{index}. {title} ({change_item.change_type}):")
-        if change_item.old_content:
-            lines.append(f"   Source {source_label}: {change_item.old_content}")
-        if change_item.new_content:
-            lines.append(f"   Target {target_label}: {change_item.new_content}")
+    for change_item in selected:
+        title = change_item.section_title or f"Change #{change_item.id}"
+        change_type_label = {
+            "added": "Added",
+            "removed": "Removed",
+            "modified": "Modified",
+        }.get((change_item.change_type or "").lower(), change_item.change_type or "Changed")
+        lines.append(f"**{title}** \u2014 {change_type_label}")
+        if change_item.old_content and change_item.new_content:
+            lines.append(f'The original version stated: "{change_item.old_content.strip()[:300]}"')
+            lines.append(f'The updated version now says: "{change_item.new_content.strip()[:300]}"')
+        elif change_item.new_content:
+            lines.append(f'This clause was added: "{change_item.new_content.strip()[:300]}"')
+        elif change_item.old_content:
+            lines.append(f'This clause was removed: "{change_item.old_content.strip()[:300]}"')
         if change_item.review_status:
-            lines.append(f"   Review status: {change_item.review_status}.")
+            status_label = {
+                "pending": "pending review",
+                "accepted": "accepted",
+                "rejected": "rejected",
+                "flagged": "flagged for attention",
+            }.get((change_item.review_status or "").lower(), change_item.review_status)
+            lines.append(f"This change is currently {status_label}.")
+        lines.append("")
 
     return ContractChatAnswer(
-        content="\n".join(lines),
+        content="\n".join(lines).strip(),
         citations=citations,
         provider_used="local-compare",
     )
@@ -1133,14 +1148,27 @@ def _normalize_heading_text(value: str) -> str:
 
 
 def _build_extractive_answer(context_blocks: list[dict[str, object]]) -> str:
-    lines = [
-        str(item.get("content") or "").strip()
-        for item in context_blocks
-        if str(item.get("content") or "").strip()
-    ]
-    if len(lines) == 1:
-        return f"Here's what I found in the contract: {lines[0]}"
-    return "Here's what I found in the contract:\n" + "\n".join(f"- {line}" for line in lines)
+    if len(context_blocks) == 1:
+        block = context_blocks[0]
+        section = str(block.get("section_title") or "").strip()
+        content = str(block.get("content") or "").strip()
+        if section:
+            return f"Based on **{section}** in the contract:\n\n{content}"
+        return f"Here's what I found in the contract:\n\n{content}"
+
+    parts = ["Based on the relevant sections of the contract:\n"]
+    for block in context_blocks:
+        section = str(block.get("section_title") or "").strip()
+        content = str(block.get("content") or "").strip()
+        if not content:
+            continue
+        if section:
+            parts.append(f"**{section}**")
+            parts.append(content)
+            parts.append("")
+        else:
+            parts.append(f"- {content}")
+    return "\n".join(parts).strip()
 
 
 def _serialize_citations(retrieved_blocks: list[dict[str, object]]) -> list[dict[str, object]]:

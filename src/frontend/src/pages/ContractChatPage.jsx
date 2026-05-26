@@ -636,7 +636,7 @@ export function ContractChatPage() {
                 </h2>
                 <p style={{ fontSize: "13px", color: "#848E9C", maxWidth: "400px", lineHeight: 1.7 }}>
                   {selectedScope === "compare"
-                    ? "Get answers grounded in deterministic compare changes across the selected draft pair."
+                    ? "Ask questions about what changed between two versions of your contract."
                     : "AI searches through your contract to find verified answers with source references."}
                 </p>
               </div>
@@ -817,7 +817,7 @@ export function ContractChatPage() {
               </div>
               <div>
                 <p style={{ fontSize: "11px", fontWeight: 700, color: "#1E2026", marginBottom: "4px" }}>Evidence Policy</p>
-                <p style={{ fontSize: "10px", color: "#C0C6CF", lineHeight: 1.6 }}>Contract-grounded answers cite source evidence here. Session-memory answers have no document citations intentionally.</p>
+                <p style={{ fontSize: "10px", color: "#C0C6CF", lineHeight: 1.6 }}>Every answer includes references to the original contract text. Conversation-based answers don't need document references.</p>
               </div>
             </div>
           )}

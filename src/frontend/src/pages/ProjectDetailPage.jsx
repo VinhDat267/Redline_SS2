@@ -561,7 +561,7 @@ export function ProjectDetailPage() {
       }
 
       resetDocumentForm();
-      setFeedback(activeEditId ? "Contract updated from the live backend." : "Contract created in the live backend.");
+      setFeedback(activeEditId ? "Contract updated successfully." : "Contract created successfully.");
     } catch (saveError) {
       if (saveError instanceof ApiError && saveError.status === 401) {
         logout();
@@ -597,7 +597,7 @@ export function ProjectDetailPage() {
         resetDocumentForm();
       }
       setDeleteTarget(null);
-      setFeedback("Contract deleted from the live backend.");
+      setFeedback(`"${targetDocument.title}" has been deleted.`);
     } catch (deleteError) {
       if (deleteError instanceof ApiError && deleteError.status === 401) {
         logout();

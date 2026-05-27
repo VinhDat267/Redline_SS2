@@ -2,7 +2,7 @@ import { startTransition, useDeferredValue, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Database, FolderHeart, FolderOpen, Pencil, Plus, Trash2,
-  Search, SearchX, Clock, FileText, ArrowRight, Sparkles, MoreVertical, X, FolderPlus
+  Search, SearchX, Clock, FileText, ArrowRight, Sparkles, MoreVertical, X, FolderPlus, UserPlus, Mail
 } from "lucide-react";
 import { encodeId } from "../lib/idCodec";
 
@@ -11,7 +11,7 @@ import { useActiveProject } from "../context/ActiveProjectContext";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { Toast } from "../components/Toast";
 // Modal is now inline — no WorkspaceDrawer needed
-import { ApiError, createProject, deleteProject, listProjects, seedDemoWorkspace, updateProject } from "../lib/api";
+import { ApiError, createProject, createProjectMember, deleteProject, listProjects, seedDemoWorkspace, updateProject } from "../lib/api";
 import { formatDateTime } from "../lib/formatters";
 
 const EMPTY_PROJECT_FORM = {
@@ -283,6 +283,7 @@ export function ProjectListPage() {
   const [error, setError] = useState("");
   const [feedback, setFeedback] = useState("");
   const [createForm, setCreateForm] = useState(EMPTY_PROJECT_FORM);
+  const [inviteRows, setInviteRows] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
@@ -342,6 +343,7 @@ export function ProjectListPage() {
     setEditingProjectId(null);
     setDeleteTarget(null);
     setCreateForm(EMPTY_PROJECT_FORM);
+    setInviteRows([]);
     setError("");
     setFeedback("");
   }
@@ -362,6 +364,7 @@ export function ProjectListPage() {
     setShowCreateForm(false);
     setEditingProjectId(null);
     setCreateForm(EMPTY_PROJECT_FORM);
+    setInviteRows([]);
   }
 
   async function handleImportDemoData() {
@@ -414,6 +417,22 @@ export function ProjectListPage() {
       if (editingProjectId) {
         setFeedback("Project updated.");
       } else {
+        // Send invitations for the newly created project
+        const validInvites = inviteRows.filter(r => r.email.trim());
+        if (validInvites.length > 0) {
+          const inviteResults = await Promise.allSettled(
+            validInvites.map(row =>
+              createProjectMember(token, savedProject.id, {
+                email: row.email.trim(),
+                role: row.role,
+              })
+            )
+          );
+          const failedCount = inviteResults.filter(r => r.status === "rejected").length;
+          if (failedCount > 0) {
+            setFeedback(`Project created. ${validInvites.length - failedCount} invite(s) sent, ${failedCount} failed.`);
+          }
+        }
         startTransition(() => {
           navigate(`/projects/${encodeId(savedProject.id)}`);
         });
@@ -720,6 +739,69 @@ export function ProjectListPage() {
                   />
                   <p className="text-[12px] font-medium text-[#848E9C]">Optional — helps your team understand the project's purpose.</p>
                 </div>
+
+                {/* Invite Members — only shown for new project, not edit */}
+                {!editingProjectId && (
+                  <div className="flex flex-col gap-2">
+                    <label className="text-[12px] font-semibold text-[#848E9C] uppercase tracking-wider flex items-center gap-1.5">
+                      <UserPlus size={13} /> Invite Members
+                    </label>
+                    <div className="space-y-2">
+                      {inviteRows.map((row, idx) => (
+                        <div key={idx} className="flex items-center gap-2">
+                          <div className="relative flex-1">
+                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-[#848E9C]" size={14} />
+                            <input
+                              className="w-full h-9 pl-9 pr-3 bg-[#F5F5F5] border border-[#E6E8EA] text-[13px] font-medium text-[#1E2026] placeholder:text-[#848E9C]"
+                              style={{ borderRadius: "6px", outline: "none", transition: "border-color 200ms ease" }}
+                              onFocus={(e) => { e.target.style.borderColor = "#000000"; }}
+                              onBlur={(e) => { e.target.style.borderColor = "#E6E8EA"; }}
+                              type="email"
+                              placeholder="colleague@company.com"
+                              value={row.email}
+                              onChange={(e) => {
+                                const updated = [...inviteRows];
+                                updated[idx] = { ...updated[idx], email: e.target.value };
+                                setInviteRows(updated);
+                              }}
+                            />
+                          </div>
+                          <select
+                            className="h-9 px-2 bg-[#F5F5F5] border border-[#E6E8EA] text-[12px] font-semibold text-[#1E2026] cursor-pointer"
+                            style={{ borderRadius: "6px", outline: "none" }}
+                            value={row.role}
+                            onChange={(e) => {
+                              const updated = [...inviteRows];
+                              updated[idx] = { ...updated[idx], role: e.target.value };
+                              setInviteRows(updated);
+                            }}
+                          >
+                            <option value="viewer">Viewer</option>
+                            <option value="editor">Editor</option>
+                            <option value="admin">Admin</option>
+                          </select>
+                          <button
+                            type="button"
+                            className="w-8 h-8 flex items-center justify-center bg-transparent border-none text-[#848E9C] hover:text-[#F6465D] cursor-pointer"
+                            style={{ borderRadius: "6px", transition: "color 200ms ease" }}
+                            onClick={() => setInviteRows(inviteRows.filter((_, i) => i !== idx))}
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      className="flex items-center gap-1.5 text-[13px] font-semibold text-[#F0B90B] hover:text-[#D0980B] bg-transparent border-none cursor-pointer mt-1 self-start"
+                      style={{ transition: "color 200ms ease" }}
+                      onClick={() => setInviteRows([...inviteRows, { email: "", role: "viewer" }])}
+                    >
+                      <Plus size={14} /> Add Member
+                    </button>
+                    <p className="text-[12px] font-medium text-[#848E9C]">Optional — invite team members by email. They'll receive an invitation to join.</p>
+                  </div>
+                )}
               </div>
 
               {/* Actions — form buttons use 6px radius per spec */}

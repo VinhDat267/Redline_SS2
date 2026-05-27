@@ -18,6 +18,8 @@ NOTIF_COMPARE_STARTED = "compare_started"
 NOTIF_COMPARE_COMPLETED = "compare_completed"
 NOTIF_REVIEW_COMMENT = "review_comment"
 NOTIF_CHANGE_REVIEWED = "change_reviewed"
+NOTIF_CHANGE_ASSIGNED = "change_assigned"
+NOTIF_CHANGE_UPDATED = "change_updated"
 
 
 def create_notification(

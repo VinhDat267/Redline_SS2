@@ -9,6 +9,7 @@ import { encodeId } from "../lib/idCodec";
 import { useAuth } from "../auth/AuthContext";
 import { useActiveProject } from "../context/ActiveProjectContext";
 import { useProjectEvents } from "../hooks/useProjectEvents";
+import { Toast } from "./Toast";
 
 /* Navigation tabs that require an active project */
 const PROJECT_LINKS = [
@@ -322,6 +323,10 @@ function NotificationBell({ invitations: pendingInvitations, onAccept, onDecline
   const [processing, setProcessing] = useState(null); // { id, action }
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [activeToast, setActiveToast] = useState(null); // { id, message, type }
+
+  const isFirstFetchRef = useRef(true);
+  const notifiedIdsRef = useRef(new Set());
   const ref = useRef(null);
 
   // Total badge = pending invitations + unread system notifications
@@ -338,6 +343,31 @@ function NotificationBell({ invitations: pendingInvitations, onAccept, onDecline
       const items = Array.isArray(result?.items) ? result.items : (Array.isArray(result) ? result : []);
       setNotifications(items);
       setUnreadCount(result?.unread_count ?? 0);
+
+      // System unread notifications (ignoring invites that are already handled in pendingInvitations)
+      const systemUnread = items.filter(n => !n.is_read && n.notification_type !== "project_invite");
+
+      if (isFirstFetchRef.current) {
+        // Initialize notified IDs on first fetch so we don't spam Toast notifications
+        const initialIds = systemUnread.map(n => n.id);
+        notifiedIdsRef.current = new Set(initialIds);
+        isFirstFetchRef.current = false;
+      } else {
+        // Look for any incoming unread notifications we haven't popped yet
+        const newUnread = systemUnread.filter(n => !notifiedIdsRef.current.has(n.id));
+        if (newUnread.length > 0) {
+          // Track that we are alerting them now
+          newUnread.forEach(n => notifiedIdsRef.current.add(n.id));
+
+          // Alert the latest one
+          const latestNotif = newUnread[0];
+          setActiveToast({
+            id: latestNotif.id,
+            message: `${latestNotif.title}${latestNotif.body ? `: ${latestNotif.body}` : ""}`,
+            type: latestNotif.notification_type === "project_removed" ? "error" : "success"
+          });
+        }
+      }
     } catch {
       // silent
     }
@@ -629,6 +659,14 @@ function NotificationBell({ invitations: pendingInvitations, onAccept, onDecline
             </ul>
           )}
         </div>
+      )}
+      {activeToast && (
+        <Toast
+          message={activeToast.message}
+          type={activeToast.type}
+          onClose={() => setActiveToast(null)}
+          duration={4000}
+        />
       )}
     </div>
   );

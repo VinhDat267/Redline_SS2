@@ -25,6 +25,8 @@ from app.services.project_events import (
     get_event_broker, ProjectEvent,
     EVENT_CHANGE_ITEM_REVIEWED, EVENT_CHANGE_ITEM_COMMENTED,
 )
+from app.services import notifications as notification_service
+from app.services.notifications import NOTIF_CHANGE_REVIEWED, NOTIF_REVIEW_COMMENT
 
 
 router = APIRouter(tags=["change-items"], dependencies=[Depends(get_current_user)])
@@ -77,6 +79,14 @@ def update_change_item(
             actor_user_id=current_user.id,
             actor_display_name=current_user.display_name,
         ))
+        notification_service.notify_project_members(
+            database, project_id, current_user.id,
+            notification_type=NOTIF_CHANGE_REVIEWED,
+            title=f'Change item reviewed as "{payload.review_status}"',
+            body=f"{current_user.display_name} updated a review status.",
+            actor_display_name=current_user.display_name,
+        )
+        database.commit()
     return {"data": ChangeItemDetailRead.model_validate(detail).model_dump(mode="json")}
 
 
@@ -103,6 +113,14 @@ def create_review_comment(
         actor_user_id=current_user.id,
         actor_display_name=current_user.display_name,
     ))
+    notification_service.notify_project_members(
+        database, project_id, current_user.id,
+        notification_type=NOTIF_REVIEW_COMMENT,
+        title="New review comment",
+        body=f"{current_user.display_name} commented on a change item.",
+        actor_display_name=current_user.display_name,
+    )
+    database.commit()
     return {"data": ReviewCommentRead.model_validate(comment).model_dump(mode="json")}
 
 

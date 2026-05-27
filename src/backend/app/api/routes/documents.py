@@ -12,6 +12,8 @@ from app.services.document_parser import DocumentParseError
 from app.services import parser_workspace as parser_workspace_service
 from app.services import project_access as project_access_service
 from app.services.project_events import get_event_broker, ProjectEvent, EVENT_DOCUMENT_CREATED, EVENT_DOCUMENT_DELETED, EVENT_DOCUMENT_UPDATED, EVENT_VERSION_CREATED
+from app.services import notifications as notification_service
+from app.services.notifications import NOTIF_DOCUMENT_UPLOADED, NOTIF_VERSION_UPLOADED
 
 
 router = APIRouter(tags=["documents"], dependencies=[Depends(get_current_user)])
@@ -53,6 +55,15 @@ def create_document(
         actor_user_id=current_user.id,
         actor_display_name=current_user.display_name,
     ))
+    notification_service.notify_project_members(
+        database, project_id, current_user.id,
+        notification_type=NOTIF_DOCUMENT_UPLOADED,
+        title=f'New document "{document.title}"',
+        body=f"{current_user.display_name} created a new document.",
+        project_name=document.title,
+        actor_display_name=current_user.display_name,
+    )
+    database.commit()
     return {"data": DocumentRead.model_validate(document).model_dump(mode="json")}
 
 
@@ -165,6 +176,15 @@ def create_document_version(
         actor_user_id=current_user.id,
         actor_display_name=current_user.display_name,
     ))
+    notification_service.notify_project_members(
+        database, document.project_id, current_user.id,
+        notification_type=NOTIF_VERSION_UPLOADED,
+        title=f'New version "{version_label}" on "{document.title}"',
+        body=f"{current_user.display_name} uploaded a new version.",
+        project_name=document.title,
+        actor_display_name=current_user.display_name,
+    )
+    database.commit()
     return {"data": DocumentVersionRead.model_validate(version).model_dump(mode="json")}
 
 

@@ -20,6 +20,8 @@ from app.services import ai_summary as ai_summary_service
 from app.services import compare as compare_service
 from app.services import export_docx as export_docx_service
 from app.services import project_access as project_access_service
+from app.services import notifications as notification_service
+from app.services.notifications import NOTIF_COMPARE_STARTED
 from app.services.project_events import get_event_broker, ProjectEvent, EVENT_COMPARE_STARTED
 
 
@@ -57,6 +59,15 @@ def create_compare_run(
         actor_user_id=current_user.id,
         actor_display_name=current_user.display_name,
     ))
+    notification_service.notify_project_members(
+        database, document.project_id, current_user.id,
+        notification_type=NOTIF_COMPARE_STARTED,
+        title=f'Comparison started on "{document.title}"',
+        body=f"{current_user.display_name} started a new comparison run.",
+        project_name=document.title,
+        actor_display_name=current_user.display_name,
+    )
+    database.commit()
     return {"data": CompareRunRead.model_validate(compare_run).model_dump(mode="json")}
 
 

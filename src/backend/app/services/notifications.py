@@ -5,12 +5,19 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.models.user_notification import UserNotification
+from app.models.project_member import ProjectMember
 from app.models.mixins import utcnow
 
 
 # ── Notification types ────────────────────────────────────────────
 NOTIF_PROJECT_INVITE = "project_invite"
 NOTIF_PROJECT_REMOVED = "project_removed"
+NOTIF_DOCUMENT_UPLOADED = "document_uploaded"
+NOTIF_VERSION_UPLOADED = "version_uploaded"
+NOTIF_COMPARE_STARTED = "compare_started"
+NOTIF_COMPARE_COMPLETED = "compare_completed"
+NOTIF_REVIEW_COMMENT = "review_comment"
+NOTIF_CHANGE_REVIEWED = "change_reviewed"
 
 
 def create_notification(
@@ -36,6 +43,39 @@ def create_notification(
     session.add(notif)
     session.flush()
     return notif
+
+
+def notify_project_members(
+    session: Session,
+    project_id: int,
+    actor_user_id: int,
+    notification_type: str,
+    title: str,
+    body: str | None = None,
+    project_name: str | None = None,
+    actor_display_name: str | None = None,
+) -> list[UserNotification]:
+    """Create a notification for every project member except the actor."""
+    member_user_ids = list(session.scalars(
+        select(ProjectMember.user_id).where(
+            ProjectMember.project_id == project_id,
+            ProjectMember.user_id != actor_user_id,
+        )
+    ))
+    notifications = []
+    for uid in member_user_ids:
+        notif = create_notification(
+            session,
+            user_id=uid,
+            notification_type=notification_type,
+            title=title,
+            body=body,
+            project_id=project_id,
+            project_name=project_name,
+            actor_display_name=actor_display_name,
+        )
+        notifications.append(notif)
+    return notifications
 
 
 def list_notifications_for_user(

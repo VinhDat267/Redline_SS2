@@ -10,6 +10,12 @@ from app.services.project_events import (
     get_event_broker, ProjectEvent,
     EVENT_TEST_CASE_CREATED, EVENT_TEST_CASE_UPDATED, EVENT_TEST_CASE_DELETED,
 )
+from app.services import notifications as notification_service
+from app.services.notifications import (
+    NOTIF_TEST_CASE_CREATED,
+    NOTIF_TEST_CASE_UPDATED,
+    NOTIF_TEST_CASE_DELETED,
+)
 
 
 router = APIRouter(tags=["test-cases"], dependencies=[Depends(get_current_user)])
@@ -42,6 +48,16 @@ def create_test_case(
         actor_user_id=current_user.id,
         actor_display_name=current_user.display_name,
     ))
+
+    notification_service.notify_project_members(
+        database, project_id, current_user.id,
+        notification_type=NOTIF_TEST_CASE_CREATED,
+        title=f"New compliance check \"{test_case.test_case_code}\" created",
+        body=f"{current_user.display_name} created check \"{test_case.title}\".",
+        actor_display_name=current_user.display_name,
+    )
+    database.commit()
+
     return {"data": TestCaseRead.model_validate(test_case).model_dump(mode="json")}
 
 
@@ -71,6 +87,16 @@ def update_test_case(
         actor_user_id=current_user.id,
         actor_display_name=current_user.display_name,
     ))
+
+    notification_service.notify_project_members(
+        database, test_case.project_id, current_user.id,
+        notification_type=NOTIF_TEST_CASE_UPDATED,
+        title=f"Compliance check \"{test_case.test_case_code}\" updated",
+        body=f"{current_user.display_name} updated check details.",
+        actor_display_name=current_user.display_name,
+    )
+    database.commit()
+
     return {"data": TestCaseRead.model_validate(test_case).model_dump(mode="json")}
 
 
@@ -83,7 +109,10 @@ def delete_test_case(
     test_case = project_access_service.ensure_test_case_access_or_404(database, test_case_id, current_user.id)
     project_id = test_case.project_id
     tc_code = test_case.test_case_code
+    tc_title = test_case.title
+
     test_case_service.delete_test_case(database, test_case)
+
     get_event_broker().publish(ProjectEvent(
         event_type=EVENT_TEST_CASE_DELETED,
         project_id=project_id,
@@ -91,5 +120,15 @@ def delete_test_case(
         actor_user_id=current_user.id,
         actor_display_name=current_user.display_name,
     ))
+
+    notification_service.notify_project_members(
+        database, project_id, current_user.id,
+        notification_type=NOTIF_TEST_CASE_DELETED,
+        title=f"Compliance check \"{tc_code}\" removed",
+        body=f"{current_user.display_name} deleted check \"{tc_title}\".",
+        actor_display_name=current_user.display_name,
+    )
+    database.commit()
+
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

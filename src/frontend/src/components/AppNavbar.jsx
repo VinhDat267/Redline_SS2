@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   FolderOpen, FileText, ScanSearch, GitCompare, ClipboardCheck,
   MessageSquare, BarChart3, LogOut, Settings, X, ChevronDown, Bell, Check,
-  History, ShieldCheck, UserCheck, Play, Pencil,
+  History, ShieldCheck, UserCheck, Play, Pencil, ClipboardList, Trash2,
 } from "lucide-react";
 import { encodeId } from "../lib/idCodec";
 import { useAuth } from "../auth/AuthContext";
@@ -270,6 +270,42 @@ function getNotificationVisuals(notif) {
         icon: <Pencil size={13} />,
         bgColor: "rgba(127, 140, 141, 0.12)",
         color: "#7F8C8D"
+      };
+    case "requirement_created":
+      return {
+        icon: <ClipboardList size={13} />,
+        bgColor: "rgba(46, 204, 113, 0.12)",
+        color: "#27AE60"
+      };
+    case "requirement_updated":
+      return {
+        icon: <Pencil size={13} />,
+        bgColor: "rgba(243, 156, 18, 0.12)",
+        color: "#D35400"
+      };
+    case "requirement_deleted":
+      return {
+        icon: <Trash2 size={13} />,
+        bgColor: "rgba(246, 70, 93, 0.10)",
+        color: "#F6465D"
+      };
+    case "test_case_created":
+      return {
+        icon: <ClipboardCheck size={13} />,
+        bgColor: "rgba(52, 152, 219, 0.12)",
+        color: "#2980B9"
+      };
+    case "test_case_updated":
+      return {
+        icon: <Pencil size={13} />,
+        bgColor: "rgba(127, 140, 141, 0.12)",
+        color: "#7F8C8D"
+      };
+    case "test_case_deleted":
+      return {
+        icon: <Trash2 size={13} />,
+        bgColor: "rgba(246, 70, 93, 0.10)",
+        color: "#F6465D"
       };
     default:
       return {

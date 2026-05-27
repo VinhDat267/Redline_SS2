@@ -20,6 +20,12 @@ NOTIF_REVIEW_COMMENT = "review_comment"
 NOTIF_CHANGE_REVIEWED = "change_reviewed"
 NOTIF_CHANGE_ASSIGNED = "change_assigned"
 NOTIF_CHANGE_UPDATED = "change_updated"
+NOTIF_REQUIREMENT_CREATED = "requirement_created"
+NOTIF_REQUIREMENT_UPDATED = "requirement_updated"
+NOTIF_REQUIREMENT_DELETED = "requirement_deleted"
+NOTIF_TEST_CASE_CREATED = "test_case_created"
+NOTIF_TEST_CASE_UPDATED = "test_case_updated"
+NOTIF_TEST_CASE_DELETED = "test_case_deleted"
 
 
 def create_notification(

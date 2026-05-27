@@ -10,6 +10,12 @@ from app.services.project_events import (
     get_event_broker, ProjectEvent,
     EVENT_REQUIREMENT_CREATED, EVENT_REQUIREMENT_UPDATED, EVENT_REQUIREMENT_DELETED,
 )
+from app.services import notifications as notification_service
+from app.services.notifications import (
+    NOTIF_REQUIREMENT_CREATED,
+    NOTIF_REQUIREMENT_UPDATED,
+    NOTIF_REQUIREMENT_DELETED,
+)
 
 
 router = APIRouter(tags=["requirements"], dependencies=[Depends(get_current_user)])
@@ -44,6 +50,16 @@ def create_requirement(
         actor_user_id=current_user.id,
         actor_display_name=current_user.display_name,
     ))
+
+    notification_service.notify_project_members(
+        database, project_id, current_user.id,
+        notification_type=NOTIF_REQUIREMENT_CREATED,
+        title=f"New obligation \"{requirement.requirement_code}\" created",
+        body=f"{current_user.display_name} added a new compliance obligation \"{requirement.title}\".",
+        actor_display_name=current_user.display_name,
+    )
+    database.commit()
+
     return {"data": RequirementRead.model_validate(requirement).model_dump(mode="json")}
 
 
@@ -66,13 +82,24 @@ def update_requirement(
 ):
     requirement = project_access_service.ensure_requirement_access_or_404(database, requirement_id, current_user.id)
     requirement = requirement_service.update_requirement(database, requirement, payload)
+    project_id = requirement.document.project_id
     get_event_broker().publish(ProjectEvent(
         event_type=EVENT_REQUIREMENT_UPDATED,
-        project_id=requirement.document.project_id,
+        project_id=project_id,
         data={"requirement_code": requirement.requirement_code, "title": requirement.title},
         actor_user_id=current_user.id,
         actor_display_name=current_user.display_name,
     ))
+
+    notification_service.notify_project_members(
+        database, project_id, current_user.id,
+        notification_type=NOTIF_REQUIREMENT_UPDATED,
+        title=f"Obligation \"{requirement.requirement_code}\" updated",
+        body=f"{current_user.display_name} modified the compliance obligation details.",
+        actor_display_name=current_user.display_name,
+    )
+    database.commit()
+
     return {"data": RequirementRead.model_validate(requirement).model_dump(mode="json")}
 
 
@@ -85,7 +112,10 @@ def delete_requirement(
     requirement = project_access_service.ensure_requirement_access_or_404(database, requirement_id, current_user.id)
     project_id = requirement.document.project_id
     req_code = requirement.requirement_code
+    req_title = requirement.title
+
     requirement_service.delete_requirement(database, requirement)
+
     get_event_broker().publish(ProjectEvent(
         event_type=EVENT_REQUIREMENT_DELETED,
         project_id=project_id,
@@ -93,5 +123,15 @@ def delete_requirement(
         actor_user_id=current_user.id,
         actor_display_name=current_user.display_name,
     ))
+
+    notification_service.notify_project_members(
+        database, project_id, current_user.id,
+        notification_type=NOTIF_REQUIREMENT_DELETED,
+        title=f"Obligation \"{req_code}\" removed",
+        body=f"{current_user.display_name} deleted the obligation \"{req_title}\".",
+        actor_display_name=current_user.display_name,
+    )
+    database.commit()
+
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

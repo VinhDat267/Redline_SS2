@@ -44,6 +44,7 @@ def create_app(*, session_factory=SessionLocal, start_ai_worker: bool | None = N
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["Content-Disposition"],
     )
     application.include_router(api_router)
 

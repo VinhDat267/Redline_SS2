@@ -667,7 +667,7 @@ export function listContractClauseChanges(token, compareRunId) {
 }
 
 export async function exportReviewReport(token, compareRunId) {
-  const response = await fetch(`/api/v1/contract-compare-runs/${compareRunId}/export-review-report`, {
+  const response = await fetch(`${API_BASE_URL}/api/v1/contract-compare-runs/${compareRunId}/export-review-report`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!response.ok) {

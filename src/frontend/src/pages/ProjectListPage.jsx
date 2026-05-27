@@ -419,22 +419,26 @@ export function ProjectListPage() {
       } else {
         // Send invitations for the newly created project
         const validInvites = inviteRows.filter(r => r.email.trim());
+        let feedbackMsg = "Project created successfully.";
+
         if (validInvites.length > 0) {
           const inviteResults = await Promise.allSettled(
             validInvites.map(row =>
               createProjectMember(token, savedProject.id, {
-                email: row.email.trim(),
+                user_email: row.email.trim(),
                 role: row.role,
               })
             )
           );
           const failedCount = inviteResults.filter(r => r.status === "rejected").length;
           if (failedCount > 0) {
-            setFeedback(`Project created. ${validInvites.length - failedCount} invite(s) sent, ${failedCount} failed.`);
+            feedbackMsg = `Project created. ${validInvites.length - failedCount} invite(s) sent, ${failedCount} failed.`;
+          } else {
+            feedbackMsg = `Project created. ${validInvites.length} invite(s) sent successfully.`;
           }
         }
         startTransition(() => {
-          navigate(`/projects/${encodeId(savedProject.id)}`);
+          navigate(`/projects/${encodeId(savedProject.id)}`, { state: { feedback: feedbackMsg } });
         });
       }
     } catch (createError) {

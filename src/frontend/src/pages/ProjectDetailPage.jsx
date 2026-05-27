@@ -1,5 +1,5 @@
 ﻿import { useCallback, useEffect, useState } from "react";
-import { Link, useParams, useNavigate } from "react-router-dom";
+import { Link, useParams, useNavigate, useLocation } from "react-router-dom";
 import { encodeId, decodeId } from "../lib/idCodec";
 import { ArrowLeft, BarChart3, CheckSquare, ClipboardList, Clock, FileText, FolderHeart, FolderOpen, History, LogOut, MessageSquare, Pencil, Plus, Trash2, X, Users, ShieldCheck, Activity } from "lucide-react";
 
@@ -207,6 +207,16 @@ export function ProjectDetailPage() {
   const [activeTab, setActiveTab] = useState("documents");
   const [memberDeleteTarget, setMemberDeleteTarget] = useState(null);
   const [isDeletingMember, setIsDeletingMember] = useState(false);
+
+  const location = useLocation();
+
+  useEffect(() => {
+    if (location.state?.feedback) {
+      setFeedback(location.state.feedback);
+      // Clear the location state so it doesn't show again on manual refreshes
+      window.history.replaceState({}, document.title);
+    }
+  }, [location]);
 
   useEffect(() => {
     let isCurrent = true;

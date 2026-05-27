@@ -207,8 +207,8 @@ def generate_review_report(
         else "Unknown"
     )
     contract_title = (
-        compare_run.document.title
-        if compare_run.document
+        compare_run.source_version.document.title
+        if compare_run.source_version and compare_run.source_version.document
         else "Unknown Contract"
     )
 

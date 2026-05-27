@@ -736,29 +736,61 @@ export function AppNavbar() {
   const location = useLocation();
   const navigate = useNavigate();
 
+  /*
+   * ── Active-tab resolution ──
+   * We check isActiveLink(key) against the current pathname.
+   * The "contracts" tab navigates to /projects/:id (ProjectDetailPage),
+   * so it must match both /contracts/* and /projects/:id (but NOT /projects/:id/analytics).
+   * The "Projects" link in the header highlights only on /dashboard and bare /projects/:id.
+   */
+  function isAnyProjectScopedTab(p) {
+    // Returns true if the path belongs to one of the project-scoped tabs
+    // (contracts, parser, compare, review, qa, analytics).
+    // Used to prevent the "Projects" header link from highlighting on those routes.
+    if (p.includes("/chat")) return true;            // qa
+    if (p.includes("/parser")) return true;           // parser
+    if (p.includes("/documents")) return true;        // parser (document route)
+    if (p.includes("/analytics")) return true;        // analytics
+    if (p.startsWith("/contracts")) return true;      // contracts detail/list
+    if (p.startsWith("/contract-q-a")) return true;   // qa gateway
+    if (p.startsWith("/compare")) return true;        // compare / compare-runs
+    if (p.startsWith("/review")) return true;         // review
+    return false;
+  }
+
   function isActiveLink(key) {
     const p = location.pathname;
+
     if (key === "qa")
-      return (
-        p.startsWith("/contract-q-a") || p.includes("/chat")
-      );
+      return p.startsWith("/contract-q-a") || p.includes("/chat");
+
     if (key === "review")
       return p.startsWith("/review") || p.includes("/review");
+
     if (key === "compare")
       return (
         (p.startsWith("/compare") || p.startsWith("/compare-runs")) &&
-        !p.includes("/review")
-      );
+        !p.includes("/review") &&
+        !p.includes("/summary") &&
+        !p.includes("/impact")
+      ) || p.includes("/impact") || p.includes("/summary");
+
     if (key === "contracts")
       return (
-        (p.startsWith("/contracts") || p.includes("/contracts")) &&
-        !p.includes("/chat") &&
-        !p.includes("/parser")
+        // Matches /contracts, /contracts/:id (detail) but NOT /chat or /parser sub-paths.
+        // Also matches /projects/:id (ProjectDetailPage) — the Contracts tab navigates there.
+        (
+          (p.startsWith("/contracts") && !p.includes("/chat") && !p.includes("/parser")) ||
+          (p.startsWith("/projects/") && !p.includes("/analytics"))
+        )
       );
+
     if (key === "parser")
       return p.startsWith("/parser") || p.includes("/documents") || p.includes("/parser");
+
     if (key === "analytics")
-      return p.startsWith("/analytics") || p.includes("/analytics") || p.startsWith("/project-analytics");
+      return p.includes("/analytics");
+
     return false;
   }
 
@@ -777,6 +809,9 @@ export function AppNavbar() {
   const avatarUrl = user?.avatar_url
     ? `${import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000"}${user.avatar_url}`
     : null;
+
+  /* Projects link is active only on /dashboard (not on any project-scoped tab) */
+  const isProjectsLinkActive = location.pathname === "/dashboard" && !isAnyProjectScopedTab(location.pathname);
 
   return (
     <header
@@ -808,40 +843,18 @@ export function AppNavbar() {
               className="flex items-center gap-1.5 px-3 py-1.5 no-underline text-[13px] font-semibold"
               style={{
                 borderRadius: "6px",
-                color:
-                  (location.pathname === "/dashboard" ||
-                    location.pathname.startsWith("/projects")) &&
-                    !location.pathname.includes("/analytics")
-                    ? "#1E2026"
-                    : "#848E9C",
-                background:
-                  (location.pathname === "/dashboard" ||
-                    location.pathname.startsWith("/projects")) &&
-                    !location.pathname.includes("/analytics")
-                    ? "#F5F5F5"
-                    : "transparent",
+                color: isProjectsLinkActive ? "#1E2026" : "#848E9C",
+                background: isProjectsLinkActive ? "#F5F5F5" : "transparent",
                 transition: "all 200ms ease",
               }}
               onMouseEnter={(e) => {
-                if (
-                  !(
-                    (location.pathname === "/dashboard" ||
-                      location.pathname.startsWith("/projects")) &&
-                    !location.pathname.includes("/analytics")
-                  )
-                ) {
+                if (!isProjectsLinkActive) {
                   e.currentTarget.style.color = "#1E2026";
                   e.currentTarget.style.background = "#F5F5F5";
                 }
               }}
               onMouseLeave={(e) => {
-                if (
-                  !(
-                    (location.pathname === "/dashboard" ||
-                      location.pathname.startsWith("/projects")) &&
-                    !location.pathname.includes("/analytics")
-                  )
-                ) {
+                if (!isProjectsLinkActive) {
                   e.currentTarget.style.color = "#848E9C";
                   e.currentTarget.style.background = "transparent";
                 }

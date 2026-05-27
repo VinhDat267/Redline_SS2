@@ -62,14 +62,21 @@ def notify_project_members(
     body: str | None = None,
     project_name: str | None = None,
     actor_display_name: str | None = None,
+    exclude_user_ids: list[int] | None = None,
 ) -> list[UserNotification]:
-    """Create a notification for every project member except the actor."""
+    """Create a notification for every project member except the actor.
+
+    exclude_user_ids: additional user IDs to skip (e.g. users already notified
+    via a targeted create_notification call, to avoid duplicate alerts).
+    """
+    excluded = set(exclude_user_ids or [])
     member_user_ids = list(session.scalars(
         select(ProjectMember.user_id).where(
             ProjectMember.project_id == project_id,
             ProjectMember.user_id != actor_user_id,
         )
     ))
+    member_user_ids = [uid for uid in member_user_ids if uid not in excluded]
     notifications = []
     for uid in member_user_ids:
         notif = create_notification(

@@ -147,7 +147,7 @@ def update_change_item(
             actor_display_name=current_user.display_name,
         ))
 
-        # Notify the assignee directly (if someone is assigned and it's not the actor)
+        # Notify the assignee directly with a personalised message
         assignee_id = change_item.assignee_user_id
         if assignee_id is not None and assignee_id != current_user.id:
             notification_service.create_notification(
@@ -161,13 +161,14 @@ def update_change_item(
                 actor_display_name=current_user.display_name,
             )
 
-        # Notify other project members
+        # Notify remaining project members (exclude assignee who was notified above)
         notification_service.notify_project_members(
             database, project_id, current_user.id,
             notification_type=NOTIF_CHANGE_REVIEWED,
             title=f'Change item review status updated',
             body=f"{current_user.display_name} updated the status of \"{section_title}\" to \"{payload.review_status}\".",
             actor_display_name=current_user.display_name,
+            exclude_user_ids=[assignee_id] if assignee_id is not None else None,
         )
 
     # 3. Handle Summary/Details Modification

@@ -363,8 +363,9 @@ function NotificationBell({ invitations: pendingInvitations, onAccept, onDecline
           const latestNotif = newUnread[0];
           setActiveToast({
             id: latestNotif.id,
-            message: `${latestNotif.title}${latestNotif.body ? `: ${latestNotif.body}` : ""}`,
-            type: latestNotif.notification_type === "project_removed" ? "error" : "success"
+            title: latestNotif.title,
+            body: latestNotif.body,
+            notification_type: latestNotif.notification_type
           });
         }
       }
@@ -385,6 +386,15 @@ function NotificationBell({ invitations: pendingInvitations, onAccept, onDecline
     // Small delay so the DB commit from the backend is visible when we query
     setTimeout(fetchNotifs, 500);
   });
+
+  // Auto-dismiss transient toast after 4s
+  useEffect(() => {
+    if (!activeToast) return undefined;
+    const timer = setTimeout(() => {
+      setActiveToast(null);
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [activeToast]);
 
 
   useEffect(() => {
@@ -660,14 +670,63 @@ function NotificationBell({ invitations: pendingInvitations, onAccept, onDecline
           )}
         </div>
       )}
-      {activeToast && (
-        <Toast
-          message={activeToast.message}
-          type={activeToast.type}
-          onClose={() => setActiveToast(null)}
-          duration={4000}
-        />
-      )}
+      {/* Real-time drop-down Toast under the bell icon */}
+      {activeToast && !isOpen && (() => {
+        const visuals = getNotificationVisuals(activeToast);
+        return (
+          <div
+            style={{
+              position: "absolute",
+              right: 0,
+              top: "100%",
+              marginTop: "8px",
+              width: "320px",
+              zIndex: 250,
+              animation: "profileDropdownIn 200ms ease-out",
+            }}
+          >
+            <div
+              className="flex items-start gap-3 bg-white border px-4 py-3.5"
+              style={{
+                borderRadius: "12px",
+                borderColor: visuals.bgColor.replace("0.12", "0.2").replace("0.10", "0.2"),
+                boxShadow: "0 8px 30px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)",
+                borderLeft: `4px solid ${visuals.color}`,
+              }}
+            >
+              <div
+                className="w-7 h-7 flex items-center justify-center text-[12px] font-bold flex-shrink-0 mt-0.5"
+                style={{
+                  borderRadius: "50%",
+                  background: visuals.bgColor,
+                  color: visuals.color,
+                }}
+              >
+                {visuals.icon}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[12px] font-bold text-[#1E2026] leading-tight">
+                  {activeToast.title}
+                </p>
+                {activeToast.body && (
+                  <p className="text-[11px] text-[#848E9C] mt-1.5 leading-normal line-clamp-2">
+                    {activeToast.body}
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveToast(null)}
+                className="text-[#848E9C] hover:text-[#1E2026] bg-transparent border-none cursor-pointer p-0 flex-shrink-0 mt-0.5"
+                style={{ transition: "color 150ms ease" }}
+                aria-label="Close alert"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

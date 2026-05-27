@@ -758,7 +758,7 @@ export function AppNavbar() {
     if (key === "parser")
       return p.startsWith("/parser") || p.includes("/documents") || p.includes("/parser");
     if (key === "analytics")
-      return p.startsWith("/analytics") || p.startsWith("/project-analytics");
+      return p.startsWith("/analytics") || p.includes("/analytics") || p.startsWith("/project-analytics");
     return false;
   }
 
@@ -809,21 +809,26 @@ export function AppNavbar() {
               style={{
                 borderRadius: "6px",
                 color:
-                  location.pathname === "/dashboard" ||
-                    location.pathname.startsWith("/projects")
+                  (location.pathname === "/dashboard" ||
+                    location.pathname.startsWith("/projects")) &&
+                    !location.pathname.includes("/analytics")
                     ? "#1E2026"
                     : "#848E9C",
                 background:
-                  location.pathname === "/dashboard" ||
-                    location.pathname.startsWith("/projects")
+                  (location.pathname === "/dashboard" ||
+                    location.pathname.startsWith("/projects")) &&
+                    !location.pathname.includes("/analytics")
                     ? "#F5F5F5"
                     : "transparent",
                 transition: "all 200ms ease",
               }}
               onMouseEnter={(e) => {
                 if (
-                  !location.pathname.startsWith("/dashboard") &&
-                  !location.pathname.startsWith("/projects")
+                  !(
+                    (location.pathname === "/dashboard" ||
+                      location.pathname.startsWith("/projects")) &&
+                    !location.pathname.includes("/analytics")
+                  )
                 ) {
                   e.currentTarget.style.color = "#1E2026";
                   e.currentTarget.style.background = "#F5F5F5";
@@ -831,8 +836,11 @@ export function AppNavbar() {
               }}
               onMouseLeave={(e) => {
                 if (
-                  !location.pathname.startsWith("/dashboard") &&
-                  !location.pathname.startsWith("/projects")
+                  !(
+                    (location.pathname === "/dashboard" ||
+                      location.pathname.startsWith("/projects")) &&
+                    !location.pathname.includes("/analytics")
+                  )
                 ) {
                   e.currentTarget.style.color = "#848E9C";
                   e.currentTarget.style.background = "transparent";

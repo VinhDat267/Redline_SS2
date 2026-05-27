@@ -93,7 +93,7 @@ export function SummaryExportPage() {
   const summaryWordCount = countWords(editableText);
   const hasSummaryDraft = editableText.trim().length > 0;
   const readyToExport = reviewCounts.open === 0 && reviewCounts.inReview === 0;
-  const canExportDocx = readyToExport && hasSummaryDraft && !isExportingDocx;
+  const canExportDocx = hasSummaryDraft && !isExportingDocx;
   const activeReviewCount = reviewCounts.open + reviewCounts.inReview;
   const totalChanges = compareRun?.summary?.total_changes ?? queue.length;
   const resolvedPct = totalChanges > 0 ? Math.round((reviewCounts.resolved / totalChanges) * 100) : 0;

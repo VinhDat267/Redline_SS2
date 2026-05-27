@@ -35,6 +35,9 @@ from app.services import contracts as contract_service
 from app.services import documents as document_service
 from app.services.document_parser import DocumentParseError
 from app.services import project_access as project_access_service
+from app.services.project_events import get_event_broker, ProjectEvent, EVENT_DOCUMENT_CREATED, EVENT_DOCUMENT_DELETED, EVENT_VERSION_CREATED
+from app.services import notifications as notification_service
+from app.services.notifications import NOTIF_DOCUMENT_UPLOADED, NOTIF_VERSION_UPLOADED
 
 
 router = APIRouter(tags=["contracts"], dependencies=[Depends(get_current_user)])
@@ -85,6 +88,22 @@ def create_contract(
         entity_id=contract.id,
         description=f'Created contract "{contract.title}"',
     )
+    get_event_broker().publish(ProjectEvent(
+        event_type=EVENT_DOCUMENT_CREATED,
+        project_id=project_id,
+        data={"document_id": contract.id, "title": contract.title},
+        actor_user_id=current_user.id,
+        actor_display_name=current_user.display_name,
+    ))
+    notification_service.notify_project_members(
+        database, project_id, current_user.id,
+        notification_type=NOTIF_DOCUMENT_UPLOADED,
+        title=f'New contract "{contract.title}"',
+        body=f"{current_user.display_name} created a new contract.",
+        project_name=contract.title,
+        actor_display_name=current_user.display_name,
+    )
+    database.commit()
     return {"data": ContractRead.model_validate(contract_service.serialize_contract(contract)).model_dump(mode="json")}
 
 
@@ -135,6 +154,14 @@ def delete_contract(
         entity_id=contract_id,
         description=f'Deleted contract "{contract_title}"',
     )
+    get_event_broker().publish(ProjectEvent(
+        event_type=EVENT_DOCUMENT_DELETED,
+        project_id=project_id,
+        data={"document_id": contract_id, "title": contract_title},
+        actor_user_id=current_user.id,
+        actor_display_name=current_user.display_name,
+    ))
+    database.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -176,6 +203,27 @@ def create_contract_draft(
         entity_id=draft.id,
         description=f'Uploaded draft "{draft_label}" to "{contract.title}"',
     )
+    get_event_broker().publish(ProjectEvent(
+        event_type=EVENT_VERSION_CREATED,
+        project_id=contract.project_id,
+        data={
+            "document_id": contract.id,
+            "version_id": draft.id,
+            "version_label": draft_label,
+            "document_title": contract.title,
+        },
+        actor_user_id=current_user.id,
+        actor_display_name=current_user.display_name,
+    ))
+    notification_service.notify_project_members(
+        database, contract.project_id, current_user.id,
+        notification_type=NOTIF_VERSION_UPLOADED,
+        title=f'New version "{draft_label}" on "{contract.title}"',
+        body=f"{current_user.display_name} uploaded a new version.",
+        project_name=contract.title,
+        actor_display_name=current_user.display_name,
+    )
+    database.commit()
     return {"data": ContractDraftRead.model_validate(contract_service.serialize_contract_draft(draft)).model_dump(mode="json")}
 
 

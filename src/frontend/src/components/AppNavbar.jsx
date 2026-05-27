@@ -752,10 +752,11 @@ export function AppNavbar() {
     if (key === "contracts")
       return (
         (p.startsWith("/contracts") || p.includes("/contracts")) &&
-        !/\/contracts\/\d+\/chat/.test(p)
+        !/\/contracts\/\d+\/chat/.test(p) &&
+        !p.includes("/parser")
       );
     if (key === "parser")
-      return p.startsWith("/parser") || p.includes("/documents");
+      return p.startsWith("/parser") || p.includes("/documents") || p.includes("/parser");
     if (key === "analytics")
       return p.startsWith("/analytics") || p.startsWith("/project-analytics");
     return false;

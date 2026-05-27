@@ -20,7 +20,7 @@ export function useProjectEvents(projectId, onEvent, { enabled = true } = {}) {
     onEventRef.current = onEvent;
 
     useEffect(() => {
-        if (!projectId || !enabled) return;
+        if (!projectId || !enabled || !token) return;
 
         let eventSource;
         let reconnectTimer;
@@ -28,10 +28,9 @@ export function useProjectEvents(projectId, onEvent, { enabled = true } = {}) {
         const MAX_RETRIES = 10;
 
         function connect() {
-            let url = `${API_BASE_URL}/api/v1/projects/${projectId}/events`;
-            if (token) {
-                url += `?token=${encodeURIComponent(token)}`;
-            }
+            // Auth is handled via httpOnly session cookie (withCredentials: true).
+            // useAuth().token is the CSRF token, NOT the JWT — do NOT pass it as ?token=.
+            const url = `${API_BASE_URL}/api/v1/projects/${projectId}/events`;
             eventSource = new EventSource(url, { withCredentials: true });
 
 

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { useAuth } from "../auth/AuthContext";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 
@@ -14,6 +15,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000
  * @param {boolean}     [options.enabled=true]
  */
 export function useProjectEvents(projectId, onEvent, { enabled = true } = {}) {
+    const { token } = useAuth();
     const onEventRef = useRef(onEvent);
     onEventRef.current = onEvent;
 
@@ -26,8 +28,12 @@ export function useProjectEvents(projectId, onEvent, { enabled = true } = {}) {
         const MAX_RETRIES = 10;
 
         function connect() {
-            const url = `${API_BASE_URL}/api/v1/projects/${projectId}/events`;
+            let url = `${API_BASE_URL}/api/v1/projects/${projectId}/events`;
+            if (token) {
+                url += `?token=${encodeURIComponent(token)}`;
+            }
             eventSource = new EventSource(url, { withCredentials: true });
+
 
             eventSource.addEventListener("connected", () => {
                 retryCount = 0;

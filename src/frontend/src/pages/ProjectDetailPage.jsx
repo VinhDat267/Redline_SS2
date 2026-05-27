@@ -1,5 +1,5 @@
 ﻿import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import { encodeId, decodeId } from "../lib/idCodec";
 import { ArrowLeft, BarChart3, CheckSquare, ClipboardList, Clock, FileText, FolderHeart, FolderOpen, History, LogOut, MessageSquare, Pencil, Plus, Trash2, X, Users, ShieldCheck, Activity } from "lucide-react";
 
@@ -166,7 +166,8 @@ function FormSelect({ label, children, "aria-label": ariaLabel, ...props }) {
 
 export function ProjectDetailPage() {
   const { logout, token, user } = useAuth();
-  const { setActiveProject } = useActiveProject();
+  const { setActiveProject, clearActiveProject } = useActiveProject();
+  const navigate = useNavigate();
   const { projectId: rawProjectId } = useParams();
   const projectId = decodeId(rawProjectId);
   const [project, setProject] = useState(null);
@@ -292,6 +293,11 @@ export function ProjectDetailPage() {
         setFeedback(`${actor} ${data?.updated ? "updated a member role" : "added a new member"}`);
         break;
       case "member_removed":
+        if (data?.user_id === user?.id) {
+          clearActiveProject();
+          navigate("/dashboard");
+          return;
+        }
         refreshMemberInventory();
         refreshActivityLogs();
         setFeedback(`${actor} removed a member`);
@@ -314,7 +320,8 @@ export function ProjectDetailPage() {
         setFeedback(`${actor} updated the project`);
         break;
       case "project_deleted":
-        setFeedback(`${actor} deleted this project`);
+        clearActiveProject();
+        navigate("/dashboard");
         break;
       case "compare_started":
       case "compare_completed":

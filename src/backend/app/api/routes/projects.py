@@ -167,12 +167,13 @@ def delete_project_member(
 ):
     project_access_service.ensure_project_admin_or_403(database, project_id, current_user.id)
     member = project_service.get_project_member_or_404(database, project_id, member_id)
+    member_user_id = member.user_id
     member_email = getattr(member, "user_email", None)  # capture before delete detaches
     project_service.delete_project_member(database, member, actor_display_name=current_user.display_name)
     get_event_broker().publish(ProjectEvent(
         event_type=EVENT_MEMBER_REMOVED,
         project_id=project_id,
-        data={"member_id": member_id, "email": member_email},
+        data={"member_id": member_id, "user_id": member_user_id, "email": member_email},
         actor_user_id=current_user.id,
         actor_display_name=current_user.display_name,
     ))

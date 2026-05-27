@@ -7,6 +7,7 @@ import {
 import { encodeId } from "../lib/idCodec";
 import { useAuth } from "../auth/AuthContext";
 import { useActiveProject } from "../context/ActiveProjectContext";
+import { useProjectEvents } from "../hooks/useProjectEvents";
 
 /* Navigation tabs that require an active project */
 const PROJECT_LINKS = [
@@ -207,7 +208,7 @@ function ProfileDropdown({ displayName, email, initial, avatarUrl, onLogout }) {
 }
 
 /* ─── Notification Bell ─── */
-function NotificationBell({ invitations: pendingInvitations, onAccept, onDecline, token }) {
+function NotificationBell({ invitations: pendingInvitations, onAccept, onDecline, token, activeProjectId }) {
   const [isOpen, setIsOpen] = useState(false);
   const [processing, setProcessing] = useState(null); // { id, action }
   const [notifications, setNotifications] = useState([]);
@@ -219,25 +220,32 @@ function NotificationBell({ invitations: pendingInvitations, onAccept, onDecline
 
   const close = useCallback(() => setIsOpen(false), []);
 
-  // Fetch system notifications (removed etc.) on mount + every 30s
-  useEffect(() => {
-    if (!token) return undefined;
-    async function fetchNotifs() {
-      try {
-        const { listNotifications: listNotifs } = await import("../lib/api");
-        const result = await listNotifs(token, { unreadOnly: false });
-        // Backend returns {items: [...], unread_count: N} after apiRequest unwrap
-        const items = Array.isArray(result?.items) ? result.items : (Array.isArray(result) ? result : []);
-        setNotifications(items);
-        setUnreadCount(result?.unread_count ?? 0);
-      } catch {
-        // silent
-      }
+  const fetchNotifs = useCallback(async () => {
+    if (!token) return;
+    try {
+      const { listNotifications: listNotifs } = await import("../lib/api");
+      const result = await listNotifs(token, { unreadOnly: false });
+      // Backend returns {items: [...], unread_count: N} after apiRequest unwrap
+      const items = Array.isArray(result?.items) ? result.items : (Array.isArray(result) ? result : []);
+      setNotifications(items);
+      setUnreadCount(result?.unread_count ?? 0);
+    } catch {
+      // silent
     }
+  }, [token]);
+
+  // Fetch on token load + setup 30s polling fallback
+  useEffect(() => {
     fetchNotifs();
     const timer = setInterval(fetchNotifs, 30000);
     return () => clearInterval(timer);
-  }, [token]);
+  }, [fetchNotifs]);
+
+  // Subscribe to real-time events via SSE on the active project to update notifications instantly
+  useProjectEvents(activeProjectId ? Number(activeProjectId) : null, () => {
+    fetchNotifs();
+  });
+
 
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -678,12 +686,12 @@ export function AppNavbar() {
 
         {/* Right side */}
         <div className="flex items-center gap-3">
-          {/* Notification Bell */}
           <NotificationBell
             invitations={pendingProjectInvitations}
             onAccept={acceptPendingProjectInvitation}
             onDecline={declinePendingProjectInvitation}
             token={token}
+            activeProjectId={activeProject?.id}
           />
 
           {/* Active project badge */}

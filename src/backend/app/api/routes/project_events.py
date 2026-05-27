@@ -70,8 +70,7 @@ async def stream_project_events(
 
     async def combined_generator():
         """Merge event stream with keepalive heartbeats."""
-        queue: asyncio.Queue = asyncio.Queue(maxsize=64)
-        broker._subscribers[project_id].add(queue)
+        subscriber = broker.subscribe(project_id, exclude_user_id=exclude_user_id)
 
         # Send connected event
         yield "event: connected\ndata: {\"status\": \"connected\", \"project_id\": %d}\n\n" % project_id
@@ -82,19 +81,17 @@ async def stream_project_events(
                     break
 
                 try:
-                    event = await asyncio.wait_for(queue.get(), timeout=25.0)
-                    if exclude_user_id and event.actor_user_id == exclude_user_id:
-                        continue
+                    event = await asyncio.wait_for(subscriber.__anext__(), timeout=25.0)
                     yield event.to_sse()
                 except asyncio.TimeoutError:
                     # Send keepalive comment
                     yield ": keepalive\n\n"
+                except StopAsyncIteration:
+                    break
         except asyncio.CancelledError:
             pass
         finally:
-            broker._subscribers[project_id].discard(queue)
-            if not broker._subscribers[project_id]:
-                del broker._subscribers[project_id]
+            await subscriber.aclose()
 
     return StreamingResponse(
         combined_generator(),

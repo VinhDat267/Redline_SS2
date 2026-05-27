@@ -11,7 +11,7 @@ from app.services import documents as document_service
 from app.services.document_parser import DocumentParseError
 from app.services import parser_workspace as parser_workspace_service
 from app.services import project_access as project_access_service
-from app.services.project_events import get_event_broker, ProjectEvent, EVENT_DOCUMENT_CREATED, EVENT_DOCUMENT_DELETED, EVENT_VERSION_CREATED
+from app.services.project_events import get_event_broker, ProjectEvent, EVENT_DOCUMENT_CREATED, EVENT_DOCUMENT_DELETED, EVENT_DOCUMENT_UPDATED, EVENT_VERSION_CREATED
 
 
 router = APIRouter(tags=["documents"], dependencies=[Depends(get_current_user)])
@@ -87,6 +87,13 @@ def update_document(
 ):
     document = project_access_service.ensure_document_access_or_404(database, document_id, current_user.id)
     document = document_service.update_document(database, document, payload)
+    get_event_broker().publish(ProjectEvent(
+        event_type=EVENT_DOCUMENT_UPDATED,
+        project_id=document.project_id,
+        data={"document_id": document.id, "title": document.title},
+        actor_user_id=current_user.id,
+        actor_display_name=current_user.display_name,
+    ))
     return {"data": DocumentRead.model_validate(document).model_dump(mode="json")}
 
 
@@ -98,14 +105,16 @@ def delete_document(
 ):
     document = project_access_service.ensure_document_access_or_404(database, document_id, current_user.id)
     project_id = document.project_id
+    doc_title = document.title  # capture before delete detaches
+    document_service.delete_document(database, document)
+    # Publish AFTER successful commit
     get_event_broker().publish(ProjectEvent(
         event_type=EVENT_DOCUMENT_DELETED,
         project_id=project_id,
-        data={"document_id": document.id, "title": document.title},
+        data={"document_id": document_id, "title": doc_title},
         actor_user_id=current_user.id,
         actor_display_name=current_user.display_name,
     ))
-    document_service.delete_document(database, document)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

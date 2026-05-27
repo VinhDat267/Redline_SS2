@@ -738,7 +738,12 @@ export function ReviewPanelPage() {
                   )}
                   {changeItem.ai_review_draft.provider_used && (
                     <span style={{ marginTop: '4px', display: 'inline-block', marginLeft: '4px', fontSize: '10px', fontWeight: 700, padding: '1px 7px', borderRadius: '4px', background: '#EBF9F4', color: '#16714E', border: '1px solid #2EBD8544' }}>
-                      ✦ AI Generated
+                      ✦ AI Generated ({changeItem.ai_review_draft.provider_used})
+                    </span>
+                  )}
+                  {changeItem.ai_review_draft.fallback_used && (
+                    <span style={{ marginTop: '4px', display: 'inline-block', marginLeft: '4px', fontSize: '10px', fontWeight: 700, padding: '1px 7px', borderRadius: '4px', background: '#FFF1F0', color: '#C03050', border: '1px solid #F6465D44' }}>
+                      Fallback used
                     </span>
                   )}
                   {changeItem.ai_review_draft.error_message && (

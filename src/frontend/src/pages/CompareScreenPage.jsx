@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Eye, FileText, GitMerge, LogOut, Sparkles, FolderDown, ArrowUpToLine, FileDiff, Flag, List, CircleDashed, Clock, CheckCircle2, Bot, Activity, XCircle, FileCode, Edit, Code, Database, Info, GitCommit, FileWarning, Calendar, Hash, RefreshCw, Download } from "lucide-react";
 import { decodeId, encodeId } from "../lib/idCodec";
 import { InlineDiff } from "../components/InlineDiff";
@@ -138,6 +138,7 @@ function clampPage(value, totalPages) {
 }
 export function CompareScreenPage() {
   const { logout, token } = useAuth();
+  const navigate = useNavigate();
   const { compareRunId: rawCompareRunId } = useParams();
   const compareRunId = decodeId(rawCompareRunId);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -417,12 +418,12 @@ export function CompareScreenPage() {
         throw new Error("Missing draft version metadata to re-run comparison.");
       }
       const newRun = await createContractCompareRun(token, docId, {
-        source_draft_id: sourceId,
-        target_draft_id: targetId
+        source_version_id: sourceId,
+        target_version_id: targetId
       });
       setAiMessage("Re-running comparison workspace succeeded! Redirecting...");
-      // Hard redirect to the newly generated compare run
-      window.location.href = `/compare-runs/${newRun.id}`;
+      // Use React Router navigate with encoded ID to preserve SPA state
+      navigate(`/compare-runs/${encodeId(newRun.id)}`);
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         logout();
@@ -462,7 +463,7 @@ export function CompareScreenPage() {
     },
     {
       label: "Changes",
-      value: compareRun ? String(compareRun.summary.total_changes) : "Loading...",
+      value: compareRun ? String(compareRun.summary?.total_changes ?? "–") : "Loading...",
       icon: FileDiff
     },
     {
@@ -497,14 +498,15 @@ export function CompareScreenPage() {
     function onKey(e) {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
       const idx = filteredQueue.findIndex(i => i.id === selectedChangeId);
-      if ((e.key === 'j' || e.key === 'J') && idx > 0) {
-        const nextParams = new URLSearchParams(window.location.search);
-        nextParams.set('change', String(filteredQueue[idx - 1].id));
-        setSearchParams(nextParams);
-      }
-      if ((e.key === 'k' || e.key === 'K') && idx < filteredQueue.length - 1) {
+      // J = next (down), K = prev (up) — vim convention
+      if ((e.key === 'j' || e.key === 'J') && idx < filteredQueue.length - 1) {
         const nextParams = new URLSearchParams(window.location.search);
         nextParams.set('change', String(filteredQueue[idx + 1].id));
+        setSearchParams(nextParams);
+      }
+      if ((e.key === 'k' || e.key === 'K') && idx > 0) {
+        const nextParams = new URLSearchParams(window.location.search);
+        nextParams.set('change', String(filteredQueue[idx - 1].id));
         setSearchParams(nextParams);
       }
     }
@@ -870,7 +872,7 @@ export function CompareScreenPage() {
                       <p style={{ fontSize: '12px', color: '#474D57', lineHeight: 1.65 }}>{selectedChange.ai_review_draft.explanation}</p>
                       {selectedChange.ai_review_draft.provider_used && (
                         <span style={{ marginTop: '6px', display: 'inline-block', fontSize: '10px', fontWeight: 700, padding: '1px 7px', borderRadius: '4px', background: '#EBF9F4', color: '#16714E', border: '1px solid #2EBD8544' }}>
-                          ✦ AI Generated
+                          ✦ AI Generated ({selectedChange.ai_review_draft.provider_used})
                         </span>
                       )}
                     </div>

@@ -11,11 +11,14 @@ from app.schemas.compare import (
     CompareQueueItemRead,
     CompareQueuePageRead,
     CompareRunAIGenerateRequest,
+    CompareRunAISummaryResponse,
     CompareRunRead,
 )
 from app.services import ai_batch_jobs as ai_batch_job_service
 from app.services import ai_rate_limit
+from app.services import ai_summary as ai_summary_service
 from app.services import compare as compare_service
+from app.services import export_docx as export_docx_service
 from app.services import project_access as project_access_service
 from app.services.project_events import get_event_broker, ProjectEvent, EVENT_COMPARE_STARTED
 
@@ -127,10 +130,6 @@ def generate_compare_run_ai_review_drafts(
         worker.wake()
     return {"data": AIBatchJobRead.model_validate(result).model_dump(mode="json")}
 
-
-from app.schemas.compare import CompareRunAISummaryResponse
-from app.services import ai_summary as ai_summary_service
-from app.services import export_docx as export_docx_service
 
 @router.post("/compare-runs/{compare_run_id}/ai-summary-drafts/generate", response_model=CompareRunAISummaryResponse)
 def generate_compare_run_ai_summary_draft(

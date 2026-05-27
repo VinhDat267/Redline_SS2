@@ -163,7 +163,6 @@ def decline_project_invitation(
     current_user: User = Depends(get_current_user),
     database: Session = Depends(get_db_session),
 ):
-    from fastapi import HTTPException
     invitation = database.get(ProjectInvitation, invitation_id)
     if invitation is None or invitation.status != "pending" or invitation.email != normalize_email(current_user.email):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project invitation not found")

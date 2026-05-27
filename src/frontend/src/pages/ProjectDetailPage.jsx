@@ -268,40 +268,49 @@ export function ProjectDetailPage() {
     switch (type) {
       case "document_created":
         refreshDocumentInventory();
+        refreshActivityLogs();
         setFeedback(`${actor} created document "${data?.title || ""}"`);
         break;
       case "document_updated":
         refreshDocumentInventory();
+        refreshActivityLogs();
         setFeedback(`${actor} updated a document`);
         break;
       case "document_deleted":
         refreshDocumentInventory();
+        refreshActivityLogs();
         setFeedback(`${actor} deleted document "${data?.title || ""}"`);
         break;
       case "version_created":
         refreshDocumentInventory();
+        refreshActivityLogs();
         setFeedback(`${actor} uploaded version "${data?.version_label || ""}" to "${data?.document_title || ""}"`);
         break;
       case "member_added":
         refreshMemberInventory();
-        setFeedback(`${actor} added a new member`);
+        refreshActivityLogs();
+        setFeedback(`${actor} ${data?.updated ? "updated a member role" : "added a new member"}`);
         break;
       case "member_removed":
         refreshMemberInventory();
+        refreshActivityLogs();
         setFeedback(`${actor} removed a member`);
         break;
       case "invitation_created":
         refreshInvitationInventory();
+        refreshActivityLogs();
         setFeedback(`${actor} sent an invitation to ${data?.email || "someone"}`);
         break;
       case "invitation_accepted":
       case "invitation_declined":
         refreshInvitationInventory();
         refreshMemberInventory();
-        setFeedback(`An invitation was ${type === "invitation_accepted" ? "accepted" : "declined"}`);
+        refreshActivityLogs();
+        setFeedback(`An invitation was ${type === "invitation_accepted" ? "accepted" : data?.action === "revoked" ? "revoked" : "declined"}`);
         break;
       case "project_updated":
         loadProjectData();
+        refreshActivityLogs();
         setFeedback(`${actor} updated the project`);
         break;
       case "project_deleted":
@@ -310,22 +319,26 @@ export function ProjectDetailPage() {
       case "compare_started":
       case "compare_completed":
       case "review_completed":
+        refreshActivityLogs();
         setFeedback(`${actor} ${type.replace(/_/g, " ")}`);
         break;
       case "requirement_created":
       case "requirement_updated":
       case "requirement_deleted":
         refreshRequirementInventory();
+        refreshActivityLogs();
         setFeedback(`${actor} ${type.replace(/_/g, " ")}`);
         break;
       case "test_case_created":
       case "test_case_updated":
       case "test_case_deleted":
         refreshTestCaseInventory();
+        refreshActivityLogs();
         setFeedback(`${actor} ${type.replace(/_/g, " ")}`);
         break;
       case "change_item_reviewed":
       case "change_item_commented":
+        refreshActivityLogs();
         setFeedback(`${actor} ${type.replace(/_/g, " ")}`);
         break;
       default:
@@ -399,6 +412,13 @@ export function ProjectDetailPage() {
       setError(refreshError.message);
       return false;
     }
+  }
+
+  async function refreshActivityLogs() {
+    try {
+      const activityPayload = await listProjectActivityLogs(token, projectId);
+      setActivityLogs(activityPayload);
+    } catch { /* silent */ }
   }
 
   async function refreshTestCaseInventory() {

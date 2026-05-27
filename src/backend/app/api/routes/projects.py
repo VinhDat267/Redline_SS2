@@ -75,6 +75,7 @@ def update_project(
     project = project_access_service.ensure_project_admin_or_403(database, project_id, current_user.id)
     project = project_service.update_project(database, project, payload)
     document_count = project_service.count_project_documents(database, project.id)
+    # Publish AFTER successful commit to avoid broadcasting stale events on DB failure
     get_event_broker().publish(ProjectEvent(
         event_type=EVENT_PROJECT_UPDATED,
         project_id=project_id,
@@ -92,14 +93,16 @@ def delete_project(
     database: Session = Depends(get_db_session),
 ):
     project = project_access_service.ensure_project_admin_or_403(database, project_id, current_user.id)
+    project_name = project.name  # capture before delete detaches
+    project_service.delete_project(database, project)
+    # Publish AFTER successful commit to avoid broadcasting stale events on DB failure
     get_event_broker().publish(ProjectEvent(
         event_type=EVENT_PROJECT_DELETED,
         project_id=project_id,
-        data={"name": project.name},
+        data={"name": project_name},
         actor_user_id=current_user.id,
         actor_display_name=current_user.display_name,
     ))
-    project_service.delete_project(database, project)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -145,6 +148,13 @@ def update_project_member(
     project_access_service.ensure_project_admin_or_403(database, project_id, current_user.id)
     member = project_service.get_project_member_or_404(database, project_id, member_id)
     member = project_service.update_project_member(database, member, payload)
+    get_event_broker().publish(ProjectEvent(
+        event_type=EVENT_MEMBER_ADDED,
+        project_id=project_id,
+        data={"member_id": member_id, "role": member.role, "updated": True},
+        actor_user_id=current_user.id,
+        actor_display_name=current_user.display_name,
+    ))
     return {"data": ProjectMemberRead.model_validate(member).model_dump(mode="json")}
 
 
@@ -198,7 +208,15 @@ def delete_project_invitation(
         project_id,
         invitation_id,
     )
+    invitation_email = invitation.email  # capture before mutation
     project_invitation_service.revoke_project_invitation(database, invitation)
+    get_event_broker().publish(ProjectEvent(
+        event_type=EVENT_INVITATION_DECLINED,
+        project_id=project_id,
+        data={"invitation_id": invitation_id, "email": invitation_email, "action": "revoked"},
+        actor_user_id=current_user.id,
+        actor_display_name=current_user.display_name,
+    ))
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -223,6 +241,13 @@ def decline_project_invitation(
     inv.status = "declined"
     database.add(inv)
     database.commit()
+    get_event_broker().publish(ProjectEvent(
+        event_type=EVENT_INVITATION_DECLINED,
+        project_id=project_id,
+        data={"invitation_id": invitation_id, "email": inv.email},
+        actor_user_id=current_user.id,
+        actor_display_name=current_user.display_name,
+    ))
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

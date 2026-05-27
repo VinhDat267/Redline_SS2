@@ -110,11 +110,21 @@ function providerBadgeLabel(message) {
   if (!provider) return "";
   const rawBase = provider.split(":")[0] || provider;
   const hasCompareEvidence = Array.isArray(message.citations) && message.citations.some(c => c.compare_run_id || c.change_item_id || c.source_label);
-  if (rawBase === "local-compare") return "\ud83d\udcc4 from compare changes";
-  if (hasCompareEvidence) return "\ud83d\udd04 from compare changes";
-  if (provider === "session-memory") return "\ud83d\udcac from conversation";
-  if (provider === "contract-metadata") return "\ud83d\udccb from contract info";
-  return "\ud83d\udcc4 from current draft";
+  const displayBase = rawBase.startsWith("local") ? "local" : rawBase;
+
+  if (rawBase === "local-compare") {
+    return `📄 ${displayBase} · compare fallback`;
+  }
+  if (hasCompareEvidence) {
+    return `🔄 ${displayBase} · compare changes`;
+  }
+  if (provider === "session-memory") {
+    return `💬 ${displayBase} · conversation`;
+  }
+  if (provider === "contract-metadata") {
+    return `📋 ${displayBase} · contract info`;
+  }
+  return `📄 ${displayBase} · current draft`;
 }
 function citationScopeLabel(c) { return c.source_label === "source" ? "Source" : c.source_label === "target" ? "Target" : ""; }
 function citationTitle(c) {
@@ -632,7 +642,7 @@ export function ContractChatPage() {
                 </div>
               </div>
               <div>
-                <p style={{ fontSize: "11px", fontWeight: 700, color: "#848E9C", textTransform: "uppercase", letterSpacing: ".1em", marginBottom: "8px" }}>Ready to answer</p>
+                <p style={{ fontSize: "11px", fontWeight: 700, color: "#848E9C", textTransform: "uppercase", letterSpacing: ".1em", marginBottom: "8px" }}>Ready for grounded Q&A</p>
                 <h2 style={{ fontSize: "26px", fontWeight: 800, color: "#1E2026", margin: "0 0 10px", letterSpacing: "-.02em" }}>
                   {selectedScope === "compare" ? "Ask about the comparison" : "Ask about this contract"}
                 </h2>

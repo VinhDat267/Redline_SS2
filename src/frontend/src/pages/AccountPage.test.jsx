@@ -88,15 +88,25 @@ describe("AccountPage", () => {
   });
 
   test("saves display name and updates the authenticated session", async () => {
-    fetch.mockResolvedValueOnce(
-      jsonResponse({
-        data: {
-          ...localSession.user,
-          display_name: "Updated Reviewer",
-          updated_at: "2026-05-06T01:00:00Z"
-        }
-      })
-    );
+    fetch.mockImplementation((input, init = {}) => {
+      const url = String(input);
+      const method = init.method || "GET";
+      if (url.includes("/invitations") || url.includes("/my-invitations")) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.includes("/api/v1/auth/me") && method === "PATCH") {
+        return Promise.resolve(
+          jsonResponse({
+            data: {
+              ...localSession.user,
+              display_name: "Updated Reviewer",
+              updated_at: "2026-05-06T01:00:00Z"
+            }
+          })
+        );
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
 
     renderAccountPage(localSession);
 
@@ -117,7 +127,7 @@ describe("AccountPage", () => {
         body: JSON.stringify({ display_name: "Updated Reviewer" })
       })
     );
-    expect(fetch.mock.calls[0][1].headers.Authorization).toBeUndefined();
+    expect(fetch.mock.calls.find(c => String(c[0]).endsWith("/api/v1/auth/me"))[1].headers.Authorization).toBeUndefined();
 
     await waitFor(() => {
       expect(JSON.parse(window.sessionStorage.getItem("redline.week7.session"))).toMatchObject({
@@ -133,9 +143,19 @@ describe("AccountPage", () => {
 
   test("logs out when profile save finds an expired session", async () => {
     window.sessionStorage.setItem("redline.week7.session", JSON.stringify(localSession));
-    fetch.mockResolvedValueOnce(
-      jsonResponse({ detail: "Your session has expired. Please sign in again." }, 401)
-    );
+    fetch.mockImplementation((input, init = {}) => {
+      const url = String(input);
+      const method = init.method || "GET";
+      if (url.includes("/invitations") || url.includes("/my-invitations")) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.includes("/api/v1/auth/me") && method === "PATCH") {
+        return Promise.resolve(
+          jsonResponse({ detail: "Your session has expired. Please sign in again." }, 401)
+        );
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
 
     renderAccountPage(localSession);
 
@@ -206,15 +226,25 @@ describe("AccountPage", () => {
   });
 
   test("uploads avatar and shows success message", async () => {
-    fetch.mockResolvedValueOnce(
-      jsonResponse({
-        data: {
-          ...localSession.user,
-          avatar_url: "/uploads/avatars/user-1/new.webp",
-          updated_at: "2026-05-06T02:00:00Z"
-        }
-      })
-    );
+    fetch.mockImplementation((input, init = {}) => {
+      const url = String(input);
+      const method = init.method || "GET";
+      if (url.includes("/invitations") || url.includes("/my-invitations")) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.includes("/api/v1/auth/me/avatar") && method === "POST") {
+        return Promise.resolve(
+          jsonResponse({
+            data: {
+              ...localSession.user,
+              avatar_url: "/uploads/avatars/user-1/new.webp",
+              updated_at: "2026-05-06T02:00:00Z"
+            }
+          })
+        );
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
 
     renderAccountPage(localSession);
 
@@ -235,15 +265,25 @@ describe("AccountPage", () => {
   });
 
   test("removes avatar and shows success message", async () => {
-    fetch.mockResolvedValueOnce(
-      jsonResponse({
-        data: {
-          ...localSession.user,
-          avatar_url: null,
-          updated_at: "2026-05-06T03:00:00Z"
-        }
-      })
-    );
+    fetch.mockImplementation((input, init = {}) => {
+      const url = String(input);
+      const method = init.method || "GET";
+      if (url.includes("/invitations") || url.includes("/my-invitations")) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.includes("/api/v1/auth/me/avatar") && method === "DELETE") {
+        return Promise.resolve(
+          jsonResponse({
+            data: {
+              ...localSession.user,
+              avatar_url: null,
+              updated_at: "2026-05-06T03:00:00Z"
+            }
+          })
+        );
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
 
     const sessionWithAvatar = {
       ...localSession,
@@ -267,6 +307,14 @@ describe("AccountPage", () => {
   });
 
   test("shows error for oversized avatar file", async () => {
+    fetch.mockImplementation((input, init = {}) => {
+      const url = String(input);
+      if (url.includes("/invitations") || url.includes("/my-invitations")) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+
     renderAccountPage(localSession);
 
     // Create a file that exceeds 5MB
@@ -278,11 +326,22 @@ describe("AccountPage", () => {
     fireEvent.change(input, { target: { files: [file] } });
 
     expect(await screen.findByText(/5 mb/i)).toBeInTheDocument();
-    // No API call should have been made
-    expect(fetch).not.toHaveBeenCalled();
+    // No avatar upload call should have been made
+    expect(fetch).not.toHaveBeenCalledWith(
+      expect.stringContaining("/api/v1/auth/me/avatar"),
+      expect.any(Object)
+    );
   });
 
   test("shows error for unsupported avatar file type", async () => {
+    fetch.mockImplementation((input, init = {}) => {
+      const url = String(input);
+      if (url.includes("/invitations") || url.includes("/my-invitations")) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+
     renderAccountPage(localSession);
 
     const file = new File(["fake"], "doc.pdf", { type: "application/pdf" });
@@ -290,13 +349,26 @@ describe("AccountPage", () => {
     fireEvent.change(input, { target: { files: [file] } });
 
     expect(await screen.findByText(/jpeg.*png.*webp.*gif/i)).toBeInTheDocument();
-    expect(fetch).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalledWith(
+      expect.stringContaining("/api/v1/auth/me/avatar"),
+      expect.any(Object)
+    );
   });
 
   test("shows error message when avatar upload fails", async () => {
-    fetch.mockResolvedValueOnce(
-      jsonResponse({ detail: "Upload failed" }, 500)
-    );
+    fetch.mockImplementation((input, init = {}) => {
+      const url = String(input);
+      const method = init.method || "GET";
+      if (url.includes("/invitations") || url.includes("/my-invitations")) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.includes("/api/v1/auth/me/avatar") && method === "POST") {
+        return Promise.resolve(
+          jsonResponse({ detail: "Upload failed" }, 500)
+        );
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
 
     renderAccountPage(localSession);
 

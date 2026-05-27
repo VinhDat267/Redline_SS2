@@ -191,8 +191,10 @@ def create_project_member(
             project_name=project.name,
             actor_display_name=inviter.display_name if inviter else None,
         )
-        session.commit()
 
+    # Always commit — whether or not the user exists yet
+    session.commit()
+    session.refresh(invitation)
     return {
         "result_type": "invitation_created",
         "member": None,

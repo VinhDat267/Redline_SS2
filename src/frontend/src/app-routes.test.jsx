@@ -246,7 +246,14 @@ describe("Redline authenticated routes", () => {
     });
 
     await waitFor(() => {
-      expect(fetch).toHaveBeenCalledTimes(2);
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v1/documents/10"),
+        expect.any(Object)
+      );
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/v1/documents/10/versions"),
+        expect.any(Object)
+      );
     });
   });
 

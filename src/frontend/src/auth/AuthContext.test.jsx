@@ -200,35 +200,42 @@ describe("AuthProvider session security", () => {
   });
 
   test("commits Google sessions and refreshes stored user profile details", async () => {
-    fetch
-      .mockResolvedValueOnce(
-        jsonResponse({
-          data: {
-            csrf_token: "google-csrf-token",
-            user: {
-              id: 5,
-              email: "google@example.com",
-              display_name: "Google Reviewer",
-              has_password: false,
-              google_linked: true,
-              is_active: true
-            },
-            pending_project_invitations: []
-          }
-        })
-      )
-      .mockResolvedValueOnce(
-        jsonResponse({
-          data: {
-            id: 5,
-            email: "google@example.com",
-            display_name: "Updated Reviewer",
-            has_password: false,
-            google_linked: true,
-            is_active: true
-          }
-        })
-      );
+    let mockUser = {
+      id: 5,
+      email: "google@example.com",
+      display_name: "Google Reviewer",
+      has_password: false,
+      google_linked: true,
+      is_active: true
+    };
+
+    fetch.mockImplementation((input, init = {}) => {
+      const url = String(input);
+      const method = init.method || "GET";
+
+      if (url.includes("/api/v1/auth/google") && method === "POST") {
+        return Promise.resolve(
+          jsonResponse({
+            data: {
+              csrf_token: "google-csrf-token",
+              user: mockUser,
+              pending_project_invitations: []
+            }
+          })
+        );
+      }
+
+      if (url.includes("/api/v1/auth/me/invitations") && method === "GET") {
+        return Promise.resolve(jsonResponse([]));
+      }
+
+      if (url.includes("/api/v1/auth/me") && method === "PATCH") {
+        mockUser = { ...mockUser, display_name: "Updated Reviewer" };
+        return Promise.resolve(jsonResponse({ data: mockUser }));
+      }
+
+      return Promise.reject(new Error(`Unhandled request: ${url} ${method}`));
+    });
 
     render(
       <AuthProvider>
@@ -255,16 +262,14 @@ describe("AuthProvider session security", () => {
       expect(screen.getByTestId("display-name")).toHaveTextContent("Updated Reviewer");
     });
 
-    expect(fetch).toHaveBeenNthCalledWith(
-      1,
+    expect(fetch).toHaveBeenCalledWith(
       expect.stringContaining("/api/v1/auth/google"),
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ credential: "google-id-token" })
       })
     );
-    expect(fetch).toHaveBeenNthCalledWith(
-      2,
+    expect(fetch).toHaveBeenCalledWith(
       expect.stringContaining("/api/v1/auth/me"),
       expect.objectContaining({
         method: "PATCH",
@@ -275,7 +280,10 @@ describe("AuthProvider session security", () => {
         body: JSON.stringify({ display_name: "Updated Reviewer" })
       })
     );
-    expect(fetch.mock.calls[1][1].headers.Authorization).toBeUndefined();
+    const updateCall = fetch.mock.calls.find(
+      ([url, opts]) => String(url).includes("/api/v1/auth/me") && opts?.method === "PATCH"
+    );
+    expect(updateCall?.[1]?.headers?.Authorization).toBeUndefined();
   });
 
   test("uploadAvatar sends multipart POST and updates user avatar_url in session", async () => {
@@ -291,17 +299,30 @@ describe("AuthProvider session security", () => {
       pending_project_invitations: []
     };
 
-    fetch.mockResolvedValueOnce(
-      jsonResponse({
-        data: {
-          id: 10,
-          email: "uploader@example.com",
-          display_name: "Uploader",
-          is_active: true,
-          avatar_url: "/uploads/avatars/user-10/abc.webp"
-        }
-      })
-    );
+    fetch.mockImplementation((input, init = {}) => {
+      const url = String(input);
+      const method = init.method || "GET";
+
+      if (url.includes("/api/v1/auth/me/invitations") && method === "GET") {
+        return Promise.resolve(jsonResponse([]));
+      }
+
+      if (url.includes("/api/v1/auth/me/avatar") && method === "POST") {
+        return Promise.resolve(
+          jsonResponse({
+            data: {
+              id: 10,
+              email: "uploader@example.com",
+              display_name: "Uploader",
+              is_active: true,
+              avatar_url: "/uploads/avatars/user-10/abc.webp"
+            }
+          })
+        );
+      }
+
+      return Promise.reject(new Error(`Unhandled request: ${url} ${method}`));
+    });
 
     render(
       <AuthProvider initialSession={sessionWithCsrf}>
@@ -326,7 +347,9 @@ describe("AuthProvider session security", () => {
     );
 
     // Verify FormData was sent (not JSON)
-    const callBody = fetch.mock.calls[0][1].body;
+    const callBody = fetch.mock.calls.find(
+      ([url, opts]) => String(url).includes("/api/v1/auth/me/avatar") && opts?.method === "POST"
+    )?.[1]?.body;
     expect(callBody).toBeInstanceOf(FormData);
 
     // Verify session storage updated
@@ -347,17 +370,30 @@ describe("AuthProvider session security", () => {
       pending_project_invitations: []
     };
 
-    fetch.mockResolvedValueOnce(
-      jsonResponse({
-        data: {
-          id: 11,
-          email: "remover@example.com",
-          display_name: "Remover",
-          is_active: true,
-          avatar_url: null
-        }
-      })
-    );
+    fetch.mockImplementation((input, init = {}) => {
+      const url = String(input);
+      const method = init.method || "GET";
+
+      if (url.includes("/api/v1/auth/me/invitations") && method === "GET") {
+        return Promise.resolve(jsonResponse([]));
+      }
+
+      if (url.includes("/api/v1/auth/me/avatar") && method === "DELETE") {
+        return Promise.resolve(
+          jsonResponse({
+            data: {
+              id: 11,
+              email: "remover@example.com",
+              display_name: "Remover",
+              is_active: true,
+              avatar_url: null
+            }
+          })
+        );
+      }
+
+      return Promise.reject(new Error(`Unhandled request: ${url} ${method}`));
+    });
 
     render(
       <AuthProvider initialSession={sessionWithAvatar}>

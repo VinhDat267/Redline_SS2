@@ -671,7 +671,9 @@ export async function exportReviewReport(token, compareRunId) {
     credentials: "include",
   });
   if (!response.ok) {
-    throw new ApiError(response.status, "Failed to export review report.");
+    const errorDetails = await response.json().catch(() => ({}));
+    const message = extractErrorMessage(errorDetails) || "Failed to export review report.";
+    throw new ApiError(message, response.status, errorDetails);
   }
   const blob = await response.blob();
   const disposition = response.headers.get("Content-Disposition") || "";

@@ -88,7 +88,9 @@ class ProjectEventBroker:
 
     def publish(self, event: ProjectEvent) -> None:
         """Push event to all subscribers of the given project (thread-safe)."""
-        queues = self._subscribers.get(event.project_id, set())
+        # Snapshot the set before iteration to prevent RuntimeError if a
+        # subscriber disconnects (async context) while this sync method iterates.
+        queues = list(self._subscribers.get(event.project_id, set()))
         for queue in queues:
             try:
                 queue.put_nowait(event)

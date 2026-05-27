@@ -478,19 +478,19 @@ describe("ProjectDetailPage", () => {
     expect(await screen.findByRole("heading", { name: /active members/i })).toBeInTheDocument();
     expect(screen.getByText("reviewer@example.com")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /add member/i }));
+    fireEvent.click(screen.getByRole("button", { name: /invite.*member/i }));
     fireEvent.change(screen.getByLabelText(/member email/i), {
       target: { value: "existing-reviewer@example.com" }
     });
-    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /send.*invitation/i }));
 
     expect(await screen.findByText("existing-reviewer@example.com")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /add member/i }));
+    fireEvent.click(screen.getByRole("button", { name: /invite.*member/i }));
     fireEvent.change(screen.getByLabelText(/member email/i), {
       target: { value: "future-user@example.com" }
     });
-    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /send.*invitation/i }));
 
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: /pending invitations/i })).toBeInTheDocument();

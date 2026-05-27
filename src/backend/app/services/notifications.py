@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.models.user_notification import UserNotification
@@ -52,7 +52,6 @@ def list_notifications_for_user(
 
 
 def count_unread_notifications(session: Session, user_id: int) -> int:
-    from sqlalchemy import func
     return session.scalar(
         select(func.count(UserNotification.id)).where(
             UserNotification.user_id == user_id,
@@ -81,15 +80,13 @@ def mark_notification_read(session: Session, notif: UserNotification) -> UserNot
 def mark_all_read(session: Session, user_id: int) -> int:
     """Mark all unread notifications as read. Returns count of updated rows."""
     now = utcnow()
-    notifs = list(session.scalars(
-        select(UserNotification).where(
+    result = session.execute(
+        update(UserNotification)
+        .where(
             UserNotification.user_id == user_id,
             UserNotification.is_read == False,  # noqa: E712
         )
-    ))
-    for n in notifs:
-        n.is_read = True
-        n.read_at = now
-        session.add(n)
+        .values(is_read=True, read_at=now)
+    )
     session.commit()
-    return len(notifs)
+    return result.rowcount

@@ -530,7 +530,7 @@ describe("ParserWorkspacePage", () => {
     expect(await screen.findByRole("heading", { name: /parser workspace/i })).toBeInTheDocument();
 
     const compareLink = await screen.findByRole("link", { name: /go to compare setup/i });
-    expect(compareLink.getAttribute("href")).toBe("/documents/10");
+    expect(compareLink.getAttribute("href")).toBe("/documents/98FqgR");
   });
 
   test("keeps contract facade links when opened from a contract parser route", async () => {
@@ -563,8 +563,8 @@ describe("ParserWorkspacePage", () => {
       );
     });
 
-    expect(screen.getByLabelText(/back to contract/i).getAttribute("href")).toBe("/contracts/10");
-    expect(screen.getByRole("link", { name: /go to compare setup/i }).getAttribute("href")).toBe("/contracts/10");
+    expect(screen.getByLabelText(/back to contract/i).getAttribute("href")).toBe("/contracts/98FqgR");
+    expect(screen.getByRole("link", { name: /go to compare setup/i }).getAttribute("href")).toBe("/contracts/98FqgR");
   });
 
   test("honors the version query parameter when opening parser workspace from a version-specific entry point", async () => {

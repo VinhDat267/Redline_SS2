@@ -392,7 +392,7 @@ describe("ReviewPanelPage", () => {
 
     expect(await screen.findByText(/medium/i)).toBeInTheDocument();
     expect(screen.getByText(/82%/i)).toBeInTheDocument();
-    expect(screen.getByText(/^gemini$/i)).toBeInTheDocument();
+    expect(screen.getByText(/gemini/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /refresh ai|ai review/i }));
 
@@ -405,7 +405,7 @@ describe("ReviewPanelPage", () => {
       );
     });
 
-    expect(await screen.findByText(/^openai$/i)).toBeInTheDocument();
+    expect(await screen.findByText(/openai/i)).toBeInTheDocument();
     expect(await screen.findByText(/fallback used/i)).toBeInTheDocument();
     expect(await screen.findByText(/ai error: fallback provider unavailable/i)).toBeInTheDocument();
   });

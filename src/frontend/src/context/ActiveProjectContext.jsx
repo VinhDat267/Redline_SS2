@@ -13,7 +13,18 @@ export function ActiveProjectProvider({ children }) {
     const [activeProject, setActiveProjectState] = useState(() => {
         try {
             const raw = localStorage.getItem(ACTIVE_PROJECT_STORAGE_KEY);
-            return raw ? JSON.parse(raw) : null;
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            // Validate shape: require a positive integer id and a string name
+            if (
+                parsed &&
+                Number.isInteger(parsed.id) &&
+                parsed.id > 0 &&
+                typeof parsed.name === "string"
+            ) {
+                return parsed;
+            }
+            return null;
         } catch {
             return null;
         }

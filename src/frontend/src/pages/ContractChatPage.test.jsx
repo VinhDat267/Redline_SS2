@@ -255,7 +255,7 @@ describe("ContractChatPage", () => {
     expect(screen.getByText(/ready for grounded q&a/i)).toBeInTheDocument();
     expect(screen.getByText(/session memory/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /source evidence/i })).toBeInTheDocument();
-    expect(screen.getByLabelText(/back to contract/i)).toHaveAttribute("href", "/contracts/10");
+    expect(screen.getByLabelText(/back to contract/i)).toHaveAttribute("href", "/contracts/98FqgR");
     expect(screen.getByRole("option", { name: "vendor-v1" })).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText(/ask about this contract/i), {

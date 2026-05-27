@@ -367,10 +367,10 @@ describe("CompareScreenPage", () => {
     await vi.advanceTimersByTimeAsync(2000);
     await vi.advanceTimersByTimeAsync(2000);
 
-    expect(await screen.findByText(/ai batch job completed/i)).toBeInTheDocument();
+    expect(await screen.findByText(/ai analysis complete/i)).toBeInTheDocument();
     expect(await screen.findByText(/1 \/ 1 processed/i)).toBeInTheDocument();
     expect((await screen.findAllByText(/ai ready/i)).length).toBeGreaterThan(0);
-    expect(await screen.findByText(/^gemini$/i)).toBeInTheDocument();
+    expect(await screen.findByText(/gemini/i)).toBeInTheDocument();
   });
 
   test("resumes polling when the compare run already has an active ai batch job", async () => {
@@ -494,7 +494,7 @@ describe("CompareScreenPage", () => {
 
     await vi.advanceTimersByTimeAsync(2000);
 
-    expect(await screen.findByText(/ai batch job completed/i)).toBeInTheDocument();
+    expect(await screen.findByText(/ai analysis complete/i)).toBeInTheDocument();
     expect((await screen.findAllByText(/ai ready/i)).length).toBeGreaterThan(0);
   });
 

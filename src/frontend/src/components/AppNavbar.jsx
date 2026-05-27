@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   FolderOpen, FileText, ScanSearch, GitCompare, ClipboardCheck,
   MessageSquare, BarChart3, LogOut, Settings, X, ChevronDown, Bell, Check,
+  History, ShieldCheck, UserCheck, Play, Pencil,
 } from "lucide-react";
 import { encodeId } from "../lib/idCodec";
 import { useAuth } from "../auth/AuthContext";
@@ -205,6 +206,78 @@ function ProfileDropdown({ displayName, email, initial, avatarUrl, onLogout }) {
       `}</style>
     </div>
   );
+}
+
+function getNotificationVisuals(notif) {
+  const type = notif.notification_type;
+  switch (type) {
+    case "project_removed":
+      return {
+        icon: <LogOut size={13} />,
+        bgColor: "rgba(246, 70, 93, 0.10)",
+        color: "#F6465D"
+      };
+    case "project_invite":
+      return {
+        icon: (notif.project_name || "P")[0]?.toUpperCase() || "I",
+        bgColor: "rgba(240, 185, 11, 0.12)",
+        color: "#B07D00"
+      };
+    case "document_uploaded":
+      return {
+        icon: <FolderOpen size={13} />,
+        bgColor: "rgba(52, 152, 219, 0.12)",
+        color: "#2980B9"
+      };
+    case "version_uploaded":
+      return {
+        icon: <History size={13} />,
+        bgColor: "rgba(155, 89, 182, 0.12)",
+        color: "#8E44AD"
+      };
+    case "compare_started":
+      return {
+        icon: <Play size={13} />,
+        bgColor: "rgba(243, 156, 18, 0.12)",
+        color: "#D35400"
+      };
+    case "compare_completed":
+      return {
+        icon: <GitCompare size={13} />,
+        bgColor: "rgba(46, 204, 113, 0.12)",
+        color: "#27AE60"
+      };
+    case "review_comment":
+      return {
+        icon: <MessageSquare size={13} />,
+        bgColor: "rgba(26, 188, 156, 0.12)",
+        color: "#16A085"
+      };
+    case "change_reviewed":
+      return {
+        icon: <ShieldCheck size={13} />,
+        bgColor: "rgba(241, 196, 15, 0.12)",
+        color: "#D68910"
+      };
+    case "change_assigned":
+      return {
+        icon: <UserCheck size={13} />,
+        bgColor: "rgba(52, 152, 219, 0.12)",
+        color: "#2980B9"
+      };
+    case "change_updated":
+      return {
+        icon: <Pencil size={13} />,
+        bgColor: "rgba(127, 140, 141, 0.12)",
+        color: "#7F8C8D"
+      };
+    default:
+      return {
+        icon: <Bell size={13} />,
+        bgColor: "#F5F5F5",
+        color: "#848E9C"
+      };
+  }
 }
 
 /* ─── Notification Bell ─── */
@@ -457,18 +530,20 @@ function NotificationBell({ invitations: pendingInvitations, onAccept, onDecline
                   ? pendingInvitations.find(inv => inv.project_id === notif.project_id)
                   : null;
 
+                const visuals = getNotificationVisuals(notif);
+
                 return (
                   <li key={`notif-${notif.id}`} className={`px-4 py-3 border-b border-[#F5F5F5] ${isRemoved ? "bg-[#FFF5F5]" : isInvite ? "bg-[#FFFDF5]" : "bg-white"}`}>
                     <div className="flex items-start gap-2.5">
                       <div
-                        className={`w-8 h-8 flex items-center justify-center text-[12px] font-bold flex-shrink-0 mt-0.5`}
+                        className="w-8 h-8 flex items-center justify-center text-[12px] font-bold flex-shrink-0 mt-0.5"
                         style={{
                           borderRadius: "50%",
-                          background: isRemoved ? "rgba(246,70,93,0.10)" : isInvite ? "rgba(240,185,11,0.12)" : "#F5F5F5",
-                          color: isRemoved ? "#F6465D" : isInvite ? "#B07D00" : "#848E9C",
+                          background: visuals.bgColor,
+                          color: visuals.color,
                         }}
                       >
-                        {isRemoved ? <LogOut size={13} /> : isInvite ? (notif.project_name || "P")[0]?.toUpperCase() : <Bell size={13} />}
+                        {visuals.icon}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-[12px] font-semibold text-[#1E2026]">{notif.title}</p>

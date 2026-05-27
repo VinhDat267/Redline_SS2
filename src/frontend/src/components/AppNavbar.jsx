@@ -9,7 +9,6 @@ import { encodeId } from "../lib/idCodec";
 import { useAuth } from "../auth/AuthContext";
 import { useActiveProject } from "../context/ActiveProjectContext";
 import { useProjectEvents } from "../hooks/useProjectEvents";
-import { Toast } from "./Toast";
 
 /* Navigation tabs that require an active project */
 const PROJECT_LINKS = [

@@ -740,7 +740,7 @@ export function AppNavbar() {
     const p = location.pathname;
     if (key === "qa")
       return (
-        p.startsWith("/contract-q-a") || /\/contracts\/\d+\/chat/.test(p)
+        p.startsWith("/contract-q-a") || p.includes("/chat")
       );
     if (key === "review")
       return p.startsWith("/review") || p.includes("/review");
@@ -752,7 +752,7 @@ export function AppNavbar() {
     if (key === "contracts")
       return (
         (p.startsWith("/contracts") || p.includes("/contracts")) &&
-        !/\/contracts\/\d+\/chat/.test(p) &&
+        !p.includes("/chat") &&
         !p.includes("/parser")
       );
     if (key === "parser")

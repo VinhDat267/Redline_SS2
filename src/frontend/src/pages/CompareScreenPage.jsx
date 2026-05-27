@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Eye, FileText, GitMerge, LogOut, Sparkles, FolderDown, ArrowUpToLine, FileDiff, Flag, List, CircleDashed, Clock, CheckCircle2, Bot, Activity, XCircle, FileCode, Edit, Code, Database, Info, GitCommit, FileWarning, Calendar, Hash, RefreshCw, Download } from "lucide-react";
+import { decodeId, encodeId } from "../lib/idCodec";
 import { InlineDiff } from "../components/InlineDiff";
 import { useAuth } from "../auth/AuthContext";
 import { Sidebar } from "../components/ScreenFrame";
@@ -137,7 +138,8 @@ function clampPage(value, totalPages) {
 }
 export function CompareScreenPage() {
   const { logout, token } = useAuth();
-  const { compareRunId } = useParams();
+  const { compareRunId: rawCompareRunId } = useParams();
+  const compareRunId = decodeId(rawCompareRunId);
   const [searchParams, setSearchParams] = useSearchParams();
   const [compareRun, setCompareRun] = useState(null);
   const [queue, setQueue] = useState([]);
@@ -169,10 +171,11 @@ export function CompareScreenPage() {
   const pageStartIndex = (requestedPage - 1) * QUEUE_PAGE_SIZE;
   const totalPages = Math.max(1, Math.ceil(queueTotalCount / QUEUE_PAGE_SIZE));
   const currentPage = clampPage(requestedPage, totalPages);
-  const requestedChangeNumber = Number.parseInt(String(requestedChangeId ?? ""), 10);
+  const requestedChangeRaw = searchParams.get("change");
+  const requestedChangeNumber = requestedChangeRaw ? decodeId(requestedChangeRaw) : null;
   const selectedChangeId = Number.isInteger(requestedChangeNumber) && requestedChangeNumber > 0
     ? requestedChangeNumber
-    : resolveSelectedChangeId(compareRun, filteredQueue, requestedChangeId);
+    : resolveSelectedChangeId(compareRun, filteredQueue, requestedChangeNumber);
   const selectedQueueItem = getSelectedQueueItem(filteredQueue, selectedChangeId);
   const reviewCounts = queueMeta.review_counts ?? summarizeReviewCounts(queue);
   const aiGenerationSummary = summarizeAiGeneration(queue);

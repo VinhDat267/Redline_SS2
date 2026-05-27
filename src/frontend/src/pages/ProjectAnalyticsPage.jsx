@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { decodeId, encodeId } from "../lib/idCodec";
 import {
   BarChart3,
   Bot,
@@ -135,7 +136,8 @@ function DocumentBarChart({ data }) {
 
 export function ProjectAnalyticsPage() {
   const { logout, token } = useAuth();
-  const { projectId } = useParams();
+  const { projectId: rawProjectId } = useParams();
+  const projectId = decodeId(rawProjectId);
   const [project, setProject] = useState(null);
   const [analytics, setAnalytics] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -198,14 +200,14 @@ export function ProjectAnalyticsPage() {
           <div className="flex items-center gap-2 mb-1">
             <Link to="/dashboard" className="text-[12px] font-semibold text-[#848E9C] no-underline hover:text-[#1E2026]" style={{ transition: "color 200ms" }}>Projects</Link>
             <span className="text-[12px] text-[#848E9C]">/</span>
-            <Link to={`/projects/${projectId}`} className="text-[12px] font-semibold text-[#848E9C] no-underline hover:text-[#1E2026]" style={{ transition: "color 200ms" }}>{project?.name ?? "Project"}</Link>
+            <Link to={`/projects/${encodeId(projectId)}`} className="text-[12px] font-semibold text-[#848E9C] no-underline hover:text-[#1E2026]" style={{ transition: "color 200ms" }}>{project?.name ?? "Project"}</Link>
             <span className="text-[12px] text-[#848E9C]">/</span>
             <span className="text-[12px] font-semibold text-[#1E2026]">Analytics</span>
           </div>
           <h1 className="text-[28px] font-medium text-[#1E2026]" style={{ lineHeight: "1.00" }}>Project Analytics</h1>
           <p className="text-[14px] font-medium text-[#848E9C] mt-2" style={{ lineHeight: "1.43" }}>Review progress, AI metrics, and document-level insights.</p>
         </div>
-        <Link to={`/projects/${projectId}`} className="flex items-center gap-2 px-4 py-2 bg-white border border-[#E6E8EA] text-[#1E2026] no-underline font-semibold text-[13px] shrink-0 mt-2" style={{ borderRadius: "6px", transition: "all 200ms ease" }}>
+        <Link to={`/projects/${encodeId(projectId)}`} className="flex items-center gap-2 px-4 py-2 bg-white border border-[#E6E8EA] text-[#1E2026] no-underline font-semibold text-[13px] shrink-0 mt-2" style={{ borderRadius: "6px", transition: "all 200ms ease" }}>
           Back to Project
         </Link>
       </div>

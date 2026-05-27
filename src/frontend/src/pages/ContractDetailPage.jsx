@@ -14,6 +14,7 @@ import {
   UploadCloud,
   X
 } from "lucide-react";
+import { encodeId, decodeId } from "../lib/idCodec";
 import { useAuth } from "../auth/AuthContext";
 import {
   ApiError,
@@ -136,7 +137,8 @@ const formBtnSecondary = "flex items-center justify-center gap-1.5 bg-white bord
 const formBtnStyle = { borderRadius: "6px", transition: "all 200ms ease" };
 export function ContractDetailPage() {
   const { logout, token } = useAuth();
-  const { contractId } = useParams();
+  const { contractId: rawContractId } = useParams();
+  const contractId = decodeId(rawContractId);
   const navigate = useNavigate();
   const [contract, setContract] = useState(null);
   const [drafts, setDrafts] = useState([]);
@@ -268,13 +270,13 @@ export function ContractDetailPage() {
     if (!readyDraftIds.has(sourceDraftId) || !readyDraftIds.has(targetDraftId)) { setCompareError("Selected drafts are not review-ready."); return; }
     // If a fresh compare run already exists for this pair, navigate to it
     if (matchingCompareRun) {
-      startTransition(() => { navigate(`/compare-runs/${matchingCompareRun.id}`); });
+      startTransition(() => { navigate(`/compare-runs/${encodeId(matchingCompareRun.id)}`); });
       return;
     }
     setIsCreatingCompare(true);
     try {
       const compareRun = await createContractCompareRun(token, contractId, { source_draft_id: Number(sourceDraftId), target_draft_id: Number(targetDraftId) });
-      startTransition(() => { navigate(`/compare-runs/${compareRun.id}`); });
+      startTransition(() => { navigate(`/compare-runs/${encodeId(compareRun.id)}`); });
     } catch (compareRequestError) {
       if (compareRequestError instanceof ApiError && compareRequestError.status === 401) { logout(); return; }
       setCompareError(compareRequestError.message);
@@ -283,7 +285,7 @@ export function ContractDetailPage() {
   const parsedDrafts = drafts.filter(hasParsedStatus);
   const compareReadyDrafts = drafts.filter(isCompareReadyDraft);
   const compareReady = compareReadyDrafts.length >= 2;
-  const projectPath = contract ? `/projects/${contract.project_id}` : "/dashboard";
+  const projectPath = contract ? `/projects/${encodeId(contract.project_id)}` : "/dashboard";
   const projectName = contract?.project_name || "Project";
   return (
     <>
@@ -314,7 +316,7 @@ export function ContractDetailPage() {
           {/* Header actions */}
           <div className="flex items-center gap-2 shrink-0 mt-1">
             <Link
-              to={`/contracts/${contractId}/chat`}
+              to={`/contracts/${encodeId(contractId)}/chat`}
               className="flex items-center gap-2 px-4 py-2 bg-white border border-[#E6E8EA] text-[#1E2026] no-underline font-semibold text-[13px]"
               style={{ borderRadius: "8px", transition: "all 200ms ease" }}
               onMouseEnter={e => { e.currentTarget.style.borderColor = "#1E2026"; e.currentTarget.style.boxShadow = "rgba(0,0,0,0.06) 0px 2px 8px"; }}
@@ -433,7 +435,7 @@ export function ContractDetailPage() {
                             style={{ borderRadius: "6px", transition: "all 200ms ease" }}
                             onMouseEnter={e => { e.currentTarget.style.color = "#1E2026"; e.currentTarget.style.background = "#F5F5F5"; }}
                             onMouseLeave={e => { e.currentTarget.style.color = "#848E9C"; e.currentTarget.style.background = "transparent"; }}
-                            onClick={() => navigate(`/contracts/${contract?.id ?? contractId}/parser?version=${draft.id}`)}
+                            onClick={() => navigate(`/contracts/${encodeId(contract?.id ?? contractId)}/parser?version=${encodeId(draft.id)}`)}
                             title="Open Parser"
                             type="button"
                           >
@@ -536,7 +538,7 @@ export function ContractDetailPage() {
                   return (
                     <Link
                       key={cr.id}
-                      to={`/compare-runs/${cr.id}`}
+                      to={`/compare-runs/${encodeId(cr.id)}`}
                       className="flex items-center justify-between p-3 bg-[#F5F5F5] border border-[#E6E8EA] no-underline text-inherit"
                       style={{ borderRadius: '8px', transition: 'all 200ms ease' }}
                       onMouseEnter={e => { e.currentTarget.style.borderColor = '#F0B90B'; e.currentTarget.style.background = '#FFFDF5'; }}

@@ -1,6 +1,7 @@
 import { startTransition, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowRight, FileText, Pencil, Play, ScrollText, Trash2, UploadCloud, X, AlertTriangle, GitCompareArrows } from "lucide-react";
+import { encodeId, decodeId } from "../lib/idCodec";
 
 import { useAuth } from "../auth/AuthContext";
 import { ConfirmDialog } from "../components/ConfirmDialog";
@@ -46,7 +47,8 @@ const SUPPORTED_VERSION_FILE_ACCEPT = ".docx,.pdf,application/vnd.openxmlformats
 
 export function DocumentDetailPage() {
   const { logout, token } = useAuth();
-  const { documentId } = useParams();
+  const { documentId: rawDocumentId } = useParams();
+  const documentId = decodeId(rawDocumentId);
   const navigate = useNavigate();
   const [document, setDocument] = useState(null);
   const [versions, setVersions] = useState([]);
@@ -188,7 +190,7 @@ export function DocumentDetailPage() {
     setIsCreatingCompare(true);
     try {
       const run = await createCompareRun(token, documentId, { source_version_id: Number(sourceVersionId), target_version_id: Number(targetVersionId) });
-      startTransition(() => { navigate(`/compare-runs/${run.id}`); });
+      startTransition(() => { navigate(`/compare-runs/${encodeId(run.id)}`); });
     } catch (e) { if (e instanceof ApiError && e.status === 401) { logout(); return; } setCompareError(e.message); }
     finally { setIsCreatingCompare(false); }
   }
@@ -196,7 +198,7 @@ export function DocumentDetailPage() {
   const parsedVersions = versions.filter(hasParsedStatus);
   const compareReadyVersions = versions.filter(isCompareReadyVersion);
   const compareReady = compareReadyVersions.length >= 2;
-  const projectPath = document ? `/projects/${document.project_id}` : "/dashboard";
+  const projectPath = document ? `/projects/${encodeId(document.project_id)}` : "/dashboard";
 
   /* ── Binance-spec inline helpers ── */
   function Card({ title, aside, children }) {
@@ -238,188 +240,188 @@ export function DocumentDetailPage() {
 
   return (
     <>
-    <main className="max-w-[1200px] mx-auto px-8 py-8">
-      {error && <div className="mb-5 p-3.5 bg-white border border-[#F6465D] text-[14px] text-[#F6465D] font-semibold" style={{ borderRadius: "8px" }}>{error}</div>}
-      {feedback && <div className="mb-5 p-3.5 bg-white border border-[#0ECB81] text-[14px] text-[#0ECB81] font-semibold" style={{ borderRadius: "8px" }}>{feedback}</div>}
+      <main className="max-w-[1200px] mx-auto px-8 py-8">
+        {error && <div className="mb-5 p-3.5 bg-white border border-[#F6465D] text-[14px] text-[#F6465D] font-semibold" style={{ borderRadius: "8px" }}>{error}</div>}
+        {feedback && <div className="mb-5 p-3.5 bg-white border border-[#0ECB81] text-[14px] text-[#0ECB81] font-semibold" style={{ borderRadius: "8px" }}>{feedback}</div>}
 
-      {/* Header */}
-      <div className="flex items-start justify-between mb-6">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <Link to="/dashboard" className="text-[12px] font-semibold text-[#848E9C] no-underline hover:text-[#1E2026]" style={{ transition: "color 200ms" }}>Projects</Link>
-            <span className="text-[12px] text-[#848E9C]">/</span>
-            <Link to={projectPath} className="text-[12px] font-semibold text-[#848E9C] no-underline hover:text-[#1E2026]" style={{ transition: "color 200ms" }}>Project</Link>
-            <span className="text-[12px] text-[#848E9C]">/</span>
-            <span className="text-[12px] font-semibold text-[#1E2026]">{document?.title ?? "Document"}</span>
+        {/* Header */}
+        <div className="flex items-start justify-between mb-6">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <Link to="/dashboard" className="text-[12px] font-semibold text-[#848E9C] no-underline hover:text-[#1E2026]" style={{ transition: "color 200ms" }}>Projects</Link>
+              <span className="text-[12px] text-[#848E9C]">/</span>
+              <Link to={projectPath} className="text-[12px] font-semibold text-[#848E9C] no-underline hover:text-[#1E2026]" style={{ transition: "color 200ms" }}>Project</Link>
+              <span className="text-[12px] text-[#848E9C]">/</span>
+              <span className="text-[12px] font-semibold text-[#1E2026]">{document?.title ?? "Document"}</span>
+            </div>
+            <h1 className="text-[28px] font-medium text-[#1E2026] mb-1" style={{ lineHeight: "1.00" }}>{document?.title ?? "Document Workspace"}</h1>
+            <p className="text-[14px] font-medium text-[#848E9C] mt-2" style={{ lineHeight: "1.43" }}>Version inventory for parser truth, compare, and review workflows.</p>
           </div>
-          <h1 className="text-[28px] font-medium text-[#1E2026] mb-1" style={{ lineHeight: "1.00" }}>{document?.title ?? "Document Workspace"}</h1>
-          <p className="text-[14px] font-medium text-[#848E9C] mt-2" style={{ lineHeight: "1.43" }}>Version inventory for parser truth, compare, and review workflows.</p>
-        </div>
-        <div className="flex items-center gap-3 shrink-0 mt-2">
-          <button className="flex items-center gap-2 px-4 py-2 bg-white border border-[#E6E8EA] text-[#1E2026] font-semibold text-[13px] cursor-pointer" style={{ borderRadius: "6px", transition: "all 200ms ease" }} onClick={openDocumentModal} type="button">
-            <Pencil size={14} /> Edit Metadata
-          </button>
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
-        {[
-          { label: "Document Type", value: document?.document_type || "General", Icon: FileText },
-          { label: "Total Versions", value: String(versions.length), Icon: ScrollText },
-          { label: "Compare Status", value: compareReady ? "Ready" : "Locked", Icon: GitCompareArrows },
-          { label: "Last Updated", value: getLatestWorkspaceTimestamp(document, versions), Icon: AlertTriangle },
-        ].map((s, i) => (
-          <div key={i} className="bg-white border border-[#E6E8EA] p-4 flex items-center gap-3" style={{ borderRadius: "12px", boxShadow: "rgba(32,32,37,0.05) 0px 3px 5px 0px" }}>
-            <div className="w-9 h-9 flex items-center justify-center text-[#F0B90B]" style={{ borderRadius: "8px", background: "rgba(240,185,11,0.1)" }}><s.Icon size={18} /></div>
-            <div><p className="text-[16px] font-bold text-[#1E2026] leading-none mb-0.5">{s.value}</p><p className="text-[11px] font-semibold text-[#848E9C]">{s.label}</p></div>
+          <div className="flex items-center gap-3 shrink-0 mt-2">
+            <button className="flex items-center gap-2 px-4 py-2 bg-white border border-[#E6E8EA] text-[#1E2026] font-semibold text-[13px] cursor-pointer" style={{ borderRadius: "6px", transition: "all 200ms ease" }} onClick={openDocumentModal} type="button">
+              <Pencil size={14} /> Edit Metadata
+            </button>
           </div>
-        ))}
-      </div>
-
-      {/* Version Inventory */}
-      <Card title="Version Inventory" aside={`${versions.length} versions`}>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
-          <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider bg-[#E8F5E9] border border-[#A5D6A7] text-[#1B5E20]" style={{ borderRadius: "4px" }}>{parsedVersions.length}/{versions.length} parsed</span>
-            {compareReady
-              ? <span className="px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider bg-[#FFF8E1] border border-[#FFE082] text-[#FF8F00]" style={{ borderRadius: "4px" }}>Compare ready</span>
-              : <span className="px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider bg-[#F5F5F5] border border-[#E6E8EA] text-[#848E9C]" style={{ borderRadius: "4px" }}>Compare locked</span>}
-          </div>
-          <button className={pillBtnCls} style={pillBtnStyle} onClick={openUploadModal} type="button"><UploadCloud size={16} /> Upload Version</button>
         </div>
 
-        {isLoading ? (
-          <div className="flex flex-col gap-2">
-            <div className="w-full h-12 bg-[#F5F5F5] animate-pulse border border-[#E6E8EA]" style={{ borderRadius: "8px" }} />
-            <div className="w-full h-12 bg-[#F5F5F5] animate-pulse border border-[#E6E8EA]" style={{ borderRadius: "8px" }} />
-          </div>
-        ) : versions.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left" style={{ borderCollapse: "collapse" }}>
-              <thead><tr className="border-b border-[#E6E8EA]">
-                {["VERSION", "FILE", "STATUS", "UPLOADED", "NOTES", "ACTIONS"].map(h => <th key={h} className="text-[11px] font-semibold text-[#848E9C] uppercase tracking-wider py-3 px-3 first:pl-0 last:pr-0">{h}</th>)}
-              </tr></thead>
-              <tbody>
-                {versions.map(version => (
-                  <tr key={version.id} className="border-b border-[#E6E8EA] last:border-b-0" style={{ transition: "background 200ms" }} onMouseEnter={e => e.currentTarget.style.background = "#F5F5F5"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                    <td className="py-3 px-3 first:pl-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[13px] font-medium text-[#1E2026]">{version.version_label}</span>
-                        {recentVersionId === version.id && <span className="px-1.5 py-0.5 bg-[rgba(240,185,11,0.1)] border border-[rgba(240,185,11,0.2)] text-[#F0B90B] text-[10px] uppercase font-bold tracking-wider" style={{ borderRadius: "4px" }}>New</span>}
-                      </div>
-                    </td>
-                    <td className="py-3 px-3 text-[12px] font-medium text-[#474D57]">{version.file_name}</td>
-                    <td className="py-3 px-3"><span className={`px-2 py-0.5 text-[11px] uppercase tracking-wider font-semibold ${getVersionStatusTone(version)}`} style={{ borderRadius: "4px" }}>{version.parse_status}</span></td>
-                    <td className="py-3 px-3">
-                      <span className="text-[12px] font-medium text-[#1E2026] block">{formatDateTime(version.uploaded_at)}</span>
-                      <span className="text-[11px] text-[#848E9C]">{version.uploaded_by_display_name}</span>
-                    </td>
-                    <td className="py-3 px-3 text-[12px] text-[#848E9C]">{version.notes || "—"}</td>
-                    <td className="py-3 px-3 last:pr-0">
-                      <div className="flex items-center gap-1">
-                        <button aria-label={`Open Parser Workspace for ${version.version_label}`} className="p-1.5 text-[#848E9C] hover:text-[#1E2026] hover:bg-[#F5F5F5] border-none bg-transparent cursor-pointer" style={{ borderRadius: "6px", transition: "all 200ms" }} onClick={() => navigate(`/documents/${document?.id ?? documentId}/parser?version=${version.id}`)} title="Parser" type="button"><FileText size={14} /></button>
-                        <button aria-label="Edit" className="p-1.5 text-[#848E9C] hover:text-[#1E2026] hover:bg-[#F5F5F5] border-none bg-transparent cursor-pointer" style={{ borderRadius: "6px", transition: "all 200ms" }} onClick={() => beginVersionEdit(version)} title="Edit" type="button"><Pencil size={14} /></button>
-                        <button aria-label="Delete" className="p-1.5 text-[#848E9C] hover:text-[#F6465D] hover:bg-[#FEECEE] border-none bg-transparent cursor-pointer" style={{ borderRadius: "6px", transition: "all 200ms" }} onClick={() => setDeleteVersionTarget(version)} title="Delete" type="button"><Trash2 size={14} /></button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="flex flex-col items-center justify-center border-2 border-dashed border-[#E6E8EA] bg-[#FAFAFA] p-12 text-center" style={{ borderRadius: "12px", minHeight: "200px" }}>
-            <UploadCloud size={32} className="text-[#848E9C] mb-3" />
-            <p className="text-[16px] font-semibold text-[#1E2026] mb-1">No versions uploaded yet</p>
-            <p className="text-[14px] font-medium text-[#848E9C] mb-4">Upload your first DOCX or PDF file to start managing versions.</p>
-            <button className={pillBtnCls} style={pillBtnStyle} onClick={openUploadModal} type="button"><UploadCloud size={16} /> Upload First Version</button>
-          </div>
-        )}
-      </Card>
+        {/* Stats */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+          {[
+            { label: "Document Type", value: document?.document_type || "General", Icon: FileText },
+            { label: "Total Versions", value: String(versions.length), Icon: ScrollText },
+            { label: "Compare Status", value: compareReady ? "Ready" : "Locked", Icon: GitCompareArrows },
+            { label: "Last Updated", value: getLatestWorkspaceTimestamp(document, versions), Icon: AlertTriangle },
+          ].map((s, i) => (
+            <div key={i} className="bg-white border border-[#E6E8EA] p-4 flex items-center gap-3" style={{ borderRadius: "12px", boxShadow: "rgba(32,32,37,0.05) 0px 3px 5px 0px" }}>
+              <div className="w-9 h-9 flex items-center justify-center text-[#F0B90B]" style={{ borderRadius: "8px", background: "rgba(240,185,11,0.1)" }}><s.Icon size={18} /></div>
+              <div><p className="text-[16px] font-bold text-[#1E2026] leading-none mb-0.5">{s.value}</p><p className="text-[11px] font-semibold text-[#848E9C]">{s.label}</p></div>
+            </div>
+          ))}
+        </div>
 
-      {/* Compare Versions */}
-      <div className="mt-6">
-        <Card title="Compare Versions" aside={compareReady ? "Ready" : "Locked"}>
-          {compareReady ? (
-            <form className="flex flex-col sm:flex-row sm:items-end gap-4 p-4 bg-[#F5F5F5] border border-[#E6E8EA]" style={{ borderRadius: "8px" }} onSubmit={handleCompareSubmit}>
-              <div className="flex-1 flex flex-col gap-1.5">
-                <label className="text-[12px] font-semibold text-[#848E9C] uppercase tracking-wider">Source</label>
-                <select aria-label="Source" className={inputCls} style={inputStyle} disabled={isCreatingCompare} onChange={e => setSourceVersionId(e.target.value)} value={sourceVersionId}>
-                  <option value="">Select source</option>
-                  {compareReadyVersions.map(v => <option key={`s-${v.id}`} value={String(v.id)}>{v.version_label}</option>)}
-                </select>
-              </div>
-              <div className="hidden sm:flex items-center justify-center pb-2"><ArrowRight size={20} className="text-[#848E9C]" /></div>
-              <div className="flex-1 flex flex-col gap-1.5">
-                <label className="text-[12px] font-semibold text-[#848E9C] uppercase tracking-wider">Target</label>
-                <select aria-label="Target" className={inputCls} style={inputStyle} disabled={isCreatingCompare} onChange={e => setTargetVersionId(e.target.value)} value={targetVersionId}>
-                  <option value="">Select target</option>
-                  {compareReadyVersions.map(v => <option key={`t-${v.id}`} value={String(v.id)}>{v.version_label}</option>)}
-                </select>
-              </div>
-              <button className={pillBtnCls} style={pillBtnStyle} disabled={isCreatingCompare} type="submit">{isCreatingCompare ? "Creating..." : <><Play size={16} /> Launch Compare</>}</button>
-              {compareError && <div className="w-full text-[#F6465D] text-[13px] font-semibold mt-2">{compareError}</div>}
-            </form>
+        {/* Version Inventory */}
+        <Card title="Version Inventory" aside={`${versions.length} versions`}>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider bg-[#E8F5E9] border border-[#A5D6A7] text-[#1B5E20]" style={{ borderRadius: "4px" }}>{parsedVersions.length}/{versions.length} parsed</span>
+              {compareReady
+                ? <span className="px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider bg-[#FFF8E1] border border-[#FFE082] text-[#FF8F00]" style={{ borderRadius: "4px" }}>Compare ready</span>
+                : <span className="px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider bg-[#F5F5F5] border border-[#E6E8EA] text-[#848E9C]" style={{ borderRadius: "4px" }}>Compare locked</span>}
+            </div>
+            <button className={pillBtnCls} style={pillBtnStyle} onClick={openUploadModal} type="button"><UploadCloud size={16} /> Upload Version</button>
+          </div>
+
+          {isLoading ? (
+            <div className="flex flex-col gap-2">
+              <div className="w-full h-12 bg-[#F5F5F5] animate-pulse border border-[#E6E8EA]" style={{ borderRadius: "8px" }} />
+              <div className="w-full h-12 bg-[#F5F5F5] animate-pulse border border-[#E6E8EA]" style={{ borderRadius: "8px" }} />
+            </div>
+          ) : versions.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left" style={{ borderCollapse: "collapse" }}>
+                <thead><tr className="border-b border-[#E6E8EA]">
+                  {["VERSION", "FILE", "STATUS", "UPLOADED", "NOTES", "ACTIONS"].map(h => <th key={h} className="text-[11px] font-semibold text-[#848E9C] uppercase tracking-wider py-3 px-3 first:pl-0 last:pr-0">{h}</th>)}
+                </tr></thead>
+                <tbody>
+                  {versions.map(version => (
+                    <tr key={version.id} className="border-b border-[#E6E8EA] last:border-b-0" style={{ transition: "background 200ms" }} onMouseEnter={e => e.currentTarget.style.background = "#F5F5F5"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                      <td className="py-3 px-3 first:pl-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[13px] font-medium text-[#1E2026]">{version.version_label}</span>
+                          {recentVersionId === version.id && <span className="px-1.5 py-0.5 bg-[rgba(240,185,11,0.1)] border border-[rgba(240,185,11,0.2)] text-[#F0B90B] text-[10px] uppercase font-bold tracking-wider" style={{ borderRadius: "4px" }}>New</span>}
+                        </div>
+                      </td>
+                      <td className="py-3 px-3 text-[12px] font-medium text-[#474D57]">{version.file_name}</td>
+                      <td className="py-3 px-3"><span className={`px-2 py-0.5 text-[11px] uppercase tracking-wider font-semibold ${getVersionStatusTone(version)}`} style={{ borderRadius: "4px" }}>{version.parse_status}</span></td>
+                      <td className="py-3 px-3">
+                        <span className="text-[12px] font-medium text-[#1E2026] block">{formatDateTime(version.uploaded_at)}</span>
+                        <span className="text-[11px] text-[#848E9C]">{version.uploaded_by_display_name}</span>
+                      </td>
+                      <td className="py-3 px-3 text-[12px] text-[#848E9C]">{version.notes || "—"}</td>
+                      <td className="py-3 px-3 last:pr-0">
+                        <div className="flex items-center gap-1">
+                          <button aria-label={`Open Parser Workspace for ${version.version_label}`} className="p-1.5 text-[#848E9C] hover:text-[#1E2026] hover:bg-[#F5F5F5] border-none bg-transparent cursor-pointer" style={{ borderRadius: "6px", transition: "all 200ms" }} onClick={() => navigate(`/documents/${encodeId(document?.id ?? documentId)}/parser?version=${encodeId(version.id)}`)} title="Parser" type="button"><FileText size={14} /></button>
+                          <button aria-label="Edit" className="p-1.5 text-[#848E9C] hover:text-[#1E2026] hover:bg-[#F5F5F5] border-none bg-transparent cursor-pointer" style={{ borderRadius: "6px", transition: "all 200ms" }} onClick={() => beginVersionEdit(version)} title="Edit" type="button"><Pencil size={14} /></button>
+                          <button aria-label="Delete" className="p-1.5 text-[#848E9C] hover:text-[#F6465D] hover:bg-[#FEECEE] border-none bg-transparent cursor-pointer" style={{ borderRadius: "6px", transition: "all 200ms" }} onClick={() => setDeleteVersionTarget(version)} title="Delete" type="button"><Trash2 size={14} /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : (
-            <div className="flex items-center gap-3 py-2">
-              <span className="px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider bg-[#FFF8E1] border border-[#FFE082] text-[#FF8F00]" style={{ borderRadius: "4px" }}>{`${compareReadyVersions.length}/2 versions ready`}</span>
-              <span className="px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider bg-[#F5F5F5] border border-[#E6E8EA] text-[#848E9C]" style={{ borderRadius: "4px" }}>{versions.length - compareReadyVersions.length} still blocked</span>
+            <div className="flex flex-col items-center justify-center border-2 border-dashed border-[#E6E8EA] bg-[#FAFAFA] p-12 text-center" style={{ borderRadius: "12px", minHeight: "200px" }}>
+              <UploadCloud size={32} className="text-[#848E9C] mb-3" />
+              <p className="text-[16px] font-semibold text-[#1E2026] mb-1">No versions uploaded yet</p>
+              <p className="text-[14px] font-medium text-[#848E9C] mb-4">Upload your first DOCX or PDF file to start managing versions.</p>
+              <button className={pillBtnCls} style={pillBtnStyle} onClick={openUploadModal} type="button"><UploadCloud size={16} /> Upload First Version</button>
             </div>
           )}
         </Card>
-      </div>
-    </main>
 
-    {/* Upload Version Modal */}
-    <ModalShell open={activeModal === "upload"} busy={isUploading} icon={UploadCloud} title="Upload Document Version" subtitle="Add a new DOCX or PDF version." onClose={closeModal}>
-      <form className="px-6 pb-6 pt-5 space-y-4" onSubmit={handleUploadSubmit}>
-        <div className="flex flex-col gap-1.5"><label className="text-[12px] font-semibold text-[#848E9C] uppercase tracking-wider">Version Label</label><input aria-label="Version Label" className={inputCls} style={inputStyle} onChange={e => setUploadVersionLabel(e.target.value)} placeholder="msa-v3-redline" type="text" value={uploadVersionLabel} onFocus={e => { e.target.style.borderColor = "#000"; }} onBlur={e => { e.target.style.borderColor = "#E6E8EA"; }} /></div>
-        <div className="flex flex-col gap-1.5"><label className="text-[12px] font-semibold text-[#848E9C] uppercase tracking-wider">Notes</label><textarea aria-label="Notes" className="px-3 py-2.5 bg-[#F5F5F5] border border-[#E6E8EA] text-[14px] font-medium text-[#1E2026] placeholder-[#848E9C] min-h-[80px] resize-y w-full" style={inputStyle} onChange={e => setUploadNotes(e.target.value)} placeholder="Optional context" rows={3} value={uploadNotes} onFocus={e => { e.target.style.borderColor = "#000"; }} onBlur={e => { e.target.style.borderColor = "#E6E8EA"; }} /></div>
-        <div className="flex flex-col gap-1.5"><label className="text-[12px] font-semibold text-[#848E9C] uppercase tracking-wider">DOCX or PDF File</label><input accept={SUPPORTED_VERSION_FILE_ACCEPT} aria-label="DOCX or PDF File" className="bg-[#F5F5F5] border border-[#E6E8EA] text-[#848E9C] text-[13px] px-3 py-2 file:mr-4 file:py-1.5 file:px-4 file:border-0 file:text-[12px] file:font-semibold file:bg-[#F0B90B] file:text-[#1E2026] file:cursor-pointer cursor-pointer w-full" style={{ borderRadius: "8px", outline: "none" }} onChange={e => setUploadFile(e.target.files?.[0] ?? null)} ref={fileInputRef} type="file" /></div>
-        {uploadError && <p className="text-[#F6465D] text-[13px] font-semibold">{uploadError}</p>}
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#E6E8EA]">
-          <button className={formBtnSecondary} style={formBtnStyle} disabled={isUploading} onClick={closeModal} type="button">Cancel</button>
-          <button className={formBtnPrimary} style={formBtnStyle} disabled={isUploading} type="submit">{isUploading ? "Uploading..." : "Upload Version"}</button>
+        {/* Compare Versions */}
+        <div className="mt-6">
+          <Card title="Compare Versions" aside={compareReady ? "Ready" : "Locked"}>
+            {compareReady ? (
+              <form className="flex flex-col sm:flex-row sm:items-end gap-4 p-4 bg-[#F5F5F5] border border-[#E6E8EA]" style={{ borderRadius: "8px" }} onSubmit={handleCompareSubmit}>
+                <div className="flex-1 flex flex-col gap-1.5">
+                  <label className="text-[12px] font-semibold text-[#848E9C] uppercase tracking-wider">Source</label>
+                  <select aria-label="Source" className={inputCls} style={inputStyle} disabled={isCreatingCompare} onChange={e => setSourceVersionId(e.target.value)} value={sourceVersionId}>
+                    <option value="">Select source</option>
+                    {compareReadyVersions.map(v => <option key={`s-${v.id}`} value={String(v.id)}>{v.version_label}</option>)}
+                  </select>
+                </div>
+                <div className="hidden sm:flex items-center justify-center pb-2"><ArrowRight size={20} className="text-[#848E9C]" /></div>
+                <div className="flex-1 flex flex-col gap-1.5">
+                  <label className="text-[12px] font-semibold text-[#848E9C] uppercase tracking-wider">Target</label>
+                  <select aria-label="Target" className={inputCls} style={inputStyle} disabled={isCreatingCompare} onChange={e => setTargetVersionId(e.target.value)} value={targetVersionId}>
+                    <option value="">Select target</option>
+                    {compareReadyVersions.map(v => <option key={`t-${v.id}`} value={String(v.id)}>{v.version_label}</option>)}
+                  </select>
+                </div>
+                <button className={pillBtnCls} style={pillBtnStyle} disabled={isCreatingCompare} type="submit">{isCreatingCompare ? "Creating..." : <><Play size={16} /> Launch Compare</>}</button>
+                {compareError && <div className="w-full text-[#F6465D] text-[13px] font-semibold mt-2">{compareError}</div>}
+              </form>
+            ) : (
+              <div className="flex items-center gap-3 py-2">
+                <span className="px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider bg-[#FFF8E1] border border-[#FFE082] text-[#FF8F00]" style={{ borderRadius: "4px" }}>{`${compareReadyVersions.length}/2 versions ready`}</span>
+                <span className="px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider bg-[#F5F5F5] border border-[#E6E8EA] text-[#848E9C]" style={{ borderRadius: "4px" }}>{versions.length - compareReadyVersions.length} still blocked</span>
+              </div>
+            )}
+          </Card>
         </div>
-      </form>
-    </ModalShell>
+      </main>
 
-    {/* Edit Document Modal */}
-    <ModalShell open={activeModal === "document"} busy={isSavingDocument} icon={Pencil} title="Document Metadata" subtitle="Update document details." onClose={closeModal}>
-      <form className="px-6 pb-6 pt-5 space-y-4" onSubmit={handleDocumentSubmit}>
-        <div className="flex flex-col gap-1.5"><label className="text-[12px] font-semibold text-[#848E9C] uppercase tracking-wider">Document title</label><input aria-label="Document title" className={inputCls} style={inputStyle} onChange={e => setDocumentForm(v => ({ ...v, title: e.target.value }))} placeholder="Master Services Agreement" type="text" value={documentForm.title} onFocus={e => { e.target.style.borderColor = "#000"; }} onBlur={e => { e.target.style.borderColor = "#E6E8EA"; }} /></div>
-        <div className="flex flex-col gap-1.5"><label className="text-[12px] font-semibold text-[#848E9C] uppercase tracking-wider">Document type</label><input aria-label="Document type" className={inputCls} style={inputStyle} onChange={e => setDocumentForm(v => ({ ...v, document_type: e.target.value }))} placeholder="MSA" type="text" value={documentForm.document_type} onFocus={e => { e.target.style.borderColor = "#000"; }} onBlur={e => { e.target.style.borderColor = "#E6E8EA"; }} /></div>
-        <div className="flex flex-col gap-1.5"><label className="text-[12px] font-semibold text-[#848E9C] uppercase tracking-wider">Description</label><textarea aria-label="Document description" className="px-3 py-2.5 bg-[#F5F5F5] border border-[#E6E8EA] text-[14px] font-medium text-[#1E2026] placeholder-[#848E9C] min-h-[80px] resize-y w-full" style={inputStyle} onChange={e => setDocumentForm(v => ({ ...v, description: e.target.value }))} placeholder="Describe the review scope." rows={3} value={documentForm.description} onFocus={e => { e.target.style.borderColor = "#000"; }} onBlur={e => { e.target.style.borderColor = "#E6E8EA"; }} /></div>
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#E6E8EA]">
-          <button className={formBtnSecondary} style={formBtnStyle} disabled={isSavingDocument} onClick={closeModal} type="button">Cancel</button>
-          <button className={formBtnPrimary} style={formBtnStyle} disabled={isSavingDocument} type="submit">{isSavingDocument ? "Saving..." : "Save Document"}</button>
-        </div>
-      </form>
-    </ModalShell>
+      {/* Upload Version Modal */}
+      <ModalShell open={activeModal === "upload"} busy={isUploading} icon={UploadCloud} title="Upload Document Version" subtitle="Add a new DOCX or PDF version." onClose={closeModal}>
+        <form className="px-6 pb-6 pt-5 space-y-4" onSubmit={handleUploadSubmit}>
+          <div className="flex flex-col gap-1.5"><label className="text-[12px] font-semibold text-[#848E9C] uppercase tracking-wider">Version Label</label><input aria-label="Version Label" className={inputCls} style={inputStyle} onChange={e => setUploadVersionLabel(e.target.value)} placeholder="msa-v3-redline" type="text" value={uploadVersionLabel} onFocus={e => { e.target.style.borderColor = "#000"; }} onBlur={e => { e.target.style.borderColor = "#E6E8EA"; }} /></div>
+          <div className="flex flex-col gap-1.5"><label className="text-[12px] font-semibold text-[#848E9C] uppercase tracking-wider">Notes</label><textarea aria-label="Notes" className="px-3 py-2.5 bg-[#F5F5F5] border border-[#E6E8EA] text-[14px] font-medium text-[#1E2026] placeholder-[#848E9C] min-h-[80px] resize-y w-full" style={inputStyle} onChange={e => setUploadNotes(e.target.value)} placeholder="Optional context" rows={3} value={uploadNotes} onFocus={e => { e.target.style.borderColor = "#000"; }} onBlur={e => { e.target.style.borderColor = "#E6E8EA"; }} /></div>
+          <div className="flex flex-col gap-1.5"><label className="text-[12px] font-semibold text-[#848E9C] uppercase tracking-wider">DOCX or PDF File</label><input accept={SUPPORTED_VERSION_FILE_ACCEPT} aria-label="DOCX or PDF File" className="bg-[#F5F5F5] border border-[#E6E8EA] text-[#848E9C] text-[13px] px-3 py-2 file:mr-4 file:py-1.5 file:px-4 file:border-0 file:text-[12px] file:font-semibold file:bg-[#F0B90B] file:text-[#1E2026] file:cursor-pointer cursor-pointer w-full" style={{ borderRadius: "8px", outline: "none" }} onChange={e => setUploadFile(e.target.files?.[0] ?? null)} ref={fileInputRef} type="file" /></div>
+          {uploadError && <p className="text-[#F6465D] text-[13px] font-semibold">{uploadError}</p>}
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#E6E8EA]">
+            <button className={formBtnSecondary} style={formBtnStyle} disabled={isUploading} onClick={closeModal} type="button">Cancel</button>
+            <button className={formBtnPrimary} style={formBtnStyle} disabled={isUploading} type="submit">{isUploading ? "Uploading..." : "Upload Version"}</button>
+          </div>
+        </form>
+      </ModalShell>
 
-    {/* Edit Version Modal */}
-    <ModalShell open={activeModal === "version"} busy={isSavingVersion} icon={Pencil} title="Edit Version" subtitle="Edit version details." onClose={closeModal}>
-      <form className="px-6 pb-6 pt-5 space-y-4" onSubmit={handleVersionSubmit}>
-        <div className="flex flex-col gap-1.5"><label className="text-[12px] font-semibold text-[#848E9C] uppercase tracking-wider">Version label</label><input aria-label="Edit Version Label" className={inputCls} style={inputStyle} onChange={e => setVersionForm(v => ({ ...v, version_label: e.target.value }))} placeholder="v1.1-reviewed" type="text" value={versionForm.version_label} onFocus={e => { e.target.style.borderColor = "#000"; }} onBlur={e => { e.target.style.borderColor = "#E6E8EA"; }} /></div>
-        <div className="flex flex-col gap-1.5"><label className="text-[12px] font-semibold text-[#848E9C] uppercase tracking-wider">Notes</label><textarea aria-label="Edit Version Notes" className="px-3 py-2.5 bg-[#F5F5F5] border border-[#E6E8EA] text-[14px] font-medium text-[#1E2026] placeholder-[#848E9C] min-h-[80px] resize-y w-full" style={inputStyle} onChange={e => setVersionForm(v => ({ ...v, notes: e.target.value }))} placeholder="Record why this version changed." rows={3} value={versionForm.notes} onFocus={e => { e.target.style.borderColor = "#000"; }} onBlur={e => { e.target.style.borderColor = "#E6E8EA"; }} /></div>
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#E6E8EA]">
-          <button className={formBtnSecondary} style={formBtnStyle} disabled={isSavingVersion} onClick={closeModal} type="button">Cancel</button>
-          <button className={formBtnPrimary} style={formBtnStyle} disabled={isSavingVersion} type="submit">{isSavingVersion ? "Saving..." : "Save Version"}</button>
-        </div>
-      </form>
-    </ModalShell>
+      {/* Edit Document Modal */}
+      <ModalShell open={activeModal === "document"} busy={isSavingDocument} icon={Pencil} title="Document Metadata" subtitle="Update document details." onClose={closeModal}>
+        <form className="px-6 pb-6 pt-5 space-y-4" onSubmit={handleDocumentSubmit}>
+          <div className="flex flex-col gap-1.5"><label className="text-[12px] font-semibold text-[#848E9C] uppercase tracking-wider">Document title</label><input aria-label="Document title" className={inputCls} style={inputStyle} onChange={e => setDocumentForm(v => ({ ...v, title: e.target.value }))} placeholder="Master Services Agreement" type="text" value={documentForm.title} onFocus={e => { e.target.style.borderColor = "#000"; }} onBlur={e => { e.target.style.borderColor = "#E6E8EA"; }} /></div>
+          <div className="flex flex-col gap-1.5"><label className="text-[12px] font-semibold text-[#848E9C] uppercase tracking-wider">Document type</label><input aria-label="Document type" className={inputCls} style={inputStyle} onChange={e => setDocumentForm(v => ({ ...v, document_type: e.target.value }))} placeholder="MSA" type="text" value={documentForm.document_type} onFocus={e => { e.target.style.borderColor = "#000"; }} onBlur={e => { e.target.style.borderColor = "#E6E8EA"; }} /></div>
+          <div className="flex flex-col gap-1.5"><label className="text-[12px] font-semibold text-[#848E9C] uppercase tracking-wider">Description</label><textarea aria-label="Document description" className="px-3 py-2.5 bg-[#F5F5F5] border border-[#E6E8EA] text-[14px] font-medium text-[#1E2026] placeholder-[#848E9C] min-h-[80px] resize-y w-full" style={inputStyle} onChange={e => setDocumentForm(v => ({ ...v, description: e.target.value }))} placeholder="Describe the review scope." rows={3} value={documentForm.description} onFocus={e => { e.target.style.borderColor = "#000"; }} onBlur={e => { e.target.style.borderColor = "#E6E8EA"; }} /></div>
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#E6E8EA]">
+            <button className={formBtnSecondary} style={formBtnStyle} disabled={isSavingDocument} onClick={closeModal} type="button">Cancel</button>
+            <button className={formBtnPrimary} style={formBtnStyle} disabled={isSavingDocument} type="submit">{isSavingDocument ? "Saving..." : "Save Document"}</button>
+          </div>
+        </form>
+      </ModalShell>
 
-    <ConfirmDialog
-      cancelLabel="Cancel Delete"
-      confirmLabel={isDeletingVersion ? "Deleting..." : "Confirm Delete Version"}
-      description={deleteVersionTarget ? `Delete ${deleteVersionTarget.version_label}? This cannot be undone.` : ""}
-      isProcessing={isDeletingVersion}
-      onCancel={() => setDeleteVersionTarget(null)}
-      onConfirm={handleDeleteVersion}
-      open={Boolean(deleteVersionTarget)}
-      title="Delete Version"
-    />
+      {/* Edit Version Modal */}
+      <ModalShell open={activeModal === "version"} busy={isSavingVersion} icon={Pencil} title="Edit Version" subtitle="Edit version details." onClose={closeModal}>
+        <form className="px-6 pb-6 pt-5 space-y-4" onSubmit={handleVersionSubmit}>
+          <div className="flex flex-col gap-1.5"><label className="text-[12px] font-semibold text-[#848E9C] uppercase tracking-wider">Version label</label><input aria-label="Edit Version Label" className={inputCls} style={inputStyle} onChange={e => setVersionForm(v => ({ ...v, version_label: e.target.value }))} placeholder="v1.1-reviewed" type="text" value={versionForm.version_label} onFocus={e => { e.target.style.borderColor = "#000"; }} onBlur={e => { e.target.style.borderColor = "#E6E8EA"; }} /></div>
+          <div className="flex flex-col gap-1.5"><label className="text-[12px] font-semibold text-[#848E9C] uppercase tracking-wider">Notes</label><textarea aria-label="Edit Version Notes" className="px-3 py-2.5 bg-[#F5F5F5] border border-[#E6E8EA] text-[14px] font-medium text-[#1E2026] placeholder-[#848E9C] min-h-[80px] resize-y w-full" style={inputStyle} onChange={e => setVersionForm(v => ({ ...v, notes: e.target.value }))} placeholder="Record why this version changed." rows={3} value={versionForm.notes} onFocus={e => { e.target.style.borderColor = "#000"; }} onBlur={e => { e.target.style.borderColor = "#E6E8EA"; }} /></div>
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#E6E8EA]">
+            <button className={formBtnSecondary} style={formBtnStyle} disabled={isSavingVersion} onClick={closeModal} type="button">Cancel</button>
+            <button className={formBtnPrimary} style={formBtnStyle} disabled={isSavingVersion} type="submit">{isSavingVersion ? "Saving..." : "Save Version"}</button>
+          </div>
+        </form>
+      </ModalShell>
+
+      <ConfirmDialog
+        cancelLabel="Cancel Delete"
+        confirmLabel={isDeletingVersion ? "Deleting..." : "Confirm Delete Version"}
+        description={deleteVersionTarget ? `Delete ${deleteVersionTarget.version_label}? This cannot be undone.` : ""}
+        isProcessing={isDeletingVersion}
+        onCancel={() => setDeleteVersionTarget(null)}
+        onConfirm={handleDeleteVersion}
+        open={Boolean(deleteVersionTarget)}
+        title="Delete Version"
+      />
     </>
   );
 }

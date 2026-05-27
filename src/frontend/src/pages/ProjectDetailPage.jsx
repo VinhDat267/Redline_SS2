@@ -1,5 +1,6 @@
 ﻿import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { encodeId, decodeId } from "../lib/idCodec";
 import { ArrowLeft, BarChart3, CheckSquare, ClipboardList, Clock, FileText, FolderHeart, FolderOpen, History, LogOut, MessageSquare, Pencil, Plus, Trash2, X, Users, ShieldCheck, Activity } from "lucide-react";
 
 import { useAuth } from "../auth/AuthContext";
@@ -166,7 +167,8 @@ function FormSelect({ label, children, "aria-label": ariaLabel, ...props }) {
 export function ProjectDetailPage() {
   const { logout, token, user } = useAuth();
   const { setActiveProject } = useActiveProject();
-  const { projectId } = useParams();
+  const { projectId: rawProjectId } = useParams();
+  const projectId = decodeId(rawProjectId);
   const [project, setProject] = useState(null);
   const [documents, setDocuments] = useState([]);
   const [members, setMembers] = useState([]);
@@ -975,13 +977,13 @@ export function ProjectDetailPage() {
                     headers={["Title", "Type", "Description", "Last Activity", "Actions"]}
                     colWidths={["36%", "10%", "18%", "18%", "18%"]}
                     rows={documents.map(doc => [
-                      <Link key={doc.id} className="font-semibold text-[#1E2026] no-underline" style={{ transition: "color 200ms ease" }} onMouseEnter={e => { e.target.style.color = "#F0B90B"; }} onMouseLeave={e => { e.target.style.color = "#1E2026"; }} to={`/contracts/${doc.id}`}>{doc.title}</Link>,
+                      <Link key={doc.id} className="font-semibold text-[#1E2026] no-underline" style={{ transition: "color 200ms ease" }} onMouseEnter={e => { e.target.style.color = "#F0B90B"; }} onMouseLeave={e => { e.target.style.color = "#1E2026"; }} to={`/contracts/${encodeId(doc.id)}`}>{doc.title}</Link>,
                       <span key={`${doc.id}-t`} className="text-[12px] text-[#848E9C] font-medium">{doc.document_type || "Contract"}</span>,
                       <span key={`${doc.id}-d`} className="text-[12px] text-[#848E9C]">{doc.description || "No description"}</span>,
                       <span key={`${doc.id}-u`} className="text-[12px] text-[#848E9C]">{formatDateTime(doc.updated_at)}</span>,
                       <div key={`${doc.id}-a`} className="flex items-center gap-1">
-                        <Link className="p-1.5 text-[#848E9C]" style={{ borderRadius: "6px", transition: "color 200ms ease" }} to={`/contracts/${doc.id}`} title="Open"><FolderOpen size={15} /></Link>
-                        <Link className="p-1.5 text-[#F0B90B]" style={{ borderRadius: "6px", transition: "color 200ms ease" }} to={`/contracts/${doc.id}/chat`} title="Q&A"><MessageSquare size={15} /></Link>
+                        <Link className="p-1.5 text-[#848E9C]" style={{ borderRadius: "6px", transition: "color 200ms ease" }} to={`/contracts/${encodeId(doc.id)}`} title="Open"><FolderOpen size={15} /></Link>
+                        <Link className="p-1.5 text-[#F0B90B]" style={{ borderRadius: "6px", transition: "color 200ms ease" }} to={`/contracts/${encodeId(doc.id)}/chat`} title="Q&A"><MessageSquare size={15} /></Link>
                         <button aria-label="Edit" className="p-1.5 text-[#848E9C] bg-transparent border-none cursor-pointer" style={{ borderRadius: "6px", transition: "color 200ms ease" }} onClick={() => beginDocumentEdit(doc)} type="button" title="Edit"><Pencil size={15} /></button>
                         <button aria-label="Delete" className="p-1.5 text-[#848E9C] bg-transparent border-none cursor-pointer" style={{ borderRadius: "6px", transition: "color 200ms ease" }} onClick={() => setDeleteTarget(doc)} type="button" title="Delete"><Trash2 size={15} /></button>
                       </div>

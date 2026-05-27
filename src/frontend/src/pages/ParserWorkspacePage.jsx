@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
+import { decodeId, encodeId } from "../lib/idCodec";
 import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronDown, FileSearch, FileText, GitCompare, Heading, List, Play, Sparkles, XCircle } from "lucide-react";
 
 
@@ -971,11 +972,13 @@ function InspectPanel({ workspace, surfaceDetail, selectedInspector }) {
 
 export function ParserWorkspacePage() {
   const { logout, token } = useAuth();
-  const { contractId, documentId } = useParams();
+  const { contractId: rawContractId, documentId: rawDocumentId } = useParams();
+  const contractId = decodeId(rawContractId);
+  const documentId = decodeId(rawDocumentId);
   const [searchParams] = useSearchParams();
   const routeDocumentId = documentId ?? contractId;
-  const contractDetailHref = `/contracts/${contractId ?? routeDocumentId}`;
-  const compareSetupHref = contractId ? `/contracts/${contractId}` : `/documents/${routeDocumentId}`;
+  const contractDetailHref = `/contracts/${encodeId(contractId ?? routeDocumentId)}`;
+  const compareSetupHref = contractId ? `/contracts/${encodeId(contractId)}` : `/documents/${encodeId(routeDocumentId)}`;
   const [workspace, setWorkspace] = useState(null);
   const [selectedVersionId, setSelectedVersionId] = useState(null);
   const [activeSurfaceGroup, setActiveSurfaceGroup] = useState("body");

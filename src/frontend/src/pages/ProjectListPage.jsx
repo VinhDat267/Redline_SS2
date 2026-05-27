@@ -4,6 +4,7 @@ import {
   Database, FolderHeart, FolderOpen, Pencil, Plus, Trash2,
   Search, SearchX, Clock, FileText, ArrowRight, Sparkles, MoreVertical, X, FolderPlus
 } from "lucide-react";
+import { encodeId } from "../lib/idCodec";
 
 import { useAuth } from "../auth/AuthContext";
 import { useActiveProject } from "../context/ActiveProjectContext";
@@ -60,7 +61,7 @@ function ProjectCard({ project, index, onEdit, onDelete }) {
       <div className="h-[4px] w-full bg-[#F0B90B]" />
 
       {/* Content */}
-      <Link aria-label={project.name} to={`/projects/${project.id}`} className="block p-5 no-underline" style={{ minHeight: "200px" }}>
+      <Link aria-label={project.name} to={`/projects/${encodeId(project.id)}`} className="block p-5 no-underline" style={{ minHeight: "200px" }}>
         {/* Header row */}
         <div className="flex items-start justify-between mb-4">
           {/* Project icon — gold only */}
@@ -414,7 +415,7 @@ export function ProjectListPage() {
         setFeedback("Project updated.");
       } else {
         startTransition(() => {
-          navigate(`/projects/${savedProject.id}`);
+          navigate(`/projects/${encodeId(savedProject.id)}`);
         });
       }
     } catch (createError) {

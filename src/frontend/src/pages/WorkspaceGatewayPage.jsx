@@ -12,6 +12,7 @@ import {
   Sparkles,
   Loader2,
 } from "lucide-react";
+import { encodeId } from "../lib/idCodec";
 import { useActiveProject } from "../context/ActiveProjectContext";
 import { useAuth } from "../auth/AuthContext";
 import { listProjectContracts, listContractDrafts } from "../lib/api";
@@ -77,8 +78,8 @@ const GATEWAY_CONTENT = {
 
 /* Where to redirect when active project is known — simple URL-based */
 const SECTION_PROJECT_URLS = {
-  contracts: (id) => `/projects/${id}`,
-  analytics: (id) => `/projects/${id}/analytics`,
+  contracts: (id) => `/projects/${encodeId(id)}`,
+  analytics: (id) => `/projects/${encodeId(id)}/analytics`,
   // parser, qa — need async fetch (contract + draft IDs)
   // compare, review — need a compare run, can't auto-resolve
 };
@@ -126,7 +127,7 @@ export function WorkspaceGatewayPage({ section = "contracts" }) {
 
         if (section === "qa") {
           // Q&A just needs the contractId
-          navigate(`/contracts/${firstContract.id}/chat`, { replace: true });
+          navigate(`/contracts/${encodeId(firstContract.id)}/chat`, { replace: true });
           return;
         }
 
@@ -140,7 +141,7 @@ export function WorkspaceGatewayPage({ section = "contracts" }) {
             return;
           }
           const firstDraft = drafts[0];
-          navigate(`/contracts/${firstContract.id}/parser?version=${firstDraft.id}`, { replace: true });
+          navigate(`/contracts/${encodeId(firstContract.id)}/parser?version=${encodeId(firstDraft.id)}`, { replace: true });
           return;
         }
 
@@ -152,7 +153,7 @@ export function WorkspaceGatewayPage({ section = "contracts" }) {
 
         if (parsedCount >= 2) {
           // Redirect to ContractDetailPage which has the Compare Setup section
-          navigate(`/contracts/${firstContract.id}`, { replace: true });
+          navigate(`/contracts/${encodeId(firstContract.id)}`, { replace: true });
           return;
         }
 
@@ -246,7 +247,7 @@ export function WorkspaceGatewayPage({ section = "contracts" }) {
 
           <div className="flex items-center gap-2">
             <Link
-              to={`/contracts/${resolveInfo.contractId}`}
+              to={`/contracts/${encodeId(resolveInfo.contractId)}`}
               className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 bg-[#F0B90B] text-[#1E2026] font-semibold text-[13px] no-underline"
               style={{ borderRadius: "8px", boxShadow: "rgb(153,153,153) 0px 2px 10px -3px", transition: "opacity 200ms ease" }}
               onMouseEnter={e => { e.currentTarget.style.opacity = "0.85"; }}

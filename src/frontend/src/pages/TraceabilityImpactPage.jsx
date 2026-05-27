@@ -14,6 +14,7 @@ import {
   Sparkles,
   ChevronRight
 } from "lucide-react";
+import { decodeId } from "../lib/idCodec";
 import { Toast } from "../components/Toast";
 import { diffWords } from "diff";
 
@@ -43,7 +44,8 @@ import {
 
 export function TraceabilityImpactPage() {
   const { logout, token } = useAuth();
-  const { compareRunId } = useParams();
+  const { compareRunId: rawCompareRunId } = useParams();
+  const compareRunId = decodeId(rawCompareRunId);
   const [searchParams] = useSearchParams();
   const [compareRun, setCompareRun] = useState(null);
   const [changeItem, setChangeItem] = useState(null);
@@ -72,7 +74,7 @@ export function TraceabilityImpactPage() {
           getCompareRun(token, compareRunId),
           listCompareRunChangeItems(token, compareRunId)
         ]);
-        const selectedChangeId = resolveSelectedChangeId(crPayload, queuePayload, searchParams.get("change"));
+        const selectedChangeId = resolveSelectedChangeId(crPayload, queuePayload, decodeId(searchParams.get("change")));
         const ciPayload = selectedChangeId ? await getChangeItem(token, selectedChangeId) : null;
         const projectId = crPayload?.document?.project_id;
         const [reqs, tcs] = projectId

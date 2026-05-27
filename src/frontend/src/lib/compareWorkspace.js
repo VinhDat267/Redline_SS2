@@ -1,3 +1,5 @@
+import { encodeId } from "./idCodec";
+
 function normalizeId(value) {
   const nextValue = Number(value);
   return Number.isInteger(nextValue) && nextValue > 0 ? nextValue : null;
@@ -117,14 +119,15 @@ export function buildCompareRunLabel(compareRun) {
 }
 
 export function buildCompareRunPath(compareRunId, suffix = "", changeItemId = null) {
-  const basePath = `/compare-runs/${compareRunId}${suffix}`;
+  const encodedRunId = encodeId(compareRunId);
+  const basePath = `/compare-runs/${encodedRunId}${suffix}`;
   const normalizedChangeItemId = normalizeId(changeItemId);
 
   if (!normalizedChangeItemId) {
     return basePath;
   }
 
-  return `${basePath}?change=${normalizedChangeItemId}`;
+  return `${basePath}?change=${encodeId(normalizedChangeItemId)}`;
 }
 
 export function resolveSelectedChangeId(compareRun, queue = [], requestedChangeId = null) {

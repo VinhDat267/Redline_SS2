@@ -4,17 +4,18 @@ import {
   FolderOpen, FileText, ScanSearch, GitCompare, ClipboardCheck,
   MessageSquare, BarChart3, LogOut, Settings, X, ChevronDown, Bell, Check,
 } from "lucide-react";
+import { encodeId } from "../lib/idCodec";
 import { useAuth } from "../auth/AuthContext";
 import { useActiveProject } from "../context/ActiveProjectContext";
 
 /* Navigation tabs that require an active project */
 const PROJECT_LINKS = [
-  { key: "contracts", label: "Contracts", icon: FileText, path: (id) => `/projects/${id}` },
+  { key: "contracts", label: "Contracts", icon: FileText, path: (id) => `/projects/${encodeId(id)}` },
   { key: "parser", label: "Parser", icon: ScanSearch, path: () => `/parser` },
   { key: "compare", label: "Compare", icon: GitCompare, path: () => `/compare` },
   { key: "review", label: "Review", icon: ClipboardCheck, path: () => `/review` },
   { key: "qa", label: "Q&A", icon: MessageSquare, path: () => `/contract-q-a` },
-  { key: "analytics", label: "Analytics", icon: BarChart3, path: (id) => `/projects/${id}/analytics` },
+  { key: "analytics", label: "Analytics", icon: BarChart3, path: (id) => `/projects/${encodeId(id)}/analytics` },
 ];
 
 /* ─── Profile Dropdown Menu ─── */

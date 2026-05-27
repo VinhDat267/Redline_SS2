@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { decodeId, encodeId } from "../lib/idCodec";
 import {
   ArrowLeft, Bot, ChevronDown, CircleDot, FileText, MessageSquare,
   Plus, RotateCcw, ScrollText, Send, ShieldCheck, Sparkles, Square,
@@ -143,7 +144,8 @@ const COMPARE_PROMPT_EXAMPLES = [
 
 export function ContractChatPage() {
   const { logout, token, user } = useAuth();
-  const { contractId } = useParams();
+  const { contractId: rawContractId } = useParams();
+  const contractId = decodeId(rawContractId);
   const streamAbortRef = useRef(null);
   const activeAttemptRef = useRef(null);
   const stopRequestedRef = useRef(false);
@@ -578,7 +580,7 @@ export function ContractChatPage() {
 
         {/* Top bar */}
         <div style={{ flexShrink: 0, height: "52px", borderBottom: "1px solid #E6E8EA", background: "#fff", display: "flex", alignItems: "center", padding: "0 20px", gap: "10px", zIndex: 10 }}>
-          <Link to={`/contracts/${contractId}`}
+          <Link to={`/contracts/${encodeId(contractId)}`}
             aria-label="Back to contract"
             style={{ display: "flex", alignItems: "center", gap: "5px", padding: "5px 12px", borderRadius: "7px", border: "1px solid #E6E8EA", background: "#fff", color: "#474D57", fontSize: "12px", fontWeight: 700, textDecoration: "none", transition: "all 150ms", flexShrink: 0 }}
             onMouseEnter={e => e.currentTarget.style.background = "#F4F5F7"}
@@ -833,7 +835,7 @@ export function ContractChatPage() {
               ? `${selectedCompareRunLabel} / compare truth`
               : selectedDraft ? `${selectedDraft.version_label} / ${formatDateTime(selectedDraft.uploaded_at)}` : "Choose a parsed draft to begin."}
           </div>
-          <Link to={`/contracts/${contractId}`}
+          <Link to={`/contracts/${encodeId(contractId)}`}
             style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 700, color: "#1EAEDB", textDecoration: "none" }}>
             <FileText size={11} /> Open contract workspace
           </Link>

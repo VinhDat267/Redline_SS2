@@ -5,6 +5,7 @@ import {
   Clock, Download, FileCode, FileDiff, FileDown, FileText, Flag,
   Sparkles, ChevronRight, GitCompare,
 } from "lucide-react";
+import { decodeId } from "../lib/idCodec";
 import { diffWords } from "diff";
 
 import { useAuth } from "../auth/AuthContext";
@@ -46,7 +47,8 @@ const RS_CFG = {
 
 export function SummaryExportPage() {
   const { logout, token } = useAuth();
-  const { compareRunId } = useParams();
+  const { compareRunId: rawCompareRunId } = useParams();
+  const compareRunId = decodeId(rawCompareRunId);
   const [searchParams] = useSearchParams();
   const [compareRun, setCompareRun] = useState(null);
   const [queue, setQueue] = useState([]);
@@ -84,7 +86,7 @@ export function SummaryExportPage() {
     return () => { ok = false; };
   }, [compareRunId, logout, token]);
 
-  const selectedChangeId = resolveSelectedChangeId(compareRun, queue, searchParams.get("change"));
+  const selectedChangeId = resolveSelectedChangeId(compareRun, queue, decodeId(searchParams.get("change")));
   const highlightedItem = getSelectedQueueItem(queue, selectedChangeId) ?? queue[0] ?? null;
   const reviewCounts = summarizeReviewCounts(queue);
   const queuePreview = buildQueuePreview(queue, highlightedItem);

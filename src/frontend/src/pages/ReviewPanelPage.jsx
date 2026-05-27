@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ArrowRight, MessageSquare, Save, Sparkles, Flag, FileCode, Database, GitCommit, UserCircle, CheckCircle2, Clock, CircleDashed, RefreshCw, FileDiff, Download } from "lucide-react";
+import { decodeId, encodeId } from "../lib/idCodec";
 import { diffWords } from "diff";
 import { Toast } from "../components/Toast";
 
@@ -111,7 +112,8 @@ function clampPage(value, totalPages) {
 
 export function ReviewPanelPage() {
   const { logout, token, user } = useAuth();
-  const { compareRunId } = useParams();
+  const { compareRunId: rawCompareRunId } = useParams();
+  const compareRunId = decodeId(rawCompareRunId);
   const [searchParams, setSearchParams] = useSearchParams();
   const [compareRun, setCompareRun] = useState(null);
   const [queue, setQueue] = useState([]);
@@ -131,7 +133,7 @@ export function ReviewPanelPage() {
   const [isRegeneratingAiDraft, setIsRegeneratingAiDraft] = useState(false);
   const [queueOpen, setQueueOpen] = useState(true);
   const [commentsOpen, setCommentsOpen] = useState(false);
-  const requestedChangeId = searchParams.get("change");
+  const requestedChangeId = decodeId(searchParams.get("change"));
   const queueSearch = searchParams.get("queueSearch") ?? "";
   const queueChangeType = searchParams.get("queueChangeType") ?? "all";
   const queueReviewStatus = searchParams.get("queueReviewStatus") ?? "all";
@@ -287,7 +289,7 @@ export function ReviewPanelPage() {
         return;
       }
 
-      nextParams.set(key, String(value));
+      nextParams.set(key, key === "change" ? encodeId(value) : String(value));
     });
 
     setSearchParams(nextParams);

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { ArrowRight, MessageSquare, Save, Sparkles, Flag, FileCode, Database, GitCommit, UserCircle, CheckCircle2, Clock, CircleDashed, RefreshCw, FileDiff } from "lucide-react";
+import { ArrowRight, MessageSquare, Save, Sparkles, Flag, FileCode, Database, GitCommit, UserCircle, CheckCircle2, Clock, CircleDashed, RefreshCw, FileDiff, Download } from "lucide-react";
 import { diffWords } from "diff";
 import { Toast } from "../components/Toast";
 
@@ -14,7 +14,8 @@ import {
   listCompareRunChangeItems,
   listProjectMembers,
   regenerateChangeItemAiDraft,
-  updateChangeItem
+  updateChangeItem,
+  exportReviewReport
 } from "../lib/api";
 import {
   buildChangeHeadline,
@@ -540,6 +541,22 @@ export function ReviewPanelPage() {
         <button type="button" onClick={() => setQueueOpen(o => !o)}
           style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 10px', borderRadius: '7px', border: '1px solid #E6E8EA', background: queueOpen ? '#FFF8E6' : '#fff', color: queueOpen ? '#B07D0A' : '#474D57', fontSize: '11px', fontWeight: 700, cursor: 'pointer', transition: 'all 150ms', flexShrink: 0 }}>
           ☰ {queueOpen ? 'Hide' : `Queue (${filteredQueue.length})`}
+        </button>
+
+        {/* Export Review Report */}
+        <button type="button" disabled={!compareRun || filteredQueue.length === 0}
+          onClick={async () => {
+            setError("");
+            try {
+              await exportReviewReport(token, compareRunId);
+              setReviewMessage("Review report downloaded.");
+            } catch (err) {
+              if (err instanceof ApiError && err.status === 401) { logout(); return; }
+              setError(err.message);
+            }
+          }}
+          style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '5px 10px', borderRadius: '7px', border: '1px solid #E6E8EA', background: '#fff', color: '#474D57', fontSize: '11px', fontWeight: 600, cursor: !compareRun || filteredQueue.length === 0 ? 'not-allowed' : 'pointer', opacity: !compareRun || filteredQueue.length === 0 ? 0.6 : 1, transition: 'all 150ms', flexShrink: 0 }}>
+          <Download size={12} /> Export
         </button>
 
         {/* Prev / Index / Next */}

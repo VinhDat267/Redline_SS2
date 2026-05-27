@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Eye, FileText, GitMerge, LogOut, Sparkles, FolderDown, ArrowUpToLine, FileDiff, Flag, List, CircleDashed, Clock, CheckCircle2, Bot, Activity, XCircle, FileCode, Edit, Code, Database, Info, GitCommit, FileWarning, Calendar, Hash, RefreshCw } from "lucide-react";
+import { ArrowLeft, ArrowRight, Eye, FileText, GitMerge, LogOut, Sparkles, FolderDown, ArrowUpToLine, FileDiff, Flag, List, CircleDashed, Clock, CheckCircle2, Bot, Activity, XCircle, FileCode, Edit, Code, Database, Info, GitCommit, FileWarning, Calendar, Hash, RefreshCw, Download } from "lucide-react";
 import { InlineDiff } from "../components/InlineDiff";
 import { useAuth } from "../auth/AuthContext";
 import { Sidebar } from "../components/ScreenFrame";
@@ -12,7 +12,8 @@ import {
   getChangeItem,
   getCompareRun,
   listCompareRunChangeItems,
-  createContractCompareRun
+  createContractCompareRun,
+  exportReviewReport
 } from "../lib/api";
 import {
   buildChangeHeadline,
@@ -151,6 +152,7 @@ export function CompareScreenPage() {
   const [isWorkspaceLoading, setIsWorkspaceLoading] = useState(true);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [isRecomparing, setIsRecomparing] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [error, setError] = useState("");
   const [aiMessage, setAiMessage] = useState("");
   const requestedChangeId = searchParams.get("change");
@@ -717,6 +719,27 @@ export function CompareScreenPage() {
                   <Icon size={12} /> {label}
                 </Link>
               ))}
+              <button type="button" disabled={isExporting || !compareRun || queue.length === 0}
+                onClick={async () => {
+                  setIsExporting(true);
+                  setError("");
+                  try {
+                    await exportReviewReport(token, compareRunId);
+                    setAiMessage("Review report downloaded.");
+                  } catch (err) {
+                    if (err instanceof ApiError && err.status === 401) { logout(); return; }
+                    setError(err.message);
+                  } finally {
+                    setIsExporting(false);
+                  }
+                }}
+                onMouseEnter={e => { if (!e.currentTarget.disabled) { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)'; } }}
+                onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
+                style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '5px 12px', borderRadius: '6px', border: '1px solid #E6E8EA', color: '#474D57', fontSize: '11px', fontWeight: 600, background: '#fff', cursor: isExporting || !compareRun || queue.length === 0 ? 'not-allowed' : 'pointer', opacity: isExporting || !compareRun || queue.length === 0 ? 0.6 : 1, transition: 'all 150ms' }}>
+                {isExporting
+                  ? <><div style={{ width: '11.5px', height: '11.5px', borderRadius: '50%', border: '2px solid rgba(71,77,87,0.2)', borderTopColor: '#474D57', animation: 'cwSpin 0.8s linear infinite' }} /> Exporting…</>
+                  : <><Download size={12} /> Export</>}
+              </button>
               <button type="button" disabled={isRecomparing || !compareRun}
                 onClick={handleRerunCompare}
                 onMouseEnter={e => { if (!e.currentTarget.disabled) { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)'; } }}

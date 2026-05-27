@@ -323,6 +323,23 @@ def list_clause_changes(
     return {"data": [ClauseChangeRead.model_validate(contract_service.serialize_clause_change(item)).model_dump(mode="json") for item in queue]}
 
 
+@router.get("/contract-compare-runs/{compare_run_id}/export-review-report")
+def export_review_report(
+    compare_run_id: int,
+    current_user: User = Depends(get_current_user),
+    database: Session = Depends(get_db_session),
+):
+    compare_run = project_access_service.ensure_compare_run_access_or_404(database, compare_run_id, current_user.id)
+    from app.services.review_export import generate_review_report
+
+    buffer, filename = generate_review_report(database, compare_run)
+    return Response(
+        content=buffer.read(),
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.post("/contracts/{contract_id}/chat/sessions", status_code=status.HTTP_201_CREATED)
 def create_chat_session(
     contract_id: int,

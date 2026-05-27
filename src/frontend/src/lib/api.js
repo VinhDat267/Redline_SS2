@@ -666,6 +666,27 @@ export function listContractClauseChanges(token, compareRunId) {
   return apiRequest(`/api/v1/contract-compare-runs/${compareRunId}/clause-changes`, { token });
 }
 
+export async function exportReviewReport(token, compareRunId) {
+  const response = await fetch(`/api/v1/contract-compare-runs/${compareRunId}/export-review-report`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new ApiError(response.status, "Failed to export review report.");
+  }
+  const blob = await response.blob();
+  const disposition = response.headers.get("Content-Disposition") || "";
+  const match = disposition.match(/filename="?([^"]+)"?/);
+  const filename = match ? match[1] : `Review_Report_${compareRunId}.docx`;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export function generateCompareRunAiDrafts(token, compareRunId, payload = { force_regenerate: false }) {
   return apiRequest(`/api/v1/compare-runs/${compareRunId}/ai-review-drafts/generate`, {
     method: "POST",

@@ -87,16 +87,38 @@ class ProjectEventBroker:
         self._subscribers: dict[int, set[asyncio.Queue]] = defaultdict(set)
 
     def publish(self, event: ProjectEvent) -> None:
-        """Push event to all subscribers of the given project (thread-safe)."""
-        # Snapshot the set before iteration to prevent RuntimeError if a
-        # subscriber disconnects (async context) while this sync method iterates.
+        """Push event to all subscribers of the given project (thread-safe).
+
+        Sync route handlers run in a thread-pool executor, but asyncio.Queue
+        is NOT thread-safe.  We detect the calling context and use
+        ``loop.call_soon_threadsafe`` when publishing from a worker thread so
+        that ``put_nowait`` always executes on the event-loop thread.
+        """
         queues = list(self._subscribers.get(event.project_id, set()))
+        if not queues:
+            return
+
+        # Determine whether we are already on the event-loop thread.
+        try:
+            running_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            running_loop = None
+
         for queue in queues:
-            try:
-                queue.put_nowait(event)
-            except asyncio.QueueFull:
-                # Skip slow consumers
-                pass
+            if running_loop is not None:
+                # We are inside the event loop – safe to put directly.
+                try:
+                    queue.put_nowait(event)
+                except asyncio.QueueFull:
+                    pass
+            else:
+                # Called from a sync/thread-pool context – schedule safely.
+                try:
+                    loop = asyncio.get_event_loop()
+                    loop.call_soon_threadsafe(queue.put_nowait, event)
+                except RuntimeError:
+                    # No event loop available at all – drop silently.
+                    pass
 
     async def subscribe(
         self,

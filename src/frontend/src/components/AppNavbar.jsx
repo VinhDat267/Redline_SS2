@@ -234,16 +234,17 @@ function NotificationBell({ invitations: pendingInvitations, onAccept, onDecline
     }
   }, [token]);
 
-  // Fetch on token load + setup 30s polling fallback
+  // Fetch on token load + setup 10s polling fallback
   useEffect(() => {
     fetchNotifs();
-    const timer = setInterval(fetchNotifs, 30000);
+    const timer = setInterval(fetchNotifs, 10000);
     return () => clearInterval(timer);
   }, [fetchNotifs]);
 
   // Subscribe to real-time events via SSE on the active project to update notifications instantly
   useProjectEvents(activeProjectId ? Number(activeProjectId) : null, () => {
-    fetchNotifs();
+    // Small delay so the DB commit from the backend is visible when we query
+    setTimeout(fetchNotifs, 500);
   });
 
 

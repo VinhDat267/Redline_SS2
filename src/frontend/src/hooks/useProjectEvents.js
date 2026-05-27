@@ -70,5 +70,5 @@ export function useProjectEvents(projectId, onEvent, { enabled = true } = {}) {
                 eventSource.close();
             }
         };
-    }, [projectId, enabled]);
+    }, [projectId, enabled, token]);
 }

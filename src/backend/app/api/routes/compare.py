@@ -10,6 +10,7 @@ from app.schemas.compare import (
     CompareCreate,
     CompareQueueItemRead,
     CompareQueuePageRead,
+    CompareRunDocxExportRequest,
     CompareRunAIGenerateRequest,
     CompareRunAISummaryResponse,
     CompareRunRead,
@@ -161,6 +162,36 @@ def export_compare_run_docx(
     summary_text: str | None = Query(None, description="Optional AI summary text to include"),
     current_user: User = Depends(get_current_user),
     database: Session = Depends(get_db_session),
+):
+    return _build_compare_run_docx_response(
+        database=database,
+        compare_run_id=compare_run_id,
+        current_user=current_user,
+        summary_text=summary_text,
+    )
+
+
+@router.post("/compare-runs/{compare_run_id}/export/docx")
+def export_compare_run_docx_from_body(
+    compare_run_id: int,
+    payload: CompareRunDocxExportRequest,
+    current_user: User = Depends(get_current_user),
+    database: Session = Depends(get_db_session),
+):
+    return _build_compare_run_docx_response(
+        database=database,
+        compare_run_id=compare_run_id,
+        current_user=current_user,
+        summary_text=payload.summary_text,
+    )
+
+
+def _build_compare_run_docx_response(
+    *,
+    database: Session,
+    compare_run_id: int,
+    current_user: User,
+    summary_text: str | None,
 ):
     project_access_service.ensure_compare_run_access_or_404(database, compare_run_id, current_user.id)
     buffer = export_docx_service.generate_compare_run_docx(

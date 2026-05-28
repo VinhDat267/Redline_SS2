@@ -196,7 +196,34 @@ export function CompareScreenPage() {
       setIsWorkspaceLoading(true);
       setError("");
       setAiMessage("");
+      if (!Number.isInteger(compareRunId) || compareRunId <= 0) {
+        setIsWorkspaceLoading(false);
+        setError("Invalid comparison run ID format.");
+        return;
+      }
       try {
+        if (requestedChangeNumber) {
+          const fullQueuePayload = await listCompareRunChangeItems(token, compareRunId, {});
+          const normalizedFull = Array.isArray(fullQueuePayload)
+            ? fullQueuePayload
+            : (fullQueuePayload?.items ?? []);
+          const matchedIndex = normalizedFull.findIndex((item) => item.id === requestedChangeNumber);
+          if (matchedIndex !== -1) {
+            const targetPage = Math.floor(matchedIndex / QUEUE_PAGE_SIZE) + 1;
+            if (targetPage !== requestedPage) {
+              setSearchParams(
+                (prev) => {
+                  const next = new URLSearchParams(prev);
+                  next.set("page", String(targetPage));
+                  return next;
+                },
+                { replace: true }
+              );
+              return;
+            }
+          }
+        }
+
         const [compareRunPayload, queuePayload] = await Promise.all([
           getCompareRun(token, compareRunId),
           listCompareRunChangeItems(token, compareRunId, {
@@ -242,7 +269,10 @@ export function CompareScreenPage() {
     normalizedSearch,
     pageStartIndex,
     reviewStatusFilter,
-    token
+    token,
+    requestedChangeNumber,
+    requestedPage,
+    setSearchParams
   ]);
   useEffect(() => {
     if (!displayedAiBatchJob || !isActiveAiBatchJob(displayedAiBatchJob)) {

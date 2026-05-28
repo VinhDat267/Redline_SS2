@@ -148,6 +148,16 @@ def get_latest_ai_batch_job_summary(session: Session, compare_run_id: int) -> di
     return _serialize_job(job, active=job.status in ACTIVE_JOB_STATUSES)
 
 
+def _queued_job_claim_statement():
+    return (
+        select(AIBatchJob.id)
+        .where(AIBatchJob.status == "queued")
+        .order_by(AIBatchJob.id)
+        .limit(1)
+        .with_for_update(skip_locked=True)
+    )
+
+
 def process_next_ai_batch_job(
     session_factory: sessionmaker,
     *,
@@ -160,11 +170,12 @@ def process_next_ai_batch_job(
             item_stale_after=timedelta(seconds=settings.ai_batch_stale_item_seconds),
             job_stale_after=timedelta(seconds=settings.ai_batch_stale_job_seconds),
         )
-        job = session.scalar(
-            select(AIBatchJob)
-            .where(AIBatchJob.status == "queued")
-            .order_by(AIBatchJob.id)
-        )
+        job_id = session.scalar(_queued_job_claim_statement())
+        if job_id is None:
+            session.commit()
+            return False
+
+        job = session.get(AIBatchJob, job_id)
         if job is None:
             session.commit()
             return False
@@ -174,7 +185,6 @@ def process_next_ai_batch_job(
         job.started_at = job.started_at or now
         job.last_heartbeat_at = now
         session.add(job)
-        job_id = job.id
         session.commit()
 
     adapter = get_llm_adapter()

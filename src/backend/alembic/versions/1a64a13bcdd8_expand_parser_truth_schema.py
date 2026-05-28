@@ -71,7 +71,15 @@ def _backfill_legacy_parse_runs() -> None:
                 "summary_json": '{"legacy_backfill": true, "surface_types": ["body"]}',
             },
         )
-        parse_run_id = parse_run_result.lastrowid
+        try:
+            parse_run_id = parse_run_result.lastrowid
+        except Exception:
+            parse_run_id = None
+        if parse_run_id is None:
+            parse_run_id = connection.execute(
+                sa.text("SELECT max(id) FROM document_parse_runs WHERE document_version_id = :document_version_id"),
+                {"document_version_id": version["id"]}
+            ).scalar()
 
         surface_result = connection.execute(
             sa.text(
@@ -95,7 +103,15 @@ def _backfill_legacy_parse_runs() -> None:
             ),
             {"parse_run_id": parse_run_id},
         )
-        surface_id = surface_result.lastrowid
+        try:
+            surface_id = surface_result.lastrowid
+        except Exception:
+            surface_id = None
+        if surface_id is None:
+            surface_id = connection.execute(
+                sa.text("SELECT max(id) FROM document_surfaces WHERE parse_run_id = :parse_run_id"),
+                {"parse_run_id": parse_run_id}
+            ).scalar()
 
         connection.execute(
             sa.text(

@@ -328,8 +328,7 @@ function NotificationBell({ invitations: pendingInvitations, onAccept, onDecline
   const notifiedIdsRef = useRef(new Set());
   const ref = useRef(null);
 
-  // Total badge = pending invitations + unread system notifications
-  const totalBadge = pendingInvitations.length + unreadCount;
+  // totalBadge is computed below after unreadNotifs is filtered (see line ~486)
 
   const close = useCallback(() => setIsOpen(false), []);
 
@@ -431,6 +430,8 @@ function NotificationBell({ invitations: pendingInvitations, onAccept, onDecline
     try {
       await onAccept(inv.id);
       await autoDismissInviteNotif(inv.project_id);
+    } catch {
+      // silent – errors handled upstream (e.g. token expiry triggers logout elsewhere)
     } finally {
       setProcessing(null);
     }
@@ -483,6 +484,10 @@ function NotificationBell({ invitations: pendingInvitations, onAccept, onDecline
     if (n.notification_type === "project_invite" && pendingProjectIds.has(n.project_id)) return false;
     return true;
   });
+  // Total badge = pending invitations + unread system notifications (after dedup-filtering)
+  // Using unreadNotifs.length (not raw unreadCount) to avoid counting invite notifications
+  // that are already shown in the pending invitations section above.
+  const totalBadge = pendingInvitations.length + unreadNotifs.length;
   const hasAny = pendingInvitations.length > 0 || unreadNotifs.length > 0;
 
   return (
@@ -811,7 +816,8 @@ export function AppNavbar() {
     : null;
 
   /* Projects link is active only on /dashboard (not on any project-scoped tab) */
-  const isProjectsLinkActive = location.pathname === "/dashboard" && !isAnyProjectScopedTab(location.pathname);
+  // isAnyProjectScopedTab("/dashboard") is always false, so the second condition is redundant.
+  const isProjectsLinkActive = location.pathname === "/dashboard";
 
   return (
     <header

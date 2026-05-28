@@ -1254,7 +1254,7 @@ export function ProjectDetailPage() {
                             <span className={`px-2.5 py-0.5 border text-[11px] font-semibold uppercase tracking-wider ${roleColor}`} style={{ borderRadius: "6px" }}>
                               {m.role || "Member"}
                             </span>
-                            {isCurrentUserOwner && (
+                            {isCurrentUserOwner && m.user_id !== user?.id && (
                               <button
                                 aria-label={`Remove member ${m.user_email || m.user_display_name}`}
                                 className="p-1.5 text-[#848E9C] bg-transparent border-none cursor-pointer hover:text-[#F6465D]"
@@ -1276,14 +1276,16 @@ export function ProjectDetailPage() {
                     <Users size={28} className="mb-3 text-[#C0C6CF]" />
                     <p className="text-[14px] font-semibold text-[#1E2026] mb-1">No members yet</p>
                     <p className="text-[13px] text-[#848E9C] mb-4">Invite teammates to collaborate on this project.</p>
-                    <button
-                      className={pillBtnCls}
-                      style={{ ...pillBtnStyle, padding: "6px 18px", fontSize: "13px" }}
-                      onClick={() => { setShowMemberForm(true); setError(""); }}
-                      type="button"
-                    >
-                      <Plus size={14} /> Invite First Member
-                    </button>
+                    {isCurrentUserOwner && (
+                      <button
+                        className={pillBtnCls}
+                        style={{ ...pillBtnStyle, padding: "6px 18px", fontSize: "13px" }}
+                        onClick={() => { setShowMemberForm(true); setError(""); }}
+                        type="button"
+                      >
+                        <Plus size={14} /> Invite First Member
+                      </button>
+                    )}
                   </div>
                 )}
               </Card>

@@ -303,7 +303,9 @@ def generate_compare_run_docx(
         if item.review_comments and len(item.review_comments) > 0
     ]
     if items_with_comments:
-        section_num = (5 if items_with_ai else 4) + (1 if all_links else 0)
+        # Compute section number dynamically:
+        # 1=Executive Summary, 2=Change Summary, 3=Change Items, +AI Insights, +Traceability Matrix
+        section_num = 3 + (1 if items_with_ai else 0) + (1 if all_links else 0) + 1
         doc.add_heading(f"{section_num}. Review Comments", level=1)
 
         for item in items_with_comments:

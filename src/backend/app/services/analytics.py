@@ -36,7 +36,8 @@ def get_project_analytics(session: Session, project_id: int) -> dict:
 
     change_type_counts = {"added": 0, "removed": 0, "modified": 0}
     for row in change_type_rows:
-        change_type_counts[row.change_type] = row.count
+        if row.change_type in change_type_counts:
+            change_type_counts[row.change_type] = row.count
 
     # Review status distribution.
     review_status_rows = session.execute(
@@ -50,7 +51,8 @@ def get_project_analytics(session: Session, project_id: int) -> dict:
 
     review_status_counts = {"open": 0, "in_review": 0, "resolved": 0}
     for row in review_status_rows:
-        review_status_counts[row.review_status] = row.count
+        if row.review_status in review_status_counts:
+            review_status_counts[row.review_status] = row.count
 
     # AI generation stats.
     ai_stats_rows = session.execute(
@@ -108,7 +110,7 @@ def get_project_analytics(session: Session, project_id: int) -> dict:
     ).one_or_none()
 
     total_reviewed = accuracy_row.total if accuracy_row else 0
-    matched = accuracy_row.matched if accuracy_row else 0
+    matched = accuracy_row.matched if accuracy_row and accuracy_row.matched is not None else 0
     ai_accuracy_pct = round((matched / total_reviewed) * 100, 1) if total_reviewed > 0 else None
 
     # Average confidence.
@@ -146,7 +148,7 @@ def get_project_analytics(session: Session, project_id: int) -> dict:
             Document.id,
             Document.title,
             func.count(func.distinct(CompareRun.id)).label("compare_runs"),
-            func.count(ChangeItem.id).label("total_changes"),
+            func.count(func.distinct(ChangeItem.id)).label("total_changes"),
             func.sum(case((ChangeItem.review_status == "resolved", 1), else_=0)).label("resolved"),
         )
         .outerjoin(DocumentVersion, Document.id == DocumentVersion.document_id)

@@ -138,6 +138,23 @@ def test_export_docx_includes_summary_text_when_provided(client, auth_headers):
     assert "custom executive summary" in full_text
 
 
+def test_export_docx_accepts_summary_text_in_post_body(client, auth_headers):
+    compare_run = _create_compare_run(client, auth_headers)
+
+    response = client.post(
+        f"/api/v1/compare-runs/{compare_run['id']}/export/docx",
+        json={"summary_text": "This summary is sent in the request body."},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    docx_file = DocxDocument(BytesIO(response.content))
+    full_text = "\n".join(p.text for p in docx_file.paragraphs)
+
+    assert "Executive Summary" in full_text
+    assert "sent in the request body" in full_text
+
+
 def test_export_docx_requires_authentication(client, auth_headers):
     compare_run = _create_compare_run(client, auth_headers)
 

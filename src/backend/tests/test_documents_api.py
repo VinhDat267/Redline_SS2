@@ -554,6 +554,47 @@ def test_update_document_version_rejects_duplicate_version_label(client, seeded_
     assert update_response.json()["detail"] == "Version already exists"
 
 
+def test_update_document_version_rejects_blank_version_label(client, seeded_users, auth_headers):
+    project_response = client.post(
+        "/api/v1/projects",
+        json={"name": "Version Blank Label Demo", "description": "Version validation parent"},
+        headers=auth_headers,
+    )
+    project_id = project_response.json()["data"]["id"]
+    document_response = client.post(
+        f"/api/v1/projects/{project_id}/documents",
+        json={
+            "title": "Blank Label Spec",
+            "document_type": "SPEC",
+            "description": "Blank label target",
+        },
+        headers=auth_headers,
+    )
+    document_id = document_response.json()["data"]["id"]
+
+    create_response = client.post(
+        f"/api/v1/documents/{document_id}/versions",
+        files={
+            "file": (
+                "blank-label-v1.docx",
+                b"fake-docx-content",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
+        data={"version_label": "v1.0", "actor_user_id": seeded_users[0].id},
+        headers=auth_headers,
+    )
+    version_id = create_response.json()["data"]["id"]
+
+    update_response = client.patch(
+        f"/api/v1/document-versions/{version_id}",
+        json={"version_label": "   "},
+        headers=auth_headers,
+    )
+
+    assert update_response.status_code == 422
+
+
 def test_document_version_parse_flow(client, auth_headers, session_factory):
     project_response = client.post(
         "/api/v1/projects",

@@ -292,12 +292,21 @@ def _write_demo_docx(file_path: Path, *, file_name: str, version_label: str) -> 
     document.save(file_path)
 
 
-def seed_demo_workspace(session: Session, current_user: User) -> dict[str, object]:
-    from app.seed import seed_demo_users
-    demo_users = seed_demo_users(session)
-
+def seed_demo_workspace(
+    session: Session,
+    current_user: User,
+    *,
+    demo_users: list[User] | None = None,
+) -> dict[str, object]:
     matching_projects = list(
-        session.scalars(select(Project).where(Project.name.in_(LEGACY_PROJECT_NAMES)))
+        session.scalars(
+            select(Project)
+            .join(ProjectMember, ProjectMember.project_id == Project.id)
+            .where(
+                Project.name.in_(LEGACY_PROJECT_NAMES),
+                ProjectMember.user_id == current_user.id,
+            )
+        )
     )
     project = next(
         (candidate for candidate in matching_projects if candidate.name == WORKSPACE_PROJECT_NAME),
@@ -318,7 +327,7 @@ def seed_demo_workspace(session: Session, current_user: User) -> dict[str, objec
     member_specs: dict[int, str | None] = {
         current_user.id: "owner",
     }
-    for index, demo_user in enumerate(demo_users):
+    for index, demo_user in enumerate(demo_users or []):
         member_specs.setdefault(demo_user.id, "reviewer" if index else "editor")
 
     existing_member_user_ids = {

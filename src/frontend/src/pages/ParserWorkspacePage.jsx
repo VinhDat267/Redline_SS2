@@ -94,8 +94,13 @@ function getDefaultSurfaceSelection(surfaceGroups, preferredGroup = "body", pref
 }
 
 function parseRequestedVersionId(rawValue) {
+  if (!rawValue) return null;
   const parsedValue = Number(rawValue);
-  return Number.isInteger(parsedValue) && parsedValue > 0 ? parsedValue : null;
+  if (Number.isInteger(parsedValue) && parsedValue > 0) {
+    return parsedValue;
+  }
+  const decoded = decodeId(String(rawValue));
+  return Number.isInteger(decoded) && decoded > 0 ? decoded : null;
 }
 
 function buildEmptyCandidateState() {

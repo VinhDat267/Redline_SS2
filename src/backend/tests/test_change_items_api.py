@@ -255,6 +255,18 @@ def test_patch_change_item_updates_review_status_and_assignee(client, auth_heade
     assert payload["assignee_user_id"] == 1
 
 
+def test_patch_change_item_rejects_invalid_review_status(client, auth_headers):
+    change_item_id = _create_compare_run(client, auth_headers)
+
+    response = client.patch(
+        f"/api/v1/change-items/{change_item_id}",
+        json={"review_status": "done"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 422
+
+
 def test_patch_change_item_can_clear_assignee_and_summary(client, auth_headers):
     change_item_id = _create_compare_run(client, auth_headers)
 

@@ -300,7 +300,7 @@ export function ProjectAnalyticsPage() {
                   {analytics.per_document.map((doc) => {
                     const pct = doc.total_changes > 0 ? Math.round((doc.resolved / doc.total_changes) * 100) : 0;
                     return (
-                      <tr className="border-b border-[#F5F5F5]" key={doc.title} style={{ transition: "background 200ms" }} onMouseEnter={e => e.currentTarget.style.background = "#FAFAFA"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                      <tr className="border-b border-[#F5F5F5]" key={doc.document_id} style={{ transition: "background 200ms" }} onMouseEnter={e => e.currentTarget.style.background = "#FAFAFA"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                         <td className="text-[12px] text-[#1E2026] py-2.5 px-3 font-medium">{doc.title}</td>
                         <td className="text-[12px] text-[#474D57] py-2.5 px-3 tabular-nums">{doc.compare_runs}</td>
                         <td className="text-[12px] text-[#474D57] py-2.5 px-3 tabular-nums">{doc.total_changes}</td>

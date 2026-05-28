@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { AuthProvider } from "../auth/AuthContext";
+import { encodeId } from "../lib/idCodec";
 import { ParserWorkspacePage } from "./ParserWorkspacePage";
 
 function jsonResponse(payload, status = 200) {
@@ -586,7 +587,7 @@ describe("ParserWorkspacePage", () => {
       return Promise.reject(new Error(`Unhandled request: ${url} ${init.method || "GET"}`));
     });
 
-    renderParserWorkspace("/documents/10/parser?version=102");
+    renderParserWorkspace(`/documents/10/parser?version=${encodeId(102)}`);
 
     expect(await screen.findByRole("heading", { name: /parser workspace/i })).toBeInTheDocument();
     expect((await screen.findAllByText("v1.1")).length).toBeGreaterThan(0);

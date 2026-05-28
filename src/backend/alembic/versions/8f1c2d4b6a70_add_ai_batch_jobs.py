@@ -53,6 +53,7 @@ def upgrade() -> None:
         ["compare_run_id"],
         unique=True,
         sqlite_where=sa.text("status IN ('queued','running')"),
+        postgresql_where=sa.text("status IN ('queued','running')"),
     )
 
     op.create_table(

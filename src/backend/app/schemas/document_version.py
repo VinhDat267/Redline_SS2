@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from app.schemas.common import ReadModel
 
@@ -10,6 +10,18 @@ class DocumentVersionUpdate(BaseModel):
 
     version_label: str | None = None
     notes: str | None = None
+
+    @field_validator("version_label")
+    @classmethod
+    def normalize_version_label(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Version label is required")
+        if len(normalized) > 100:
+            raise ValueError("Version label must be 100 characters or fewer")
+        return normalized
 
 
 class DocumentVersionRead(ReadModel):

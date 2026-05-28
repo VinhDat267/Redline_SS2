@@ -131,6 +131,7 @@ export function ReviewPanelPage() {
   const [isSavingReview, setIsSavingReview] = useState(false);
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [isRegeneratingAiDraft, setIsRegeneratingAiDraft] = useState(false);
+  const [isExportingReport, setIsExportingReport] = useState(false);
   const [queueOpen, setQueueOpen] = useState(true);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const requestedChangeId = decodeId(searchParams.get("change"));
@@ -160,6 +161,7 @@ export function ReviewPanelPage() {
   });
   const selectedChangeId = resolveSelectedChangeId(compareRun, filteredQueue, requestedChangeId);
   const selectedChangeIdRef = useRef(null);
+  const handleSaveReviewRef = useRef(null); // always points to the latest handleSaveReview (stale-closure guard)
   const selectedChangeReady = Boolean(
     changeItem
     && selectedChangeId
@@ -356,6 +358,9 @@ export function ReviewPanelPage() {
     }
   }
 
+  // Keep ref current on every render so the keyboard shortcut always dispatches the latest handler
+  useEffect(() => { handleSaveReviewRef.current = handleSaveReview; });
+
   async function handleAddComment() {
     if (!selectedChangeReady) {
       return;
@@ -505,7 +510,7 @@ export function ReviewPanelPage() {
         setQueueOpen(o => !o);
       } else if (e.key === 's' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
-        handleSaveReview();
+        handleSaveReviewRef.current?.();
       }
     }
     window.addEventListener('keydown', handleKeyDown);
@@ -546,19 +551,19 @@ export function ReviewPanelPage() {
         </button>
 
         {/* Export Review Report */}
-        <button type="button" disabled={!compareRun || filteredQueue.length === 0}
+        <button type="button" disabled={!compareRun || filteredQueue.length === 0 || isExportingReport}
           onClick={async () => {
-            setError("");
+            setError(""); setIsExportingReport(true);
             try {
               await exportReviewReport(token, compareRunId);
               setReviewMessage("Review report downloaded.");
             } catch (err) {
               if (err instanceof ApiError && err.status === 401) { logout(); return; }
               setError(err.message);
-            }
+            } finally { setIsExportingReport(false); }
           }}
-          style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '5px 10px', borderRadius: '7px', border: '1px solid #E6E8EA', background: '#fff', color: '#474D57', fontSize: '11px', fontWeight: 600, cursor: !compareRun || filteredQueue.length === 0 ? 'not-allowed' : 'pointer', opacity: !compareRun || filteredQueue.length === 0 ? 0.6 : 1, transition: 'all 150ms', flexShrink: 0 }}>
-          <Download size={12} /> Export
+          style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '5px 10px', borderRadius: '7px', border: '1px solid #E6E8EA', background: '#fff', color: '#474D57', fontSize: '11px', fontWeight: 600, cursor: !compareRun || filteredQueue.length === 0 || isExportingReport ? 'not-allowed' : 'pointer', opacity: !compareRun || filteredQueue.length === 0 || isExportingReport ? 0.6 : 1, transition: 'all 150ms', flexShrink: 0 }}>
+          {isExportingReport ? '…' : <><Download size={12} /> Export</>}
         </button>
 
         {/* Prev / Index / Next */}
@@ -930,3 +935,4 @@ export function ReviewPanelPage() {
     </div>
   );
 }
+

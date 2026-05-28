@@ -30,8 +30,10 @@ function buildQueuePreview(queue, highlightedItem, limit = 8) {
 function countWords(text) { return String(text ?? "").trim().split(/\s+/).filter(Boolean).length; }
 function buildMarkdownFilename(id) { return `redline-summary-${formatCompareRunCode(id)}.md`; }
 function exportMarkdownDraft(text, id) {
-  const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([text], { type: "text/markdown" })), download: buildMarkdownFilename(id) });
+  const url = URL.createObjectURL(new Blob([text], { type: "text/markdown" }));
+  const a = Object.assign(document.createElement("a"), { href: url, download: buildMarkdownFilename(id) });
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url); // free Blob URL immediately after click
 }
 
 const CT_CFG = {

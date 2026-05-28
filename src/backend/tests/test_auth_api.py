@@ -810,6 +810,79 @@ def test_demo_seed_creates_live_workspace_data(client, auth_headers):
     assert len(project_list_after_second_seed.json()["data"]) == 1
 
 
+def test_demo_seed_creates_user_scoped_workspace_without_cross_tenant_access(client, auth_headers, register_user):
+    first_seed_response = client.post("/api/v1/demo/seed", headers=auth_headers)
+    assert first_seed_response.status_code == 200
+    first_project_id = first_seed_response.json()["data"]["project"]["id"]
+
+    outsider = register_user(email="demo-outsider@example.com", display_name="Demo Outsider")
+    outsider_before_seed = client.get(
+        f"/api/v1/projects/{first_project_id}/documents",
+        headers=outsider["headers"],
+    )
+    assert outsider_before_seed.status_code == 404
+
+    outsider_seed_response = client.post("/api/v1/demo/seed", headers=outsider["headers"])
+    assert outsider_seed_response.status_code == 200
+    outsider_project_id = outsider_seed_response.json()["data"]["project"]["id"]
+
+    assert outsider_project_id != first_project_id
+    outsider_after_seed = client.get(
+        f"/api/v1/projects/{first_project_id}/documents",
+        headers=outsider["headers"],
+    )
+    assert outsider_after_seed.status_code == 404
+    outsider_own_documents = client.get(
+        f"/api/v1/projects/{outsider_project_id}/documents",
+        headers=outsider["headers"],
+    )
+    assert outsider_own_documents.status_code == 200
+
+
+def test_demo_seed_does_not_reset_existing_demo_account_password(client, auth_headers):
+    register_response = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "vinh@example.com",
+            "display_name": "Real Vinh",
+            "password": "privatepass123",
+        },
+    )
+    assert register_response.status_code == 201
+    client.cookies.clear()
+
+    assert client.post(
+        "/api/v1/auth/login",
+        json={"email": "vinh@example.com", "password": "privatepass123"},
+    ).status_code == 200
+    client.cookies.clear()
+    assert client.post(
+        "/api/v1/auth/login",
+        json={"email": "vinh@example.com", "password": "redline123"},
+    ).status_code == 401
+    client.cookies.clear()
+
+    seed_response = client.post("/api/v1/demo/seed", headers=auth_headers)
+    assert seed_response.status_code == 200
+
+    assert client.post(
+        "/api/v1/auth/login",
+        json={"email": "vinh@example.com", "password": "privatepass123"},
+    ).status_code == 200
+    client.cookies.clear()
+    assert client.post(
+        "/api/v1/auth/login",
+        json={"email": "vinh@example.com", "password": "redline123"},
+    ).status_code == 401
+
+
+def test_decline_missing_project_invitation_returns_not_found(client, auth_headers):
+    response = client.post("/api/v1/auth/project-invitations/999999/decline", headers=auth_headers)
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Project invitation not found"
+
+
 def test_auth_routes_allow_localhost_cors_preflight(client):
     response = client.options(
         "/api/v1/auth/register",

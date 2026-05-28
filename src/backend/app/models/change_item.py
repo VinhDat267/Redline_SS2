@@ -1,4 +1,4 @@
-from sqlalchemy import ForeignKey, String, Text
+from sqlalchemy import CheckConstraint, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -7,6 +7,12 @@ from app.models.mixins import TimestampMixin
 
 class ChangeItem(TimestampMixin, Base):
     __tablename__ = "change_items"
+    __table_args__ = (
+        CheckConstraint(
+            "review_status IN ('open','in_review','resolved')",
+            name="ck_change_items_review_status",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     compare_run_id: Mapped[int] = mapped_column(ForeignKey("compare_runs.id"), nullable=False, index=True)

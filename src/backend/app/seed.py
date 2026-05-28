@@ -43,7 +43,7 @@ def main() -> None:
         for user in users:
             print(f"{user.id}: {user.display_name} <{user.email}>")
         if users:
-            res = seed_demo_workspace(session, users[0])
+            res = seed_demo_workspace(session, users[0], demo_users=users)
             print(
                 f"Seeded workspace: '{res['project'].name}' "
                 f"(Docs: {res['documents_seeded']}, Versions: {res['versions_seeded']})"

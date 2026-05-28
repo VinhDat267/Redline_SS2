@@ -741,13 +741,10 @@ export function generateCompareRunAiSummaryDraft(token, compareRunId) {
 }
 
 export async function exportCompareRunDocx(token, compareRunId, summaryText = null) {
-  const params = new URLSearchParams();
-  if (summaryText) {
-    params.set("summary_text", summaryText);
-  }
-  const query = params.toString() ? `?${params.toString()}` : "";
-  const response = await fetch(`${API_BASE_URL}/api/v1/compare-runs/${compareRunId}/export/docx${query}`, {
-    headers: buildHeaders(token),
+  const response = await fetch(`${API_BASE_URL}/api/v1/compare-runs/${compareRunId}/export/docx`, {
+    method: "POST",
+    headers: buildHeaders(token, { "Content-Type": "application/json" }, "POST"),
+    body: JSON.stringify({ summary_text: summaryText }),
     credentials: "include",
   });
   if (!response.ok) {

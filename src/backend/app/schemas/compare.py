@@ -1,6 +1,7 @@
 from datetime import datetime
+from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.schemas.ai_batch_job import AIBatchJobRead
 from app.schemas.common import ReadModel
@@ -90,10 +91,20 @@ class CompareQueuePageRead(BaseModel):
     review_counts: CompareQueueReviewCountsRead = Field(default_factory=CompareQueueReviewCountsRead)
 
 
+ReviewStatus = Literal["open", "in_review", "resolved"]
+
+
 class ChangeItemUpdate(BaseModel):
-    review_status: str | None = None
+    review_status: ReviewStatus | None = None
     assignee_user_id: int | None = None
     summary: str | None = None
+
+    @field_validator("review_status", mode="before")
+    @classmethod
+    def normalize_review_status(cls, value):
+        if value is None:
+            return None
+        return str(value).strip().lower()
 
 
 class ReviewCommentCreate(BaseModel):
@@ -201,6 +212,10 @@ class CompareRunAISummaryResponse(BaseModel):
     provider_used: str
     fallback_used: bool
     error_message: str | None
+
+
+class CompareRunDocxExportRequest(BaseModel):
+    summary_text: str | None = None
 
 
 class LinkedRequirementCreate(BaseModel):

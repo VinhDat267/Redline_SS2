@@ -142,3 +142,7 @@ def test_alembic_offline_sql_generation_covers_parser_truth_migrations():
     assert "CREATE TABLE document_parse_runs" in generated_sql
     assert "legacy-v1-body-only" in generated_sql
     assert "CREATE TABLE auth_rate_limit_buckets" in generated_sql
+    assert (
+        "CREATE UNIQUE INDEX ix_ai_batch_jobs_compare_run_active "
+        "ON ai_batch_jobs (compare_run_id) WHERE status IN ('queued','running')"
+    ) in generated_sql

@@ -5,6 +5,7 @@ from threading import Event
 from docx import Document as DocxDocument
 from fastapi.testclient import TestClient
 from sqlalchemy import select
+from sqlalchemy.dialects import postgresql
 
 from app.core.config import settings
 from app.models import AIBatchJob, AIBatchJobItem, AIReviewDraft, ChangeItem
@@ -472,6 +473,14 @@ def test_recover_stale_running_job_requeues_job_and_item(client, auth_headers, s
     assert recovered_count == 1
     assert job is not None and job.status == "queued"
     assert first_item is not None and first_item.status == "queued"
+
+
+def test_queued_job_claim_statement_uses_postgres_skip_locked():
+    from app.services.ai_batch_jobs import _queued_job_claim_statement
+
+    compiled_sql = str(_queued_job_claim_statement().compile(dialect=postgresql.dialect()))
+
+    assert "FOR UPDATE SKIP LOCKED" in compiled_sql
 
 
 def test_ai_batch_worker_wake_triggers_processing(monkeypatch, session_factory):
